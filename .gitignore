@@ -1,0 +1,16 @@
+# agent-bus
+__pycache__/
+.pytest_cache/
+.venv/
+
+# Node
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
