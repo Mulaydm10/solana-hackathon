@@ -1,32 +1,37 @@
-# Teammate onboarding (vedant059)
+# Teammate onboarding (vedant059) — written for your Claude Code to read and follow
 
-This repo runs on the agent-bus protocol (`AGENTS.md`). You run your own Claude Code as a worker under
-your own GitHub login. Design (Dhruv's Claude Code on `mac`, login `Mulaydm10`) writes the task queue and reviews; Dhruv merges. There is no Devin on this repo, and you are the only worker. Review Dhruv's `design/*` PRs when asked: you are the only independent reviewer they have. You never merge
-and never push to `main`.
+This repo runs on the agent-bus protocol. **`AGENTS.md` is the whole protocol**, and every step in it
+is a plain `gh` / `git` command — no plugin is needed. Claude: read `AGENTS.md` in full, then set
+yourself up as below.
 
-**Prerequisite (Dhruv):** the plugin repo `Mulaydm10/agent-bus-plugin` is private. You need read access
-to it before step 2, or the clone fails.
+## Roles on this repo
 
-1. `gh auth login` as `vedant059` (needs write on `Mulaydm10/solana-hackathon`; you already have it).
-2. Install the plugin and name your device (pick a short unique name, not `mac`):
-   ```bash
-   git clone https://github.com/Mulaydm10/agent-bus-plugin && cd agent-bus-plugin
-   ./bootstrap-device.sh --device <your-device-name>
-   ```
-   It prints a permissions block for `~/.claude/settings.json`. Paste it yourself, or opt in with
-   `--write-permissions` (it backs up first).
-3. Clone the project to a durable path (not a temp dir; the registry stores the path):
-   ```bash
-   git clone https://github.com/Mulaydm10/solana-hackathon && cd solana-hackathon
-   ```
-4. In Claude Code inside that checkout: `/bus:join`, then `/bus:doctor`. Every command shape must
-   report `ok` before you claim anything.
-5. `/bus:status` shows the board. `/bus:claim` takes the next eligible `status:queued` issue (or
-   `/bus:claim <n>`), makes a worktree, and prints the task and its verify command.
-6. Work only inside your issue's lane directory (`core/`, `chain/` or `surface/`, plus `tests/<lane>/`).
-   `/bus:verify` then `/bus:pr`. PRs must come from `claim/<issue>`; any other branch name is rejected by CI
-   in team mode.
-7. Done or stuck: `/bus:release`.
+- **Design:** Dhruv's Claude Code on `mac` (login `Mulaydm10`). Writes the task issues, reviews PRs.
+- **Worker:** you (login `vedant059`) — the only worker. There is no Devin here.
+- **Human:** Dhruv merges. You never merge and never push to `main`.
+- Dhruv's `design/*` PRs need a non-author review; you are the only one who can give it, so review
+  them when asked (comment `reviewed at <sha>`).
 
-Nothing is claimable until design has joined (`design:` set in `docs/STATE.md`) and queued issues exist.
-Node 20+ and npm are needed locally for `npm test --prefix <lane>`.
+## One-time setup
+
+1. `gh auth login` as `vedant059` (you already have write access to this repo).
+2. Clone to a durable path: `git clone https://github.com/Mulaydm10/solana-hackathon`.
+3. Name your device once: `git config --global device.id <short-name>` (not `mac`). Your worker id is
+   `<device>/<first 8 chars of your session id>`.
+4. Install Node 20+ and npm (lanes verify with `npm test --prefix <lane>`), and Python 3 with pytest
+   for the canary lane.
+
+## Loop (see `AGENTS.md` for the exact commands and rules)
+
+1. **Pick:** open issues labelled `status:queued`, skipping any with a live `claim/<n>` branch or an
+   open `blocked-by:` issue. Order: `prio`, then oldest, then lowest number. Skip `lane:canary` unless
+   asked by number.
+2. **Claim:** create `refs/heads/claim/<n>` from `main` via the refs API. 201 = yours; 422 = taken,
+   pick another. Then comment `claimed by <worker-id> at <ISO-8601>` and set label `status:claimed`.
+3. **Work:** in a worktree on `claim/<n>`, touching only the issue's lane directory (`core/`,
+   `chain/` or `surface/`) plus `tests/<lane>/`. Anything cross-lane → comment on the issue.
+4. **Verify:** run the lane's command from `docs/verify.txt` on `main` (run `docs/setup.sh` first).
+5. **PR:** from `claim/<n>`, title `#<n>: <summary>`, body links the issue but **no** `Closes #n`.
+   Set label `status:review`. Any other branch name is rejected by CI.
+6. **Stuck or stopping:** rename `claim/<n>` → `abandoned/<n>-<device>-<unix-ts>` (never delete) and
+   put the issue back to `status:queued`.

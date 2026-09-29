@@ -42,4 +42,4 @@ design: Mulaydm10
 
 ## Log
 - 2026-09-29: repo created from agent-bus-template; bootstrap run (mode=team).
-- 2026-09-29: no Devin on this repo. Design = Dhruv's Claude Code on `mac` (Mulaydm10); the only worker = vedant059. Omen is not in this project's pool.
+- 2026-09-29: no Devin on this repo. Design = Dhruv's Claude Code on `mac` (Mulaydm10); the only worker = vedant059. Omen is not in this project's pool. Teammate setup is plugin-free: vedant059 follows AGENTS.md via docs/TEAMMATE.md.
