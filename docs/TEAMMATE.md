@@ -1,7 +1,7 @@
 # Teammate onboarding (vedant059)
 
 This repo runs on the agent-bus protocol (`AGENTS.md`). You run your own Claude Code as a worker under
-your own GitHub login. Design (Devin) writes the task queue and reviews; Dhruv merges. You never merge
+your own GitHub login. Design (Dhruv's Claude Code on `mac`, login `Mulaydm10`) writes the task queue and reviews; Dhruv merges. There is no Devin on this repo, and you are the only worker. Review Dhruv's `design/*` PRs when asked: you are the only independent reviewer they have. You never merge
 and never push to `main`.
 
 **Prerequisite (Dhruv):** the plugin repo `Mulaydm10/agent-bus-plugin` is private. You need read access

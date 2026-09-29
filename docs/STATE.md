@@ -6,7 +6,8 @@ Build for the Superteam Germany "Build an MVP with Solana at WHU" hackathon (dea
 mode: team
 attention: active
 merge: human
-<!-- design: <login>   set by design on join, via claim/state; absent = repo not live, workers report "no design node" -->
+design: Mulaydm10
+<!-- design: Dhruv's Claude Code session on `mac`, under the Mulaydm10 login (no Devin on this repo). Format: design: <login>   set by design on join, via claim/state; absent = repo not live, workers report "no design node" -->
 <!-- mode: solo | team.  attention: active | paused (workers' cross-repo pick order skips paused repos; design sessions do not wake).
      merge: human | auto-lane (auto-lane = you give up human code review of lane PRs for throughput; design sets auto-merge on green + approved claim PRs; refused unless main requires lane+run; design/* always human).
      CI reads these from the live tip of the base branch and workers from `main`, never from a PR head: a PR must not relax the enforcement it is judged by. -->
@@ -35,8 +36,10 @@ merge: human
 ## Known gaps
 - Branch protection on `main` requires `lane` + `run` (enforce_admins off, so the owner can still override). Applied by bootstrap on the public repo.
 - Lane `package.json` manifests are read from the PR head, not BASE (see docs/setup.sh). Team mode is untested upstream.
-- One GitHub account for all workers (solo mode) = one API rate bucket; GitHub App with per-device tokens before ~20 nodes.
+- Design is a human login (Mulaydm10), not a bot: repo variable `DESIGN_BOT=Mulaydm10`. Design and merge are the same person, so the only independent review of a design PR is the worker's (vedant059).
+- The standing canary claim (#4) is held by Mulaydm10, i.e. design — a deviation from "canaries are worker-authored". Its PR is on `claim/4`, so CI still judges it on the lane path.
 - Actions minutes are one pool per repo; check quota before a team event.
 
 ## Log
 - 2026-09-29: repo created from agent-bus-template; bootstrap run (mode=team).
+- 2026-09-29: no Devin on this repo. Design = Dhruv's Claude Code on `mac` (Mulaydm10); the only worker = vedant059. Omen is not in this project's pool.
