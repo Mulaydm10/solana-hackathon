@@ -1,0 +1,369 @@
+<title>Agent Budgets on Solana</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column with a sticky difficulty ladder; each level is a section that gets denser as you climb. */
+:root {
+  --bg: #f3f5f4;
+  --paper: #ffffff;
+  --ink: #17201e;
+  --muted: #5a6763;
+  --rule: #d6ddda;
+  --accent: #0f6e63;
+  --accent-soft: #dcefeb;
+  --mark: #b45309;
+  --mark-soft: #fbecd9;
+  --bad: #b42318;
+  --good: #0f6e63;
+  --code-bg: #eef2f0;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101615; --paper: #161e1c; --ink: #e4ebe8; --muted: #9aa8a3; --rule: #2a3633;
+    --accent: #4fc1b0; --accent-soft: #173431; --mark: #f0a85a; --mark-soft: #3a2a17;
+    --bad: #f0877d; --good: #4fc1b0; --code-bg: #1c2624; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101615; --paper: #161e1c; --ink: #e4ebe8; --muted: #9aa8a3; --rule: #2a3633;
+  --accent: #4fc1b0; --accent-soft: #173431; --mark: #f0a85a; --mark-soft: #3a2a17;
+  --bad: #f0877d; --good: #4fc1b0; --code-bg: #1c2624; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 1.0625rem; line-height: 1.65; }
+.wrap { max-width: 72rem; margin: 0 auto; padding-inline: 16px; padding-block: 2.5rem 5rem; display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 3rem; }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; } }
+
+header.top { grid-column: 1 / -1; display: grid; gap: .75rem; max-width: 46rem; }
+.eyebrow { font-family: var(--mono); font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(2.2rem, 5vw, 3.4rem); line-height: 1.05; margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+.lede { font-size: 1.2rem; color: var(--muted); margin: 0; max-width: 40rem; }
+
+nav.ladder { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 1.5rem); align-self: start; display: grid; gap: .25rem; }
+@media (max-width: 860px) { nav.ladder { position: static; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); } }
+nav.ladder a { display: grid; grid-template-columns: auto 1fr; gap: .1rem .6rem; align-items: center; text-decoration: none; color: var(--ink); padding: .5rem .6rem; border-radius: 6px; font-family: var(--display); font-size: .95rem; }
+nav.ladder a:hover, nav.ladder a:focus-visible { background: var(--accent-soft); outline: none; }
+nav.ladder a small { grid-column: 2; font-family: var(--mono); font-size: .68rem; color: var(--muted); letter-spacing: .04em; }
+.bars { display: inline-flex; gap: 2px; grid-row: span 2; }
+.bars i { width: 4px; height: 14px; border-radius: 1px; background: var(--rule); display: block; }
+.bars i.on { background: var(--accent); }
+
+main { display: grid; gap: 3.5rem; min-width: 0; }
+section.level { display: grid; gap: 1rem; min-width: 0; scroll-margin-top: 1.5rem; }
+.level-head { display: grid; gap: .35rem; padding-bottom: .75rem; border-bottom: 1px solid var(--rule); }
+.level-head .tag { display: flex; align-items: center; gap: .6rem; font-family: var(--mono); font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+h2 { font-family: var(--display); font-weight: 700; font-size: clamp(1.6rem, 3vw, 2.1rem); line-height: 1.15; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--display); font-weight: 500; font-size: 1.2rem; margin: .5rem 0 0; }
+p { margin: 0; max-width: 42rem; }
+.prose { display: grid; gap: .9rem; }
+ul, ol { margin: 0; padding-left: 1.25rem; display: grid; gap: .35rem; max-width: 42rem; }
+strong { font-weight: 600; }
+code { font-family: var(--mono); font-size: .86em; background: var(--code-bg); padding: .08em .35em; border-radius: 4px; }
+a { color: var(--accent); }
+
+.pull { font-family: var(--display); font-weight: 500; font-size: clamp(1.3rem, 2.6vw, 1.7rem); line-height: 1.3; border-left: 3px solid var(--mark); padding: .2rem 0 .2rem 1rem; max-width: 40rem; text-wrap: balance; }
+
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .75rem; }
+.step { background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem; display: grid; gap: .35rem; align-content: start; }
+.step b { font-family: var(--mono); font-size: .72rem; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; font-weight: 600; }
+.step span { font-family: var(--display); font-size: 1.05rem; line-height: 1.3; }
+
+.receipt { background: var(--paper); border: 1px dashed var(--rule); border-radius: 6px; padding: 1rem 1.1rem; font-family: var(--mono); font-size: .82rem; line-height: 1.7; max-width: 30rem; overflow-x: auto; }
+.receipt .row { display: flex; justify-content: space-between; gap: 1rem; white-space: nowrap; }
+.receipt .ok { color: var(--good); }
+.receipt .no { color: var(--bad); }
+.receipt hr { border: 0; border-top: 1px dashed var(--rule); margin: .4rem 0; }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); }
+table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+th, td { text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: var(--mono); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--code-bg); }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: .85rem; white-space: nowrap; }
+
+.chip { display: inline-block; font-family: var(--mono); font-size: .7rem; letter-spacing: .04em; padding: .1rem .45rem; border-radius: 999px; white-space: nowrap; }
+.chip.done { background: var(--accent-soft); color: var(--accent); }
+.chip.todo { background: var(--mark-soft); color: var(--mark); }
+.chip.no { background: transparent; border: 1px solid var(--rule); color: var(--muted); }
+
+.callout { background: var(--mark-soft); border-radius: 8px; padding: 1rem 1.1rem; display: grid; gap: .4rem; max-width: 44rem; }
+.callout b { font-family: var(--display); font-size: 1.05rem; }
+
+.tree { font-family: var(--mono); font-size: .82rem; line-height: 1.6; background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.1rem; overflow-x: auto; white-space: pre; color: var(--ink); }
+.tree .c { color: var(--muted); }
+.tree .e { color: var(--mark); }
+
+pre.mermaid { background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 0; }
+pre.code { font-family: var(--mono); font-size: .8rem; line-height: 1.55; background: var(--code-bg); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 0; }
+
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }
+.two > div { min-width: 0; display: grid; gap: .5rem; align-content: start; }
+.vs { background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem; }
+.vs .label { font-family: var(--mono); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; }
+.vs.bad .label { color: var(--bad); }
+.vs.good .label { color: var(--good); }
+
+.sources { font-size: .85rem; color: var(--muted); }
+.sources ul { gap: .2rem; }
+footer { grid-column: 1 / -1; border-top: 1px solid var(--rule); padding-top: 1rem; font-family: var(--mono); font-size: .75rem; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">WHU × Superteam Germany · Solana hackathon · read 2 Oct 2026</div>
+    <h1>Agent Budgets on Solana</h1>
+    <p class="lede">Everything we know about the project, from the one-minute version to the code layout. Start at level 1 and stop wherever you have enough.</p>
+  </header>
+
+  <nav class="ladder" aria-label="Difficulty levels">
+    <a href="#l1"><span class="bars"><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span>The idea<small>LEVEL 1 · ANYONE</small></a>
+    <a href="#l2"><span class="bars"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span>The business<small>LEVEL 2 · PITCH</small></a>
+    <a href="#l3"><span class="bars"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>The hackathon<small>LEVEL 3 · STRATEGY</small></a>
+    <a href="#l4"><span class="bars"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>The market<small>LEVEL 4 · RESEARCH</small></a>
+    <a href="#l5"><span class="bars"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>Solana pieces<small>LEVEL 5 · TECHNICAL</small></a>
+    <a href="#l6"><span class="bars"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>The codebase<small>LEVEL 6 · ENGINEERING</small></a>
+  </nav>
+
+  <main>
+    <!-- LEVEL 1 -->
+    <section class="level" id="l1">
+      <div class="level-head">
+        <div class="tag">Level 1 · Anyone can read this</div>
+        <h2>A company card for an AI assistant</h2>
+      </div>
+      <div class="prose">
+        <p>AI assistants can now do work on their own, and some of that work costs money: buying a report, paying for data, renting computer time. Today you have two bad choices. Hand the assistant your whole wallet and hope nothing goes wrong, or approve every purchase yourself, which defeats the point.</p>
+        <p>We give each assistant its own card with rules on it, the way a company gives an employee a card with a limit.</p>
+      </div>
+      <div class="steps">
+        <div class="step"><b>You set</b><span>A budget and a list of shops it may use</span></div>
+        <div class="step"><b>It buys</b><span>On its own, with no clicks from you</span></div>
+        <div class="step"><b>It's stopped</b><span>When it tries to overspend or use an unknown shop</span></div>
+        <div class="step"><b>You cancel</b><span>Any card in one click; the others keep working</span></div>
+      </div>
+      <div class="receipt" aria-label="Example activity for one assistant">
+        <div class="row"><span>CARD · research-assistant</span><span>budget €50.00</span></div>
+        <hr>
+        <div class="row"><span>Company report, DataCo</span><span class="ok">€0.50 paid</span></div>
+        <div class="row"><span>News archive, NewsAPI</span><span class="ok">€0.02 paid</span></div>
+        <div class="row"><span>Unknown shop, sketchy.io</span><span class="no">refused · shop not approved</span></div>
+        <div class="row"><span>Full market study, DataCo</span><span class="no">refused · over budget</span></div>
+        <hr>
+        <div class="row"><span>Left this month</span><span>€49.48</span></div>
+      </div>
+      <p>The rules are enforced by Solana, a public payment network, not just by our app. So even if the assistant is tricked or hacked, it still cannot break them.</p>
+    </section>
+
+    <!-- LEVEL 2 -->
+    <section class="level" id="l2">
+      <div class="level-head">
+        <div class="tag">Level 2 · The pitch</div>
+        <h2>Data by the question, not by the subscription</h2>
+      </div>
+      <div class="prose">
+        <p>The mentor gave us three pieces of feedback. The tools for agent budgets already exist on Solana, so the infrastructure alone is not a product. We need one specific use case. And the value proposition has to be clean and unique, with the business idea in front.</p>
+        <p>The use case we chose: <strong>AI research assistants at consulting and VC firms.</strong> Analysts constantly buy data for different client projects. Today that means expensive yearly subscriptions and a month-end spreadsheet to work out which client to bill.</p>
+      </div>
+      <p class="pull">"Your AI pays for data by the question, in cents instead of €10,000 yearly licences, and every cent is billed to the right client automatically."</p>
+      <div class="two">
+        <div class="vs bad"><span class="label">Not clean</span><p>"Capped, revocable spending delegation for AI agents using x402, enforced on-chain."</p></div>
+        <div class="vs good"><span class="label">Clean</span><p>"Your AI assistant can buy things on its own, but it can never spend more than you allow."</p></div>
+      </div>
+      <h3>Why this is unique, not just clean</h3>
+      <ul>
+        <li><strong>Tiny payments.</strong> A card costs about €0.30 plus 2–3% per payment, so paying €0.002 for one API call is impossible. On Solana it costs a fraction of a cent.</li>
+        <li><strong>No human in the loop.</strong> Cards need logins, 3-D Secure and SMS codes. An AI agent can't do that.</li>
+        <li><strong>Proof per purchase.</strong> A card statement can't prove which agent bought what for which client. A Solana receipt can, and nobody can fake it.</li>
+      </ul>
+      <h3>Who pays us</h3>
+      <ul>
+        <li>Data sellers pay a small percentage per sale, because we bring them AI buyers they can't reach today.</li>
+        <li>Firms pay per seat for budgets, approvals and the client billing report.</li>
+      </ul>
+    </section>
+
+    <!-- LEVEL 3 -->
+    <section class="level" id="l3">
+      <div class="level-head">
+        <div class="tag">Level 3 · Strategy</div>
+        <h2>The hackathon and how we win it</h2>
+      </div>
+      <div class="table-wrap"><table>
+        <tr><th>Fact</th><th>Value</th></tr>
+        <tr><td>Event</td><td>Build an MVP with Solana at WHU, run by Superteam Germany</td></tr>
+        <tr><td>Prizes</td><td class="num">1,500 / 1,000 / 500 USDG</td></tr>
+        <tr><td>Deadline</td><td>About 5 Oct 2026, 00:00 CEST. Confirm on the listing.</td></tr>
+        <tr><td>Winners</td><td>8 Oct 2026</td></tr>
+        <tr><td>Field</td><td>6 submissions on 1 Oct, expect 10–20 by the deadline</td></tr>
+        <tr><td>Submit</td><td>Pitch-deck link, public GitHub repo, follow @SuperteamDE on X</td></tr>
+      </table></div>
+      <h3>What the judges score</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Criterion</th><th>Our position</th><th>What to do</th></tr>
+        <tr><td>Useful idea</td><td>Strong once framed as client billing for analysts</td><td>One named user, one pain, in the first slide</td></tr>
+        <tr><td>Working prototype</td><td><span class="chip todo">biggest risk</span> Repo has no code yet</td><td>Build one feature that works live, nothing more</td></tr>
+        <tr><td>Clear role for Solana</td><td>Strong: the chain refuses bad payments, and micropayments need it</td><td>Show a refusal coming from Solana in the demo</td></tr>
+        <tr><td>Potential to grow</td><td>Good: every consulting, VC and law firm</td><td>Roadmap slide plus who pays us</td></tr>
+      </table></div>
+      <h3>Our estimate of the odds</h3>
+      <div class="table-wrap"><table>
+        <tr><th>If we…</th><th>Top 3</th><th>1st place</th></tr>
+        <tr><td>Ship one working feature with a clear business deck</td><td class="num">55–70%</td><td class="num">25–35%</td></tr>
+        <tr><td>Attempt everything and finish half</td><td class="num">15–25%</td><td class="num">&lt;10%</td></tr>
+        <tr><td>Have strong code but a weak deck</td><td class="num">30–40%</td><td class="num">~10%</td></tr>
+      </table></div>
+      <h3>The two-minute demo</h3>
+      <ol>
+        <li>Ask the assistant: "Research Tesla's battery suppliers for Project X."</li>
+        <li>It buys three data reports. Each payment links to the Solana explorer.</li>
+        <li>It tries an unapproved data seller. Refused.</li>
+        <li>It hits the project's budget. Refused.</li>
+        <li>A partner approves one large purchase from a phone.</li>
+        <li>The client billing report is ready to invoice.</li>
+      </ol>
+    </section>
+
+    <!-- LEVEL 4 -->
+    <section class="level" id="l4">
+      <div class="level-head">
+        <div class="tag">Level 4 · Research</div>
+        <h2>What already exists, and the gaps nobody has filled</h2>
+      </div>
+      <div class="prose">
+        <p>Agents paying for things is a busy space. Most of the obvious ideas have been built, which is why the mentor pushed us to a specific use case. Payments between machines run on <strong>x402</strong>, a standard that lets a web server answer "payment required" with a price, and lets the caller pay and retry automatically.</p>
+      </div>
+      <h3>Already built, so we don't rebuild it</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Idea</th><th>Who did it</th></tr>
+        <tr><td>Capped, revocable agent budgets on Solana</td><td>A Solana "fixed delegation" program (devnet)</td></tr>
+        <tr><td>Pay actual usage up to a limit ("upto")</td><td>Coinbase, announced live on Solana 17 Sep 2026</td></tr>
+        <tr><td>Bundling many tiny payments</td><td>PayAI, public preview on Solana</td></tr>
+        <tr><td>Refunds through escrow and an arbiter</td><td>x402r</td></tr>
+        <tr><td>Chargebacks for agents with AI judges</td><td>Clawback, ETHGlobal New York 2026</td></tr>
+        <tr><td>Enforceable spending caps on Hedera</td><td>Tally, Hedera x402 bounty winner, Aug 2026</td></tr>
+      </table></div>
+      <h3>Real problems with evidence</h3>
+      <ul>
+        <li><strong>Services delivered before payment settles.</strong> A 2026 study found 31 vulnerabilities across 15 x402 payment services, including Coinbase, covering 99% of x402 transactions.</li>
+        <li><strong>Usage billing trusts the seller.</strong> Under "upto" the seller picks the final amount up to the cap, and nothing checks it. Apify, a large API seller, says x402 billing "isn't good yet".</li>
+        <li><strong>Agents tricked into spending.</strong> More than $150,000 was drained from an AI agent through prompt injection in 2026. Most protection still runs on a company server.</li>
+        <li><strong>Small market so far.</strong> x402 volume is about $1M a month. This is a market that is forming, not a large one yet.</li>
+      </ul>
+      <h3>Where the old project came from</h3>
+      <p>The code we are porting was written for ETHOnline 2026 (online, 4–16 Sep), on Hedera with ENS names. The folder name "ehl_switerland" made it look like a Swiss event; ETHGlobal has never run one in Switzerland. It moved real testnet money three times on 11 Sep, but it never appeared on the ETHOnline showcase.</p>
+    </section>
+
+    <!-- LEVEL 5 -->
+    <section class="level" id="l5">
+      <div class="level-head">
+        <div class="tag">Level 5 · Technical</div>
+        <h2>The Solana building blocks</h2>
+      </div>
+      <div class="prose">
+        <p>We don't need to invent a payment system. We connect pieces that already exist and add our own rules, dashboard and refusal reasons on top.</p>
+      </div>
+      <pre class="mermaid">
+sequenceDiagram
+  participant Owner as Firm (owner)
+  participant Agent as AI analyst
+  participant Seller as Data seller (x402)
+  participant Sol as Solana
+  Owner->>Sol: set budget + approved sellers
+  Agent->>Seller: GET /report
+  Seller-->>Agent: 402 Payment Required (price)
+  Agent->>Agent: check rules (budget, seller, revoked?)
+  Agent->>Sol: pay USDC within the limit
+  Sol-->>Agent: confirmed, or refused by the chain
+  Agent->>Seller: retry with payment proof
+  Seller-->>Agent: 200 report
+  Owner->>Sol: revoke card (one click)
+      </pre>
+      <div class="table-wrap"><table>
+        <tr><th>Job</th><th>Building block</th><th>Notes</th></tr>
+        <tr><td>Agent pays per request</td><td><code>@x402/svm</code>, <code>@x402/express</code>, <code>@x402/fetch</code> (v2.28.0)</td><td>Same package family the Hedera code uses. Devnet ID <code>solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1</code>. Fixed-price "exact" payments work on Solana.</td></tr>
+        <tr><td>Payment service</td><td>PayAI or Coinbase CDP</td><td>Covers network fees. Pick one on day 1.</td></tr>
+        <tr><td>Budget with approved sellers</td><td>Squads spending limits (<code>@sqds/multisig</code> v2.1.4)</td><td>Token, amount, reset period, allowed destinations, expiry. Closest to a company card. Check devnet first.</td></tr>
+        <tr><td>Budget, simplest fallback</td><td>SPL Token <code>approve</code> / <code>revoke</code></td><td>Rock solid. One delegate per token account, so one account per agent. No seller rules.</td></tr>
+        <tr><td>Budget, agent-specific</td><td>Fixed-delegation program <code>De1egAFM…R44</code></td><td>Amount plus expiry, agent signs its own transfers. Devnet only, no JS client.</td></tr>
+        <tr><td>Rules inside the money</td><td>Token-2022 transfer hook</td><td>Checks every transfer. Needs a wrapped token. Roadmap only.</td></tr>
+      </table></div>
+      <div class="callout">
+        <b>Open question for day 1</b>
+        <p>The docs disagree on whether "upto" (pay actual usage) works on Solana. Use fixed-price "exact" payments for the demo and test Squads on devnet before relying on it.</p>
+      </div>
+    </section>
+
+    <!-- LEVEL 6 -->
+    <section class="level" id="l6">
+      <div class="level-head">
+        <div class="tag">Level 6 · Engineering</div>
+        <h2>How the repository is organised</h2>
+      </div>
+      <div class="prose">
+        <p>The repo is <a href="https://github.com/Mulaydm10/solana-hackathon">Mulaydm10/solana-hackathon</a> (public). It is set up as a team project: work is split into lanes, each lane is one folder with a written contract, and every change goes through a pull request. Dhruv runs the design role and merges; Vedant's Claude Code session works as a worker.</p>
+        <p><strong>Status:</strong> the planning is done and merged. The three code lanes are still empty. The code to port lives in the old Hedera repo, about 3,900 lines of TypeScript.</p>
+      </div>
+<div class="tree" role="img" aria-label="Repository folder tree">solana-hackathon/
+├── <b>Analysis/</b>                   <span class="c">research and strategy (merged)</span>
+│   ├── strategy.md              <span class="c">competition read + port plan</span>
+│   ├── research-angles-…md      <span class="c">market, gaps, idea angles</span>
+│   └── use-case-and-value-prop… <span class="c">mentor feedback, use case, UVP</span>
+├── Competition Analysis/        <span class="c">PDF + HTML read of the listing</span>
+├── Ideas/                       <span class="c">ideas-bank analysis PDF</span>
+├── <b>core/</b>                       <span class="e">empty · budget rules go here</span>
+├── <b>chain/</b>                      <span class="e">empty · Solana payments go here</span>
+├── <b>surface/</b>                    <span class="e">empty · server, demo, MCP go here</span>
+├── contracts/                   <span class="c">what each lane promises the others</span>
+│   ├── core.md · chain.md · surface.md
+├── docs/                        <span class="c">STATE, ARCHITECTURE, SETUP, verify.txt</span>
+├── tests/                       <span class="c">one folder per lane + canary</span>
+├── canary/                      <span class="c">health-check lane for CI</span>
+└── AGENTS.md                    <span class="c">the team protocol</span></div>
+      <h3>The three lanes</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Lane</th><th>Promises (from <code>contracts/</code>)</th><th>Port from Hedera</th><th>Status</th></tr>
+        <tr><td><code>core/</code></td><td><code>grant(parent, child, cap)</code>, <code>revoke(agent)</code>, <code>check(agent, amount)</code> → ok or <code>OVER_LIMIT</code> · <code>REVOKED</code> · <code>PARENT_REVOKED</code>. No network code.</td><td>Copy as is; it never touched a chain</td><td><span class="chip todo">empty</span></td></tr>
+        <tr><td><code>chain/</code></td><td><code>pay(requirements, payer)</code>, <code>approve(child, cap)</code> / <code>revoke(child)</code>, <code>verify(signature, expected)</code> via <code>getTransaction</code></td><td>Rewrite: Hedera and ENS code does not carry over</td><td><span class="chip todo">empty</span></td></tr>
+        <tr><td><code>surface/</code></td><td>x402 server, browser demo, MCP tools where refusals are normal results with a reason code</td><td>Mostly reuse; swap the payment backend</td><td><span class="chip todo">empty</span></td></tr>
+      </table></div>
+      <h3>How a change gets in</h3>
+      <ol>
+        <li>A task is an issue labelled with its lane, for example <code>lane:core</code>.</li>
+        <li>A worker claims it by creating the ref <code>claim/&lt;issue&gt;</code>. Whoever creates it first owns the task.</li>
+        <li>The worker codes inside that one folder only and runs the lane's check from <code>docs/verify.txt</code>.</li>
+        <li>CI runs three jobs: <code>lane</code> (only allowed files changed), <code>resolve</code>, <code>run</code> (tests).</li>
+        <li>Someone other than the author reviews; Dhruv merges. Nobody merges their own work.</li>
+      </ol>
+      <h3>The core rule, in code terms</h3>
+<pre class="code">check(agent, amount):
+  if agent or any ancestor is revoked  → REVOKED / PARENT_REVOKED
+  if amount &gt; remaining(agent)          → OVER_LIMIT
+  else                                  → ok, debit agent
+
+grant(parent, child, cap):
+  cap must be ≤ remaining(parent)        // a child never gets more than its parent
+revoke(agent):
+  cuts off agent and its whole subtree; siblings untouched</pre>
+      <div class="callout">
+        <b>Why the refusal happens first</b>
+        <p>The server checks the rules before it quotes a price. If the answer is no, the payment service is never called, so no money can move by accident. On Solana the chain enforces the same limit a second time, so a bypassed server still can't overspend.</p>
+      </div>
+      <div class="sources">
+        <p><strong>Sources</strong> (full list in the repo's <code>Analysis/</code> files)</p>
+        <ul>
+          <li><a href="https://superteam.fun/earn/listing/build-at-whu">WHU challenge listing</a> · <a href="https://superteam.fun/build/ideas">Superteam ideas bank</a></li>
+          <li><a href="https://cryptoslate.com/31-newly-discovered-vulnerabilities-expose-99-of-x402-crypto-payments-to-asset-theft-and-free-shopping/">31 x402 vulnerabilities</a> · <a href="https://www.sean-weldon.com/blog/2026-09-05-x402-isnt-good-yet-jan-curn-apify">Apify: x402 isn't good yet</a></li>
+          <li><a href="https://docs.x402.org/faq.md">x402 FAQ</a> · <a href="https://solana.com/docs/tokens/basics/approve-delegate">SPL approve/revoke</a> · <a href="https://docs.squads.so/main/development/reference/spending-limits">Squads spending limits</a> · <a href="https://docs.chainstack.com/docs/solana-agent-allowances-x402.md">Fixed-delegation program</a></li>
+          <li><a href="https://hedera.com/blog/x402-bounty-on-hedera-winners-announced.md">Hedera x402 bounty winners</a> · <a href="https://ethglobal.com/showcase?events=ethonline2026">ETHOnline 2026 showcase</a></li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer>Built from Analysis/ in Mulaydm10/solana-hackathon · odds are our estimates, not facts</footer>
+</div>
