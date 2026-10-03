@@ -1,0 +1,526 @@
+<title>Solana Field Guide 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: reference manual. Sticky layer index on the left, filter bar on top, each layer is a grid of feature entries with a status chip. */
+:root {
+  --bg: #f4f5f8;
+  --paper: #ffffff;
+  --ink: #161a24;
+  --muted: #586074;
+  --rule: #d9dde7;
+  --accent: #2443b5;
+  --accent-soft: #e2e7fa;
+  --live: #11734b;
+  --live-soft: #ddf2e8;
+  --part: #8a5a00;
+  --part-soft: #fbefd6;
+  --dev: #5b4bb0;
+  --dev-soft: #ebe7fa;
+  --dead: #a3261c;
+  --dead-soft: #f9e1de;
+  --code-bg: #eef0f5;
+  --display: "Familjen Grotesk", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f121a; --paper: #161a25; --ink: #e6e9f2; --muted: #9aa2b6; --rule: #2a3040;
+    --accent: #8ea3ff; --accent-soft: #1e2647; --live: #5fd3a0; --live-soft: #15332a;
+    --part: #f0bd5a; --part-soft: #3a2e14; --dev: #b3a6ff; --dev-soft: #272245;
+    --dead: #ff8f84; --dead-soft: #3d1c1a; --code-bg: #1d2230; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f121a; --paper: #161a25; --ink: #e6e9f2; --muted: #9aa2b6; --rule: #2a3040;
+  --accent: #8ea3ff; --accent-soft: #1e2647; --live: #5fd3a0; --live-soft: #15332a;
+  --part: #f0bd5a; --part-soft: #3a2e14; --dev: #b3a6ff; --dev-soft: #272245;
+  --dead: #ff8f84; --dead-soft: #3d1c1a; --code-bg: #1d2230; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 80rem; margin: 0 auto; padding-inline: 16px; padding-block: 2rem 5rem; display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: 2.5rem; }
+@media (max-width: 900px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; } }
+
+header.top { grid-column: 1 / -1; display: grid; gap: .6rem; }
+.eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(2rem, 4.6vw, 3.1rem); line-height: 1.05; margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); font-size: 1.05rem; max-width: 46rem; margin: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; font-size: .82rem; color: var(--muted); }
+
+.filter { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2; background: var(--bg); padding-block: .75rem; display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; border-bottom: 1px solid var(--rule); }
+.filter input { flex: 1 1 16rem; min-width: 0; font: inherit; padding: .55rem .8rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); color: var(--ink); }
+.filter input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.filter .count { font-family: var(--mono); font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.filter button { font: inherit; font-size: .82rem; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); border-radius: 999px; padding: .3rem .75rem; cursor: pointer; }
+.filter button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--paper); }
+.filter button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+nav.index { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 1rem); align-self: start; display: grid; gap: .1rem; max-height: calc(100vh - 2rem); overflow-y: auto; }
+@media (max-width: 900px) { nav.index { position: static; max-height: none; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); } }
+nav.index a { text-decoration: none; color: var(--ink); font-size: .88rem; padding: .3rem .55rem; border-radius: 6px; display: flex; gap: .5rem; }
+nav.index a span { font-family: var(--mono); font-size: .72rem; color: var(--muted); min-width: 1.4rem; }
+nav.index a:hover, nav.index a:focus-visible { background: var(--accent-soft); outline: none; }
+
+main { display: grid; gap: 2.75rem; min-width: 0; }
+section.layer { display: grid; gap: .9rem; min-width: 0; scroll-margin-top: 4.5rem; }
+.layer-head { display: grid; gap: .25rem; }
+.layer-head .k { font-family: var(--mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h2 { font-family: var(--display); font-weight: 700; font-size: clamp(1.4rem, 2.6vw, 1.8rem); margin: 0; line-height: 1.15; }
+.layer-head p { margin: 0; color: var(--muted); max-width: 48rem; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr)); gap: .7rem; }
+.f { background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: .85rem .95rem; display: grid; gap: .35rem; align-content: start; min-width: 0; }
+.f h3 { font-family: var(--display); font-weight: 500; font-size: 1.02rem; margin: 0; line-height: 1.25; display: flex; flex-wrap: wrap; gap: .35rem .5rem; align-items: baseline; justify-content: space-between; }
+.f p { margin: 0; font-size: .9rem; }
+.f .meta { font-family: var(--mono); font-size: .74rem; color: var(--muted); overflow-wrap: anywhere; }
+code { font-family: var(--mono); font-size: .85em; background: var(--code-bg); padding: .05em .3em; border-radius: 4px; overflow-wrap: anywhere; }
+
+.chip { font-family: var(--mono); font-size: .66rem; letter-spacing: .04em; text-transform: uppercase; padding: .12rem .45rem; border-radius: 999px; white-space: nowrap; font-weight: 500; }
+.chip.live { background: var(--live-soft); color: var(--live); }
+.chip.part { background: var(--part-soft); color: var(--part); }
+.chip.dev { background: var(--dev-soft); color: var(--dev); }
+.chip.dead { background: var(--dead-soft); color: var(--dead); }
+.chip.std { background: var(--code-bg); color: var(--muted); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+th, td { text-align: left; padding: .55rem .75rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: var(--mono); font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--code-bg); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.ext { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .4rem .9rem; font-size: .88rem; }
+.ext .f { display: block; background: none; border: 0; border-radius: 0; border-bottom: 1px dashed var(--rule); padding: .35rem 0; min-width: 0; }
+.ext b { font-family: var(--mono); font-size: .8rem; font-weight: 500; color: var(--accent); }
+
+.note { background: var(--accent-soft); border-radius: 8px; padding: .8rem 1rem; font-size: .9rem; max-width: 52rem; }
+.sources { font-size: .82rem; color: var(--muted); display: grid; gap: .3rem; }
+.sources ul { margin: 0; padding-left: 1.1rem; display: grid; gap: .15rem; }
+.sources a, a { color: var(--accent); }
+.empty { color: var(--muted); font-style: italic; }
+footer { grid-column: 1 / -1; border-top: 1px solid var(--rule); padding-top: .9rem; font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">Reference · compiled 2 Oct 2026 from solana.com docs, upgrade pages and ecosystem reporting</div>
+    <h1>Solana Field Guide 2026</h1>
+    <p class="lede">Every layer of Solana in one place: the network, the account and transaction model, built-in programs, tokens, payments, identity, privacy, scaling, data, the major protocols, and what is shipping next.</p>
+    <div class="legend">
+      <span class="chip live">Live</span> on mainnet
+      <span class="chip part">Partial</span> partly activated
+      <span class="chip dev">Coming</span> devnet, test cluster or scheduled
+      <span class="chip dead">Gone</span> shut down
+      <span class="chip std">Standard</span> long-standing feature
+    </div>
+  </header>
+
+  <nav class="index" aria-label="Layers">
+    <a href="#network"><span>01</span>Network &amp; consensus</a>
+    <a href="#upgrades"><span>02</span>Upgrades 2026</a>
+    <a href="#accounts"><span>03</span>Accounts &amp; state</a>
+    <a href="#tx"><span>04</span>Transactions &amp; fees</a>
+    <a href="#programs"><span>05</span>Programs &amp; runtime</a>
+    <a href="#tokens"><span>06</span>Tokens</a>
+    <a href="#nft"><span>07</span>NFTs &amp; ownership</a>
+    <a href="#payments"><span>08</span>Payments &amp; commerce</a>
+    <a href="#identity"><span>09</span>Identity, privacy, security</a>
+    <a href="#scale"><span>10</span>Scaling layers</a>
+    <a href="#data"><span>11</span>Data, oracles, bridges</a>
+    <a href="#defi"><span>12</span>DeFi protocols</a>
+    <a href="#rwa"><span>13</span>Stablecoins &amp; RWAs</a>
+    <a href="#staking"><span>14</span>Staking &amp; MEV</a>
+    <a href="#mobile"><span>15</span>Mobile &amp; wallets</a>
+    <a href="#depin"><span>16</span>DePIN</a>
+    <a href="#ai"><span>17</span>AI &amp; agents</a>
+    <a href="#dev"><span>18</span>Developer tools</a>
+    <a href="#sources"><span>—</span>Sources</a>
+  </nav>
+
+  <main>
+    <div class="filter" role="search">
+      <label for="q" class="eyebrow" style="flex-basis:100%">Filter</label>
+      <input id="q" type="search" placeholder="Try: fees, privacy, Token-2022, oracle, mobile…" autocomplete="off">
+      <button type="button" data-status="all" aria-pressed="true">All</button>
+      <button type="button" data-status="live" aria-pressed="false">Live</button>
+      <button type="button" data-status="dev" aria-pressed="false">Coming</button>
+      <span class="count" id="count" aria-live="polite"></span>
+    </div>
+
+    <!-- 01 NETWORK -->
+    <section class="layer" id="network">
+      <div class="layer-head"><span class="k">01 · Network &amp; consensus</span><h2>How the chain itself works</h2>
+        <p>Solana is one global state machine run by validators. Its speed comes from a stack of techniques that each remove a bottleneck.</p></div>
+      <div class="grid">
+        <article class="f" data-s="std"><h3>Proof of History <span class="chip std">Standard</span></h3><p>A cryptographic clock: a chain of hashes that proves time passed between events, so validators agree on order without talking first.</p></article>
+        <article class="f" data-s="std"><h3>Tower BFT <span class="chip std">Standard</span></h3><p>Today's consensus. Validators vote on blocks using the PoH clock; full finality takes about 12.8 seconds.</p></article>
+        <article class="f" data-s="dev"><h3>Alpenglow (Votor) <span class="chip dev">Coming</span></h3><p>Replacement consensus targeting about 100–150 ms finality. Fast path at 80%+ first-round approval, slow path at 60–80%. Approved as SIMD-0326 in Sep 2025, on an Anza test cluster since May 2026, expected in Agave 4.3 (Oct 2026).</p><div class="meta">Rotor (Turbine replacement) deferred to a later proposal</div></article>
+        <article class="f" data-s="std"><h3>Turbine <span class="chip std">Standard</span></h3><p>Block propagation: the leader splits a block into small "shreds" and fans them out through a tree of validators, like BitTorrent.</p></article>
+        <article class="f" data-s="std"><h3>Gulf Stream <span class="chip std">Standard</span></h3><p>No public mempool. Transactions are forwarded straight to upcoming leaders, who are known in advance from the leader schedule.</p></article>
+        <article class="f" data-s="std"><h3>Sealevel <span class="chip std">Standard</span></h3><p>Parallel execution. Each transaction declares which accounts it reads and writes, so non-overlapping transactions run at the same time on many cores.</p></article>
+        <article class="f" data-s="std"><h3>Slots, leaders, epochs <span class="chip std">Standard</span></h3><p>Time is cut into slots; one validator leads each slot. The leader schedule is fixed per epoch (about two days) by stake weight.</p></article>
+        <article class="f" data-s="std"><h3>Stake-weighted QoS <span class="chip std">Standard</span></h3><p>Leaders reserve inbound connection capacity for traffic from staked validators, so spam can't crowd out real transactions.</p></article>
+        <article class="f" data-s="live"><h3>Validator clients <span class="chip live">Live</span></h3><p><b>Agave</b> (Anza), <b>Firedancer / Frankendancer</b> (Jump), and <b>Jito-Solana</b> (Agave fork with MEV support). Multiple clients reduce the risk of one bug halting the network.</p></article>
+        <article class="f" data-s="live"><h3>XDP networking <span class="chip live">Live</span></h3><p>Kernel-bypass networking for validators, cutting packet latency about 200×. In Agave 4.0+ and on by default in Firedancer.</p></article>
+      </div>
+    </section>
+
+    <!-- 02 UPGRADES -->
+    <section class="layer" id="upgrades">
+      <div class="layer-head"><span class="k">02 · Upgrades 2026</span><h2>What shipped and what is next</h2>
+        <p>From solana.com/upgrades. Agave is the main validator client; each release bundles feature gates.</p></div>
+      <div class="table-wrap"><table>
+        <tr><th>Release</th><th>Feature</th><th>Status</th><th>What it changes</th></tr>
+        <tr class="f-row" data-s="live"><td class="n">Agave 4.1 · May</td><td>100M CU blocks (SIMD-0286)</td><td><span class="chip live">Live</span></td><td>Block limit 60M → 100M compute units (+66%). Activated 29 Jul 2026, epoch 1009.</td></tr>
+        <tr class="f-row" data-s="live"><td class="n">Agave 4.1 · May</td><td>Optimized token program (P-Token, SIMD-0266)</td><td><span class="chip live">Live</span></td><td>Pinocchio rewrite of SPL Token. 95–98% fewer CUs; a transfer drops from about 4,645 to 76 CU. Drop-in compatible.</td></tr>
+        <tr class="f-row" data-s="live"><td class="n">Agave 4.1 · May</td><td>BLS pubkeys + Validator Admission Ticket</td><td><span class="chip live">Live</span></td><td>Validator registration groundwork for Alpenglow.</td></tr>
+        <tr class="f-row" data-s="live"><td class="n">Agave 4.1 · May</td><td>New cryptography</td><td><span class="chip live">Live</span></td><td>Native BN254 G2 and BLS12-381 operations, useful for ZK proofs and signature aggregation.</td></tr>
+        <tr class="f-row" data-s="live"><td class="n">Agave 4.1 · May</td><td>XDP</td><td><span class="chip live">Live</span></td><td>Kernel-bypass networking.</td></tr>
+        <tr class="f-row" data-s="live"><td class="n">Agave 4.2 · Aug</td><td>Larger transactions</td><td><span class="chip live">Live</span></td><td>Max transaction size 1,232 → 4,096 bytes. More accounts and instructions per transaction.</td></tr>
+        <tr class="f-row" data-s="part"><td class="n">Agave 4.2 · Aug</td><td>200 ms slots</td><td><span class="chip part">Partial</span></td><td>Slot time 400 ms → 200 ms.</td></tr>
+        <tr class="f-row" data-s="part"><td class="n">Agave 4.2 · Aug</td><td>Reduced rent</td><td><span class="chip part">Partial</span></td><td>On-chain storage about 90% cheaper.</td></tr>
+        <tr class="f-row" data-s="dev"><td class="n">Agave 4.3 · Oct (exp.)</td><td>Alpenglow</td><td><span class="chip dev">Coming</span></td><td>~150 ms finality instead of ~12.8 s.</td></tr>
+        <tr class="f-row" data-s="dev"><td class="n">Agave 4.4 · Nov (exp.)</td><td>sBPFv3</td><td><span class="chip dev">Coming</span></td><td>New program deployments must target sBPFv3; existing programs keep running.</td></tr>
+      </table></div>
+    </section>
+
+    <!-- 03 ACCOUNTS -->
+    <section class="layer" id="accounts">
+      <div class="layer-head"><span class="k">03 · Accounts &amp; state</span><h2>Everything is an account</h2>
+        <p>Code and data are both stored in accounts. Programs are stateless; they read and write accounts passed into each instruction.</p></div>
+      <div class="grid">
+        <article class="f" data-s="std"><h3>Account structure <span class="chip std">Standard</span></h3><p>Each account has an address, a balance in lamports (1 SOL = 1 billion lamports), a data byte array, an owner program, and an executable flag.</p></article>
+        <article class="f" data-s="std"><h3>Ownership rules <span class="chip std">Standard</span></h3><p>Only the owner program may change an account's data or debit its lamports. Anyone may credit lamports. This is the core security model.</p></article>
+        <article class="f" data-s="std"><h3>Rent &amp; rent exemption <span class="chip std">Standard</span></h3><p>Accounts must hold a minimum balance proportional to their size to stay alive. The deposit is returned when the account is closed. A 90% rent cut is partly activated.</p></article>
+        <article class="f" data-s="std"><h3>Program Derived Addresses <span class="chip std">Standard</span></h3><p>Deterministic addresses derived from seeds and a program ID, with no private key. Only that program can sign for them, which makes PDAs the standard way to hold program-owned state and escrow.</p></article>
+        <article class="f" data-s="std"><h3>Account types <span class="chip std">Standard</span></h3><p>Wallet (system-owned) accounts, program accounts (executable), program data accounts, token accounts, sysvars (clock, rent, slot hashes, instructions).</p></article>
+        <article class="f" data-s="std"><h3>Address Lookup Tables <span class="chip std">Standard</span></h3><p>On-chain tables of addresses that v0 transactions reference by 1-byte index, so one transaction can touch many more accounts.</p></article>
+        <article class="f" data-s="std"><h3>State compression <span class="chip std">Standard</span></h3><p>Store only a Merkle root on chain and the leaves in the ledger. Powers compressed NFTs at a tiny fraction of normal cost.</p></article>
+        <article class="f" data-s="live"><h3>ZK Compression (Light Protocol) <span class="chip live">Live</span></h3><p>Rent-free compressed accounts and tokens, kept valid with small zero-knowledge proofs. V2 batched Merkle trees went live Jan 2026 (~250× cheaper per update, ~70% less CU). The Light Token Program is on devnet, mainnet planned.</p></article>
+      </div>
+    </section>
+
+    <!-- 04 TX -->
+    <section class="layer" id="tx">
+      <div class="layer-head"><span class="k">04 · Transactions &amp; fees</span><h2>How you change state, and what it costs</h2>
+        <p>A transaction is a list of instructions plus signatures and a recent blockhash. It succeeds or fails atomically.</p></div>
+      <div class="grid">
+        <article class="f" data-s="std"><h3>Instructions <span class="chip std">Standard</span></h3><p>Each names a program, the accounts it touches (read-only or writable, signer or not), and input bytes. Programs can inspect other instructions in the same transaction (introspection).</p></article>
+        <article class="f" data-s="std"><h3>Versioned transactions (v0) <span class="chip std">Standard</span></h3><p>Adds Address Lookup Table support. Legacy transactions still work.</p></article>
+        <article class="f" data-s="live"><h3>Transaction size <span class="chip live">Live</span></h3><p>Up to 4,096 bytes since Agave 4.2 (was 1,232).</p></article>
+        <article class="f" data-s="std"><h3>Durable nonces <span class="chip std">Standard</span></h3><p>Replace the expiring blockhash with a stored nonce, so a transaction can be signed now and sent much later. Used for offline and multi-party signing.</p></article>
+        <article class="f" data-s="std"><h3>Partial signing <span class="chip std">Standard</span></h3><p>Several parties sign the same transaction separately, for example a user plus a fee payer.</p></article>
+        <article class="f" data-s="std"><h3>Base fee <span class="chip std">Standard</span></h3><p>5,000 lamports per signature. 50% burned, 50% to the validator. Charged even if the transaction fails.</p></article>
+        <article class="f" data-s="std"><h3>Priority fees <span class="chip std">Standard</span></h3><p>Optional tip per compute unit: <code>ceil(CU price × CU limit ÷ 1,000,000)</code> lamports. 100% goes to the validator.</p></article>
+        <article class="f" data-s="std"><h3>Compute budget <span class="chip std">Standard</span></h3><p>Default 200,000 CU per non-builtin instruction and 3,000 per builtin. Set a limit and price with the Compute Budget program. Blocks hold 100M CU.</p></article>
+        <article class="f" data-s="live"><h3>Fee abstraction (Kora) <span class="chip live">Live</span></h3><p>A paymaster JSON-RPC server that pays SOL fees and lets users pay in SPL tokens such as USDC. Integrates with the Kit client.</p></article>
+        <article class="f" data-s="std"><h3>Confirmation levels <span class="chip std">Standard</span></h3><p><code>processed</code> → <code>confirmed</code> (supermajority voted) → <code>finalized</code> (rooted). Alpenglow will collapse this to about 150 ms.</p></article>
+        <article class="f" data-s="live"><h3>MEV protection <span class="chip live">Live</span></h3><p>Docs cover protecting users from sandwiching via private routing and bundle services; see Staking &amp; MEV.</p></article>
+      </div>
+    </section>
+
+    <!-- 05 PROGRAMS -->
+    <section class="layer" id="programs">
+      <div class="layer-head"><span class="k">05 · Programs &amp; runtime</span><h2>Smart contracts on Solana</h2>
+        <p>Programs are compiled to sBPF bytecode and run in the Solana Virtual Machine (SVM). They are upgradeable by default unless the upgrade authority is removed.</p></div>
+      <div class="grid">
+        <article class="f" data-s="std"><h3>System Program <span class="chip std">Core</span></h3><p>Creates accounts, allocates space, assigns owners, transfers SOL.</p></article>
+        <article class="f" data-s="std"><h3>Vote &amp; Stake programs <span class="chip std">Core</span></h3><p>Validator voting, and delegating SOL to validators through stake accounts.</p></article>
+        <article class="f" data-s="std"><h3>Compute Budget program <span class="chip std">Core</span></h3><p>Sets compute limits and priority fees per transaction.</p></article>
+        <article class="f" data-s="std"><h3>Address Lookup Table program <span class="chip std">Core</span></h3><p>Creates and extends lookup tables.</p></article>
+        <article class="f" data-s="std"><h3>BPF loaders <span class="chip std">Core</span></h3><p>Deploy, upgrade and close programs (upgradeable loader v3, loader v4).</p></article>
+        <article class="f" data-s="std"><h3>ZK ElGamal Proof program <span class="chip std">Core</span></h3><p>Verifies zero-knowledge proofs used by confidential token balances.</p></article>
+        <article class="f" data-s="std"><h3>Precompiles <span class="chip std">Core</span></h3><p>Signature checks for Ed25519, Secp256k1 (Ethereum-style keys) and Secp256r1 (passkeys and phone secure enclaves).</p></article>
+        <article class="f" data-s="live"><h3>New crypto syscalls <span class="chip live">Live</span></h3><p>BN254 G2 and BLS12-381 operations, for ZK verifiers and aggregate signatures.</p></article>
+        <article class="f" data-s="std"><h3>Cross-Program Invocation <span class="chip std">Standard</span></h3><p>Programs call other programs, passing accounts and privileges along. A program signs for its own PDAs with <code>invoke_signed</code>. Nesting depth is capped.</p></article>
+        <article class="f" data-s="std"><h3>Frameworks <span class="chip std">Standard</span></h3><p><b>Anchor</b> (most common, IDL + safety macros), <b>Pinocchio</b> (zero-dependency, high performance), native Rust.</p></article>
+        <article class="f" data-s="std"><h3>IDL &amp; client generation <span class="chip std">Standard</span></h3><p>Programs publish an interface (IDL) from which typed clients are generated (Codama).</p></article>
+        <article class="f" data-s="std"><h3>Verified builds <span class="chip std">Standard</span></h3><p>Reproducible builds prove deployed bytecode matches public source code.</p></article>
+        <article class="f" data-s="dev"><h3>sBPFv3 <span class="chip dev">Coming</span></h3><p>Required target for new deployments from Agave 4.4 (Nov 2026).</p></article>
+      </div>
+    </section>
+
+    <!-- 06 TOKENS -->
+    <section class="layer" id="tokens">
+      <div class="layer-head"><span class="k">06 · Tokens</span><h2>Two token programs and twenty-seven extensions</h2>
+        <p>Every fungible token and most NFTs use one of two programs. A mint defines the token; token accounts hold balances.</p></div>
+      <div class="grid">
+        <article class="f" data-s="live"><h3>SPL Token (now P-Token) <span class="chip live">Live</span></h3><p>Create mint, create account, mint, transfer, burn, <b>approve / revoke delegate</b>, freeze / thaw, set authority, close account, sync native (wrapped SOL). Now runs as the optimized P-Token implementation.</p><div class="meta">One delegate per token account at a time</div></article>
+        <article class="f" data-s="std"><h3>Token-2022 (Token Extensions) <span class="chip std">Standard</span></h3><p>A second token program with optional extensions chosen when the mint or account is created. Listed in full below.</p></article>
+        <article class="f" data-s="std"><h3>Token ACL <span class="chip std">Standard</span></h3><p>Permissioned tokens: allow or block lists for who may hold or move a token, aimed at regulated assets.</p></article>
+        <article class="f" data-s="std"><h3>Metaplex metadata <span class="chip std">Standard</span></h3><p>Name, symbol, image and attributes for SPL tokens and NFTs.</p></article>
+        <article class="f" data-s="std"><h3>Token verification <span class="chip std">Standard</span></h3><p>Guidance for proving a token is the real one, not a lookalike.</p></article>
+      </div>
+      <h3 style="font-family:var(--display);font-weight:500;margin:.5rem 0 0">Token-2022 mint extensions (20)</h3>
+      <div class="ext">
+        <div class="f" data-s="std"><b>TransferFeeConfig</b> — fee on every transfer, withdrawable by an authority</div>
+        <div class="f" data-s="std"><b>MintCloseAuthority</b> — the mint can be closed</div>
+        <div class="f" data-s="std"><b>ConfidentialTransferMint</b> — auditor setup for confidential balances</div>
+        <div class="f" data-s="std"><b>DefaultAccountState</b> — new accounts start frozen or open</div>
+        <div class="f" data-s="std"><b>NonTransferable</b> — soulbound tokens</div>
+        <div class="f" data-s="std"><b>InterestBearingConfig</b> — displayed balance accrues interest</div>
+        <div class="f" data-s="std"><b>PermanentDelegate</b> — an authority that can always move or burn</div>
+        <div class="f" data-s="std"><b>TransferHook</b> — your program runs on every transfer</div>
+        <div class="f" data-s="std"><b>ConfidentialTransferFeeConfig</b> — encrypted withheld fees</div>
+        <div class="f" data-s="std"><b>MetadataPointer</b> — points to the metadata account</div>
+        <div class="f" data-s="std"><b>TokenMetadata</b> — metadata stored in the mint itself</div>
+        <div class="f" data-s="std"><b>GroupPointer</b> — points to a group config</div>
+        <div class="f" data-s="std"><b>TokenGroup</b> — collections of tokens</div>
+        <div class="f" data-s="std"><b>GroupMemberPointer</b> — points to membership data</div>
+        <div class="f" data-s="std"><b>TokenGroupMember</b> — this token belongs to a group</div>
+        <div class="f" data-s="std"><b>ConfidentialMintBurn</b> — mint and burn with hidden amounts</div>
+        <div class="f" data-s="std"><b>ScaledUiAmount</b> — UI amount scaled by a multiplier (stock splits)</div>
+        <div class="f" data-s="std"><b>Pausable</b> — pause minting, burning and transfers</div>
+        <div class="f" data-s="std"><b>ImmutableOwner</b> — account owner can't be reassigned</div>
+        <div class="f" data-s="std"><b>CpiGuard</b> — blocks privileged token actions via CPI</div>
+      </div>
+      <h3 style="font-family:var(--display);font-weight:500;margin:.5rem 0 0">Token-2022 account extensions (7)</h3>
+      <div class="ext">
+        <div class="f" data-s="std"><b>TransferFeeAmount</b> — withheld fees on this account</div>
+        <div class="f" data-s="std"><b>ConfidentialTransferAccount</b> — encrypted balance state</div>
+        <div class="f" data-s="std"><b>MemoTransfer</b> — incoming transfers must carry a memo</div>
+        <div class="f" data-s="std"><b>NonTransferableAccount</b> — holds a soulbound token</div>
+        <div class="f" data-s="std"><b>TransferHookAccount</b> — belongs to a hooked mint</div>
+        <div class="f" data-s="std"><b>ConfidentialTransferFeeAmount</b> — encrypted withheld fees</div>
+        <div class="f" data-s="std"><b>PausableAccount</b> — belongs to a pausable mint</div>
+      </div>
+    </section>
+
+    <!-- 07 NFT -->
+    <section class="layer" id="nft">
+      <div class="layer-head"><span class="k">07 · NFTs &amp; digital ownership</span><h2>Collectibles, memberships, tickets</h2></div>
+      <div class="grid">
+        <article class="f" data-s="std"><h3>Metaplex Token Metadata <span class="chip std">Standard</span></h3><p>The original NFT standard: an SPL token with supply 1 plus a metadata account.</p></article>
+        <article class="f" data-s="std"><h3>Metaplex Core <span class="chip std">Standard</span></h3><p>Single-account NFTs with plugins (royalties, freeze, attributes). Cheaper and simpler than Token Metadata.</p></article>
+        <article class="f" data-s="live"><h3>Compressed NFTs (Bubblegum v2) <span class="chip live">Live</span></h3><p>Millions of NFTs for a few SOL using state compression. V2 adds Core collections, freeze / thaw and soulbound cNFTs.</p></article>
+        <article class="f" data-s="std"><h3>Token-2022 NFTs <span class="chip std">Standard</span></h3><p>NFTs with built-in metadata, groups and dynamic metadata that changes over time.</p></article>
+      </div>
+    </section>
+
+    <!-- 08 PAYMENTS -->
+    <section class="layer" id="payments">
+      <div class="layer-head"><span class="k">08 · Payments &amp; commerce</span><h2>Moving money</h2>
+        <p>The docs now have a full payments section: accept, send, batch, subscriptions and fee abstraction.</p></div>
+      <div class="grid">
+        <article class="f" data-s="std"><h3>Basic payments <span class="chip std">Standard</span></h3><p>SOL or token transfers with memos, address verification and confirmation tracking.</p></article>
+        <article class="f" data-s="std"><h3>Batch payments <span class="chip std">Standard</span></h3><p>Many transfers in one transaction, e.g. payroll. Larger 4,096-byte transactions fit more.</p></article>
+        <article class="f" data-s="std"><h3>Subscriptions <span class="chip std">Standard</span></h3><p>Recurring payments via token delegation and scheduled pulls; covered in the docs' subscriptions overview.</p></article>
+        <article class="f" data-s="std"><h3>Solana Pay <span class="chip std">Standard</span></h3><p>URL and QR standard for wallet payments, online and at point of sale.</p></article>
+        <article class="f" data-s="std"><h3>Actions &amp; Blinks <span class="chip std">Standard</span></h3><p>Any transaction (pay, vote, mint, swap, stake) packaged as a shareable link that unfurls into a button on X, websites or chat. Built by Dialect and the Solana Foundation.</p></article>
+        <article class="f" data-s="live"><h3>Commerce Kit <span class="chip live">Live</span></h3><p>Drop-in payment components and checkout flows for apps.</p></article>
+        <article class="f" data-s="live"><h3>x402 facilitator <span class="chip live">Live</span></h3><p>HTTP 402 pay-per-request payments for APIs and AI agents. <code>@x402/svm</code> package; facilitators PayAI and Coinbase CDP. "Exact" pricing live; "upto" announced by Coinbase on 17 Sep 2026 but the x402 FAQ still lists it as EVM-only.</p></article>
+        <article class="f" data-s="std"><h3>Delivery vs Payment <span class="chip std">Standard</span></h3><p>Asset and cash swap atomically in one transaction, so neither side can default.</p></article>
+        <article class="f" data-s="std"><h3>NAV strikes <span class="chip std">Standard</span></h3><p>Docs pattern for money-market funds publishing net asset value on chain.</p></article>
+      </div>
+    </section>
+
+    <!-- 09 IDENTITY -->
+    <section class="layer" id="identity">
+      <div class="layer-head"><span class="k">09 · Identity, privacy, security</span><h2>Who you are, what stays hidden, what keeps keys safe</h2></div>
+      <div class="grid">
+        <article class="f" data-s="live"><h3>Solana Attestation Service <span class="chip live">Live</span></h3><p>Open protocol for verifiable credentials tied to a wallet: KYC "passports", region checks, accredited-investor status. Reusable across apps without putting personal data on chain. Civic issues on it.</p></article>
+        <article class="f" data-s="std"><h3>Solana Name Service (.sol) <span class="chip std">Standard</span></h3><p>Human-readable names that resolve to wallets.</p></article>
+        <article class="f" data-s="std"><h3>Confidential balances <span class="chip std">Standard</span></h3><p>Token-2022 extensions that hide amounts with ElGamal encryption and ZK proofs, with optional auditor keys for compliance.</p></article>
+        <article class="f" data-s="live"><h3>Private Channels <span class="chip live">Live</span></h3><p>Listed in the docs' tools section as a privacy product with integration resources.</p></article>
+        <article class="f" data-s="live"><h3>Arcium <span class="chip live">Live</span></h3><p>Encrypted computation network (multi-party computation). Mainnet Alpha on Solana; Umbra runs shielded transfers and swaps on it. Over 1 million confidential computations by mid-2026.</p></article>
+        <article class="f" data-s="live"><h3>Private Ephemeral Rollups <span class="chip live">Live</span></h3><p>MagicBlock's confidential execution inside Intel TDX enclaves, still composable with Solana.</p></article>
+        <article class="f" data-s="live"><h3>Keychain <span class="chip live">Live</span></h3><p>One signing interface over local keys, cloud KMS, HSMs and wallets.</p></article>
+        <article class="f" data-s="std"><h3>Passkeys (Secp256r1) <span class="chip std">Standard</span></h3><p>Precompile lets phones' secure enclaves and passkeys sign Solana transactions.</p></article>
+        <article class="f" data-s="std"><h3>Multisig &amp; smart accounts <span class="chip std">Standard</span></h3><p>Squads: shared treasuries, approvals, spending limits with allowed destinations and periods.</p></article>
+      </div>
+    </section>
+
+    <!-- 10 SCALE -->
+    <section class="layer" id="scale">
+      <div class="layer-head"><span class="k">10 · Scaling layers</span><h2>Going faster than the base chain</h2></div>
+      <div class="grid">
+        <article class="f" data-s="live"><h3>Ephemeral Rollups (MagicBlock) <span class="chip live">Live</span></h3><p>Delegate accounts into a temporary fast SVM instance (about 10 ms latency), then commit results back to Solana. Used for games and real-time apps; over a billion transactions on its MagicNet canary.</p></article>
+        <article class="f" data-s="live"><h3>ZK Compression <span class="chip live">Live</span></h3><p>Scales state, not speed: millions of accounts without rent. See Accounts.</p></article>
+        <article class="f" data-s="live"><h3>Bigger, faster blocks <span class="chip live">Live</span></h3><p>100M CU blocks, P-Token efficiency, 4 KB transactions, with 200 ms slots partly active.</p></article>
+      </div>
+    </section>
+
+    <!-- 11 DATA -->
+    <section class="layer" id="data">
+      <div class="layer-head"><span class="k">11 · Data, oracles, bridges</span><h2>Reading the chain and connecting it to the world</h2></div>
+      <div class="grid">
+        <article class="f" data-s="std"><h3>RPC HTTP API <span class="chip std">Standard</span></h3><p>Methods for accounts, blocks, epochs, fees, leaders, supply, tokens, transactions and signatures, e.g. <code>getAccountInfo</code>, <code>getTransaction</code>, <code>simulateTransaction</code>, <code>getTokenAccountsByOwner</code>.</p></article>
+        <article class="f" data-s="std"><h3>RPC WebSocket <span class="chip std">Standard</span></h3><p>Live subscriptions to accounts, programs, logs, signatures, slots, blocks, roots and votes.</p></article>
+        <article class="f" data-s="std"><h3>RPC providers &amp; streaming <span class="chip std">Standard</span></h3><p>Helius, Triton, QuickNode, Chainstack, Alchemy and others; Geyser plugins stream account updates directly from validators.</p></article>
+        <article class="f" data-s="live"><h3>Pyth &amp; Pyth Lazer <span class="chip live">Live</span></h3><p>The default price oracle on Solana, with confidence intervals. Lazer serves sub-millisecond feeds for trading apps.</p></article>
+        <article class="f" data-s="live"><h3>RedStone <span class="chip live">Live</span></h3><p>Oracle named as a migration target for former Switchboard users.</p></article>
+        <article class="f" data-s="dead"><h3>Switchboard <span class="chip dead">Gone</span></h3><p>Shut down 25 Sep 2026 with six days' notice. Kamino, Jito, MarginFi and Drift had to migrate to Pyth or RedStone.</p></article>
+        <article class="f" data-s="live"><h3>Wormhole <span class="chip live">Live</span></h3><p>Cross-chain messaging and token transfers; most complete developer messaging stack. About 1–3 minutes for typical USDC or SOL corridors.</p></article>
+        <article class="f" data-s="live"><h3>deBridge (DLN) <span class="chip live">Live</span></h3><p>Liquidity bridge with no pooled funds: market makers fill orders natively and instantly.</p></article>
+        <article class="f" data-s="live"><h3>LayerZero <span class="chip live">Live</span></h3><p>Omnichain messaging between Solana and 70+ chains.</p></article>
+      </div>
+    </section>
+
+    <!-- 12 DEFI -->
+    <section class="layer" id="defi">
+      <div class="layer-head"><span class="k">12 · DeFi protocols</span><h2>The main financial apps</h2>
+        <p>Figures are from 2026 ecosystem reporting and change daily.</p></div>
+      <div class="grid">
+        <article class="f" data-s="live"><h3>Jupiter <span class="chip live">Live</span></h3><p>Swap aggregator (about 62% of Solana DEX volume, $700M+ daily swaps), perpetuals and the JLP pool (about $1.4B).</p></article>
+        <article class="f" data-s="live"><h3>Kamino <span class="chip live">Live</span></h3><p>Lending and automated liquidity vaults. About $2.0B TVL (May 2026); over $1B in RWA collateral via Anchorage Digital.</p></article>
+        <article class="f" data-s="live"><h3>Raydium <span class="chip live">Live</span></h3><p>Longest-running AMM: constant-product and concentrated pools, plus the LaunchLab token launchpad. About $1.7B TVL.</p></article>
+        <article class="f" data-s="live"><h3>Orca <span class="chip live">Live</span></h3><p>Concentrated-liquidity AMM (Whirlpools).</p></article>
+        <article class="f" data-s="live"><h3>Meteora <span class="chip live">Live</span></h3><p>Dynamic liquidity market maker (DLMM) and yield vaults.</p></article>
+        <article class="f" data-s="live"><h3>Drift <span class="chip live">Live</span></h3><p>Largest perpetual futures exchange on Solana, up to 20× leverage.</p></article>
+        <article class="f" data-s="live"><h3>MarginFi <span class="chip live">Live</span></h3><p>Lending and borrowing.</p></article>
+        <article class="f" data-s="live"><h3>Phoenix <span class="chip live">Live</span></h3><p>Fully on-chain central limit order book.</p></article>
+        <article class="f" data-s="live"><h3>Squads <span class="chip live">Live</span></h3><p>Multisig and smart-account infrastructure securing treasuries and program upgrade keys.</p></article>
+        <article class="f" data-s="live"><h3>Streamflow <span class="chip live">Live</span></h3><p>Token vesting, payroll streams and per-second payments.</p></article>
+      </div>
+    </section>
+
+    <!-- 13 RWA -->
+    <section class="layer" id="rwa">
+      <div class="layer-head"><span class="k">13 · Stablecoins &amp; real-world assets</span><h2>Dollars, funds and stocks on Solana</h2></div>
+      <div class="table-wrap"><table>
+        <tr><th>Asset</th><th>Detail</th></tr>
+        <tr class="f-row" data-s="live"><td>Stablecoin supply</td><td>About $16.7B (Jul 2026), third-largest chain; 11× in three years.</td></tr>
+        <tr class="f-row" data-s="live"><td>USDC</td><td>Roughly 75–80% of Solana stablecoin supply, over $10.5B.</td></tr>
+        <tr class="f-row" data-s="live"><td>PYUSD</td><td>PayPal's stablecoin; Solana is its default payment network since Feb 2026.</td></tr>
+        <tr class="f-row" data-s="live"><td>USDG, USDT, USDY</td><td>Paxos' revenue-sharing USDG (Robinhood, Kraken partners), Tether, and Ondo's yield-bearing USDY.</td></tr>
+        <tr class="f-row" data-s="live"><td>Tokenized RWAs</td><td>Over $4B by Aug 2026 (from $1.4B in Jan); 300,000+ holders on 15 Jul 2026, most of any chain; 2,120+ asset types.</td></tr>
+        <tr class="f-row" data-s="live"><td>BlackRock BUIDL</td><td>Tokenized money-market fund, Solana is one of its chains.</td></tr>
+        <tr class="f-row" data-s="live"><td>xStocks (Backed)</td><td>60+ tokenized stocks and ETFs (AAPLx, SPYx, NVDAx) backed 1:1; about $530M on Solana, tradeable on Jupiter and Raydium.</td></tr>
+      </table></div>
+    </section>
+
+    <!-- 14 STAKING -->
+    <section class="layer" id="staking">
+      <div class="layer-head"><span class="k">14 · Staking &amp; MEV</span><h2>Securing the network and ordering transactions</h2></div>
+      <div class="grid">
+        <article class="f" data-s="std"><h3>Native staking <span class="chip std">Standard</span></h3><p>Delegate SOL to validators through stake accounts; rewards each epoch from inflation and fees.</p></article>
+        <article class="f" data-s="live"><h3>Liquid staking <span class="chip live">Live</span></h3><p>Stake and receive a tradeable token: Jito (JitoSOL), Marinade (mSOL), Sanctum (many LSTs and instant unstake).</p></article>
+        <article class="f" data-s="live"><h3>Jito bundles &amp; tips <span class="chip live">Live</span></h3><p>Send groups of transactions that land together or not at all, with a tip to the validator.</p></article>
+        <article class="f" data-s="live"><h3>Jito BAM <span class="chip live">Live</span></h3><p>Block Assembly Marketplace: open-source block building with private ordering and app-controlled execution plugins. About 33–34% of stake in 2026, with preconfirmations live.</p></article>
+      </div>
+    </section>
+
+    <!-- 15 MOBILE -->
+    <section class="layer" id="mobile">
+      <div class="layer-head"><span class="k">15 · Mobile &amp; wallets</span><h2>Where users hold keys</h2></div>
+      <div class="grid">
+        <article class="f" data-s="live"><h3>Seeker phone <span class="chip live">Live</span></h3><p>Solana Mobile's second phone (shipping since Aug 2025, about $500) with a hardware Seed Vault isolating private keys.</p></article>
+        <article class="f" data-s="live"><h3>SKR token <span class="chip live">Live</span></h3><p>Launched Jan 2026; rewards users, builders, hardware makers and Guardian node operators in the mobile ecosystem.</p></article>
+        <article class="f" data-s="std"><h3>Mobile Wallet Adapter <span class="chip std">Standard</span></h3><p>Lets any Android app ask an installed wallet to sign. Part of the Solana Mobile Stack with the dApp Store.</p></article>
+        <article class="f" data-s="std"><h3>Browser &amp; app wallets <span class="chip std">Standard</span></h3><p>Phantom, Solflare, Backpack and others, connected through Wallet Standard.</p></article>
+        <article class="f" data-s="std"><h3>Embedded wallets <span class="chip std">Standard</span></h3><p>Privy and Turnkey create wallets behind an email or social login, with policies on what a key may do.</p></article>
+      </div>
+    </section>
+
+    <!-- 16 DEPIN -->
+    <section class="layer" id="depin">
+      <div class="layer-head"><span class="k">16 · DePIN</span><h2>Physical networks paid in tokens</h2></div>
+      <div class="grid">
+        <article class="f" data-s="live"><h3>Helium <span class="chip live">Live</span></h3><p>370,000 hotspots for IoT and mobile. Carrier offload (T-Mobile and others) is 57% of Helium Mobile revenue (Mar 2026).</p></article>
+        <article class="f" data-s="live"><h3>Hivemapper / Bee Maps <span class="chip live">Live</span></h3><p>Dashcam-crowdsourced maps covering about 33% of global roads; used by Lyft.</p></article>
+        <article class="f" data-s="live"><h3>io.net <span class="chip live">Live</span></h3><p>About 10,000 GPU nodes renting compute for AI workloads.</p></article>
+        <article class="f" data-s="live"><h3>Render <span class="chip live">Live</span></h3><p>Distributed GPU rendering network.</p></article>
+        <article class="f" data-s="live"><h3>Grass <span class="chip live">Live</span></h3><p>2–3 million nodes sharing spare bandwidth for web data collection.</p></article>
+        <article class="f" data-s="live"><h3>XNET <span class="chip live">Live</span></h3><p>Wi-Fi mesh; AT&amp;T routes traffic for 18 million devices through it.</p></article>
+      </div>
+    </section>
+
+    <!-- 17 AI -->
+    <section class="layer" id="ai">
+      <div class="layer-head"><span class="k">17 · AI &amp; agents</span><h2>Software that pays and acts on its own</h2></div>
+      <div class="grid">
+        <article class="f" data-s="live"><h3>x402 on Solana <span class="chip live">Live</span></h3><p>Agents pay per HTTP request in USDC. Packages <code>@x402/svm</code>, <code>@x402/fetch</code>, <code>@x402/express</code>, or <code>x402-solana</code>.</p></article>
+        <article class="f" data-s="live"><h3>Solana Agent Kit v2 <span class="chip live">Live</span></h3><p>Toolkit giving AI agents Solana actions, using embedded wallets (Turnkey, Privy) with scoped keys and caps.</p></article>
+        <article class="f" data-s="dev"><h3>Fixed-delegation program <span class="chip dev">Devnet</span></h3><p>Capped, expiring budgets an agent draws from with its own key. Program <code>De1egAFM…R44</code>.</p></article>
+        <article class="f" data-s="std"><h3>AI tools &amp; coding with agents <span class="chip std">Standard</span></h3><p>Official docs sections for building with AI assistants and agent tooling.</p></article>
+      </div>
+    </section>
+
+    <!-- 18 DEV -->
+    <section class="layer" id="dev">
+      <div class="layer-head"><span class="k">18 · Developer tools</span><h2>Building and testing</h2></div>
+      <div class="grid">
+        <article class="f" data-s="std"><h3>SDKs <span class="chip std">Standard</span></h3><p>TypeScript (<code>@solana/kit</code>, the successor to web3.js), Rust, Python, Java, Go, and gaming SDKs.</p></article>
+        <article class="f" data-s="std"><h3>CLIs <span class="chip std">Standard</span></h3><p>Solana CLI, SPL Token CLI, Anchor CLI.</p></article>
+        <article class="f" data-s="live"><h3>Surfpool <span class="chip live">Live</span></h3><p>Drop-in replacement for <code>solana-test-validator</code> for local development, testing and infrastructure-as-code deployments.</p></article>
+        <article class="f" data-s="std"><h3>LiteSVM &amp; Mollusk <span class="chip std">Standard</span></h3><p>Fast in-process test harnesses for programs.</p></article>
+        <article class="f" data-s="std"><h3>Frontend kit <span class="chip std">Standard</span></h3><p>Kit client, React hooks, Next.js templates, sign-in with Solana message auth.</p></article>
+        <article class="f" data-s="std"><h3>Networks <span class="chip std">Standard</span></h3><p>Mainnet-beta, devnet (free faucet SOL), testnet (validator testing), and local.</p></article>
+        <article class="f" data-s="std"><h3>Cookbook &amp; bootcamp <span class="chip std">Standard</span></h3><p>Recipes for accounts, tokens, transactions, wallets, games; courses up to production and DePIN.</p></article>
+      </div>
+    </section>
+
+    <section class="layer" id="sources">
+      <div class="layer-head"><span class="k">Sources</span><h2>Where this came from</h2></div>
+      <div class="sources">
+        <ul>
+          <li><a href="https://solana.com/llms.txt">Solana docs index</a> · <a href="https://solana.com/upgrades">Network upgrades</a> · <a href="https://solana.com/upgrades/100m-cu-blocks">100M CU blocks</a> · <a href="https://solana.com/upgrades/alpenglow">Alpenglow</a></li>
+          <li><a href="https://solana.com/docs/tokens/extensions">Token extensions</a> · <a href="https://solana.com/docs/core/fees/fee-structure">Fee structure</a> · <a href="https://solana.com/docs/tools/kora/getting-started">Kora</a> · <a href="https://solana.com/developers/guides/token-extensions/transfer-hook">Transfer hooks</a></li>
+          <li><a href="https://docs.chainstack.com/docs/solana-alpenglow-consensus">Alpenglow (Chainstack)</a> · <a href="https://blockeden.xyz/blog/2026/03/14/solana-p-token-simd-0266-98-percent-resource-reduction-on-chain-token-economics/">P-Token SIMD-0266</a> · <a href="https://www.theblock.co/post/301368/light-protocol-and-helius-labs-introduce-zk-compression-to-further-scale-solana-apps">ZK Compression</a></li>
+          <li><a href="https://attest.solana.com/">Solana Attestation Service</a> · <a href="https://www.theblock.co/post/387564/arcium-launches-privacy-preserving-mainnet-alpha-on-solana-as-umbra-debuts-shielded-finance-layer">Arcium Mainnet Alpha</a> · <a href="https://solanacompass.com/learn/breakpoint-25/tech-talk-magicblock-labs">MagicBlock</a></li>
+          <li><a href="https://solanacompass.com/news/switchboard-oracle-protocol-shuts-down-giving-solana-defi-six-days-to-migrate">Switchboard shutdown</a> · <a href="https://madeonsol.com/blog/pyth-vs-switchboard-solana-oracle-comparison-2026">Pyth vs Switchboard</a> · <a href="https://eco.com/support/en/articles/13017848-best-solana-bridge-for-2026">Bridges 2026</a></li>
+          <li><a href="https://eco.com/support/en/articles/13225733-solana-defi-apps-top-protocols-2026">Solana DeFi 2026</a> · <a href="https://solanacompass.com/news/solana-stablecoin-supply-reaches-167b-growing-11x-in-three-years-to-rank-third-globally">Stablecoin supply</a> · <a href="https://www.kucoin.com/news/flash/solana-rwa-value-surpasses-4-billion-setting-new-all-time-high">RWA $4B</a> · <a href="https://solanacompass.com/news/solana-hits-300000-rwa-holders-to-lead-all-blockchains">RWA holders</a></li>
+          <li><a href="https://blockworks.com/news/jito-bam-solana-mainnet">Jito BAM</a> · <a href="https://solanacompass.com/news/jito-q2-2026-protocol-revenue-falls-45-to-128m-as-bam-reaches-33-of-solana-stake">BAM stake share</a> · <a href="https://docs.solanamobile.com/solana-mobile-stack/seeker">Seeker</a> · <a href="https://developers.metaplex.com/smart-contracts/bubblegum-v2">Bubblegum v2</a></li>
+          <li><a href="https://solanacompass.com/news/helium-mobile-crosses-20m-revenue-mark-as-solana-depin-sector-proves-it-can-scale">Helium</a> · <a href="https://blockeden.xyz/zh/blog/2026/04/28/solana-depin-mainstream-inflection-lyft-hivemapper-helium-tmobile/">DePIN adoption</a> · <a href="https://solana.com/x402">Solana x402</a> · <a href="https://docs.x402.org/faq.md">x402 FAQ</a></li>
+        </ul>
+        <p>Long-standing protocol facts (Proof of History, Turbine, Gulf Stream, Sealevel, PDAs, CPI, ownership rules) are from Solana's core documentation. Ecosystem figures are third-party reporting and move daily.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>Solana Field Guide · compiled 2 Oct 2026 · statuses as of that date</footer>
+</div>
+
+<script>
+(function () {
+  var q = document.getElementById('q');
+  var count = document.getElementById('count');
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('.filter button'));
+  var items = Array.prototype.slice.call(document.querySelectorAll('.f, .f-row'));
+  var layers = Array.prototype.slice.call(document.querySelectorAll('section.layer')).filter(function (s) { return s.id !== 'sources'; });
+  var status = 'all';
+  function matchStatus(el) {
+    if (status === 'all') return true;
+    var s = el.getAttribute('data-s');
+    if (status === 'live') return s === 'live';
+    if (status === 'dev') return s === 'dev' || s === 'part';
+    return true;
+  }
+  function apply() {
+    var term = q.value.trim().toLowerCase();
+    var shown = 0;
+    items.forEach(function (el) {
+      var ok = matchStatus(el) && (!term || el.textContent.toLowerCase().indexOf(term) !== -1);
+      el.hidden = !ok;
+      if (ok) shown++;
+    });
+    layers.forEach(function (sec) {
+      var visible = sec.querySelectorAll('.f:not([hidden]), .f-row:not([hidden])').length;
+      sec.hidden = visible === 0;
+      sec.querySelectorAll('.ext').forEach(function (ext) {
+        var h = ext.previousElementSibling;
+        var any = ext.querySelectorAll('.f:not([hidden])').length > 0;
+        ext.hidden = !any;
+        if (h && h.tagName === 'H3') h.hidden = !any;
+      });
+      sec.querySelectorAll('.table-wrap').forEach(function (tw) {
+        tw.hidden = tw.querySelectorAll('.f-row:not([hidden])').length === 0;
+      });
+    });
+    count.textContent = shown + ' of ' + items.length + ' entries';
+  }
+  q.addEventListener('input', apply);
+  buttons.forEach(function (b) {
+    b.addEventListener('click', function () {
+      status = b.getAttribute('data-status');
+      buttons.forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      apply();
+    });
+  });
+  apply();
+})();
+</script>
