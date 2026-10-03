@@ -10,7 +10,7 @@ project up cold. Details live in the linked files; this is the map.
 | This repo | `github.com/Mulaydm10/solana-hackathon` (public). Mac mini: `~/Dhruv/solana-hackathon`. Laptop (omen): `~/competitions/solana-hackathon` |
 | Old Hedera project | `github.com/Mulaydm10/ehl-switzerland-hackathon`, Mac `~/Dhruv/ehl_switerland`. ETHOnline 2026 entry "Capability Descent". About 3,900 lines of TypeScript in `core/`, `chain/`, `surface/` |
 | Challenge | [Build an MVP with Solana at WHU](https://superteam.fun/earn/listing/build-at-whu), Superteam Germany. Deadline about **5 Oct 2026, 00:00 CEST** (confirm on the listing). Winners 8 Oct. Prizes 1,500 / 1,000 / 500 USDG. Submit: pitch-deck link, public repo, follow @SuperteamDE |
-| Live pages (private until shared) | Project explainer https://claude.ai/artifact/KiHwUPCAHNT63wiQHMBg94 · Solana field guide https://claude.ai/artifact/XQ7MGiZ3N7yTzp25UoKKRD · ETHOnline competitor map https://claude.ai/artifact/U7wLrqdEpztHdzHNJdyBw6 |
+| Live pages (private until shared) | Project explainer https://claude.ai/artifact/KiHwUPCAHNT63wiQHMBg94 · Solana field guide https://claude.ai/artifact/XQ7MGiZ3N7yTzp25UoKKRD · ETHOnline competitor map https://claude.ai/artifact/U7wLrqdEpztHdzHNJdyBw6 · Solana fit check (Vedant) https://claude.ai/artifact/Sc9NsUDR98zGb24u2nTJR6 |
 | Team | Dhruv (`Mulaydm10`, design role, merges) · Vedant (`vedant059`, collaborator, pushes `design/*` branches) |
 
 ## 2. Timeline
@@ -51,6 +51,12 @@ project up cold. Details live in the linked files; this is the map.
 13. **New direction (3 Oct):** an AI "procurement lawyer" that finds agents and services and puts each
     deal into an on-chain contract built from audited templates. See
     `idea-ai-procurement-lawyer-2026-10-03.md`.
+14. **Solana fit check** (Vedant, `solana-fit-check.pdf`, PR #14): all 32 items of his plan checked
+    against the field guide — 14 native on Solana, 11 built from existing parts, 2 gaps (budget tree
+    with ancestor debit; receipt per request), 5 our own design. Adds **X9 trust ramp**: unknown sellers
+    get a small trial limit that grows with good deliveries (`SELLER_ON_TRIAL`, `TRIAL_LIMIT_REACHED`,
+    `SELLER_DOWNGRADED`). Suggests Kora (fees in USDC) and Solana Attestation Service (seller
+    reputation).
 
 ## 3. Corrections made
 

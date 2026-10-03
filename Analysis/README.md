@@ -14,6 +14,7 @@ Research, strategy and decisions for the WHU Solana hackathon entry. Read in thi
 | 8 | `ethonline-2026-postmortem-2026-10-02.md` | Why our Hedera project (Capability Descent) did not place |
 | 9 | `ethonline-2026-finalists-study-guide.pdf` / `.docx` | The 8 finalists explained one by one (Vedant) |
 | 10 | `what-won-and-how-we-win.pdf` / `.docx` | The 16 relevant winners, their shared design rules, and a build plan B1–B8 / X1–X8 (Vedant) |
-| — | `artifacts/` | HTML reading pages: project explainer and Solana field guide, with live links |
+| 11 | `solana-fit-check.pdf` / `-print.pdf` / `.docx` | All 32 rules and features of the plan checked against Solana: 14 native, 11 combine existing parts, 2 gaps, 5 our design; adds X9 trust ramp (Vedant) |
+| — | `artifacts/` | HTML reading pages: project explainer, Solana field guide and Solana fit check, with live links |
 
 Other folders: `Competition Analysis/` (listing read), `Ideas/` (Superteam ideas-bank analysis).
