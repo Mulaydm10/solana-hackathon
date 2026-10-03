@@ -31,11 +31,13 @@ Sources are linked inline; anything marked **(our inference)** is analysis, not 
   Agentic Payments (x402) 3 × $2k — live x402 service via Blocky402, bonus for metering, multi-agent
   settlement, audit trails, ERC-8004/HCS-14 identity; Asset Tokenization 3 × $2k; Hedera Harness OSS
   2 × $1k; Continuity $1k.
-- **Our project is not on the ETHOnline 2026 showcase.** No ETHOnline 2026 winners were published as of
-  2026-10-01 ([Hedera prize page](https://ethglobal.com/events/ethonline2026/prizes/hedera) lists none;
-  no showcase project carries a prize badge).
+- **Correction (2026-10-02):** an earlier version of this section said our project was not on the
+  showcase and that no winners were published. Both were wrong. Our project was submitted as
+  [Capability Descent](https://ethglobal.com/showcase/capability-descent-7mmjb) and did not place;
+  winners are published as prize badges and in the finale stream. See
+  `ethonline-2026-winners-and-competitors-2026-10-02.md` and `ethonline-2026-postmortem-2026-10-02.md`.
 
-### Competing ETHOnline 2026 submissions (no confirmed winners)
+### Competing ETHOnline 2026 submissions (sampled before the winners list was found)
 
 | Project | What it does | Overlap |
 |---|---|---|
