@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Solana Fit Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: summary bar, then one filterable comparison table, then three short reference sections. */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --fg:#161a22; --muted:#5b6474; --line:#dadfe7; --chip:#eef0f4;
+  --accent:#5a3fd0; --accent-soft:#ece8fb;
+  --native:#0f7a55; --native-soft:#e2f4ec;
+  --combine:#2d63c8; --combine-soft:#e4ecfa;
+  --missing:#b4441f; --missing-soft:#fbe9e2;
+  --ours:#6b6f7b; --ours-soft:#eceef2;
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1218; --surface:#171b23; --fg:#e6e9ef; --muted:#9aa3b2; --line:#2a303c; --chip:#222834;
+  --accent:#a593ff; --accent-soft:#272043;
+  --native:#4fd19c; --native-soft:#15302a; --combine:#7fa8f0; --combine-soft:#1a2740;
+  --missing:#f08a62; --missing-soft:#3a2219; --ours:#a5abb8; --ours-soft:#232833; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0f1218; --surface:#171b23; --fg:#e6e9ef; --muted:#9aa3b2; --line:#2a303c; --chip:#222834;
+  --accent:#a593ff; --accent-soft:#272043;
+  --native:#4fd19c; --native-soft:#15302a; --combine:#7fa8f0; --combine-soft:#1a2740;
+  --missing:#f08a62; --missing-soft:#3a2219; --ours:#a5abb8; --ours-soft:#232833; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:16px/1.55 var(--f-body);padding-inline:16px;padding-block:0 64px}
+.wrap{max-width:1120px;margin:0 auto}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2,h3{font-family:var(--f-display);margin:0;line-height:1.15;text-wrap:balance}
+h1{font-size:clamp(2rem,5vw,2.9rem);letter-spacing:-.02em}
+h2{font-size:1.5rem}
+h3{font-size:1.05rem}
+p{margin:0}
+.eyebrow{font:600 .74rem/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+header{padding-block:40px 20px;display:grid;gap:12px}
+.lede{max-width:70ch;color:var(--muted);font-size:1.06rem}
+section{padding-block:32px 4px;display:grid;gap:16px}
+.note{color:var(--muted);font-size:.93rem;max-width:80ch}
+.tally{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.tile{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:14px 16px;display:grid;gap:4px}
+.tile b{font:700 2rem/1 var(--f-display);font-variant-numeric:tabular-nums}
+.tile .k{font-weight:600}
+.tile span{color:var(--muted);font-size:.9rem}
+.tile.native b{color:var(--native)} .tile.combine b{color:var(--combine)} .tile.missing b{color:var(--missing)} .tile.ours b{color:var(--ours)}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--chip)}
+.bar i{display:block;height:100%}
+.verdict{display:inline-flex;align-items:center;gap:6px;font:600 .74rem/1.2 var(--f-mono);padding:4px 8px;border-radius:6px;white-space:nowrap}
+.verdict::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.v-native{color:var(--native);background:var(--native-soft)}
+.v-combine{color:var(--combine);background:var(--combine-soft)}
+.v-missing{color:var(--missing);background:var(--missing-soft)}
+.v-ours{color:var(--ours);background:var(--ours-soft)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.controls input{flex:1 1 240px;min-width:0;font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg)}
+.seg{display:flex;flex-wrap:wrap;gap:4px}
+.seg button{font:600 .85rem var(--f-body);padding:7px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.count{font:.85rem var(--f-mono);color:var(--muted)}
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.94rem}
+th,td{text-align:left;vertical-align:top;padding:11px 12px;border-bottom:1px solid var(--line)}
+th{font:600 .7rem var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--bg)}
+tr:last-child td{border-bottom:0}
+td.id{font:600 .8rem var(--f-mono);color:var(--muted);white-space:nowrap}
+td.item b{display:block}
+td.item small{color:var(--muted);font-size:.86rem}
+.feats{display:flex;flex-direction:column;gap:4px;min-width:200px}
+.feat{display:flex;gap:6px;align-items:baseline;font-size:.88rem}
+.st{font:600 .62rem/1 var(--f-mono);padding:3px 5px;border-radius:4px;background:var(--chip);color:var(--muted);flex:none}
+.st.LIVE,.st.STANDARD{background:var(--native-soft);color:var(--native)}
+.st.DEVNET,.st.PARTIAL,.st.COMING{background:var(--combine-soft);color:var(--combine)}
+.none{color:var(--muted);font-size:.88rem}
+td.how{min-width:240px}
+.verify{display:block;margin-top:6px;font-size:.84rem;color:var(--missing)}
+tr.r-missing td{background:var(--missing-soft)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;gap:8px;align-content:start}
+.card.gap{border-color:var(--missing)}
+.card p{color:var(--muted);font-size:.94rem}
+.card .fix{color:var(--fg)}
+footer{padding-block:40px 0;color:var(--muted);font-size:.9rem;display:grid;gap:6px;max-width:80ch}
+@media (max-width:640px){th,td{padding:9px 8px}}
+</style>
+
+<div class="wrap">
+<header>
+  <span class="eyebrow">WHU Solana Hackathon &#183; plan check &#183; 3 Oct 2026</span>
+  <h1>Solana Fit Check</h1>
+  <p class="lede">Every rule and feature from Parts 3 and 4 of <i>What Won, and How We Win</i>, checked against the Solana Field Guide 2026: what Solana already gives us, what we assemble from its parts, what it lacks, and how we fill each gap.</p>
+</header>
+
+<section aria-label="Summary">
+  <div class="tally" id="tally"></div>
+  <div class="bar" id="bar" aria-hidden="true"></div>
+  <p class="note" id="sumline"></p>
+</section>
+
+<section id="gaps">
+  <span class="eyebrow">Gaps first</span>
+  <h2>What Solana does not have, and how we solve it</h2>
+  <div class="cards" id="gapCards"></div>
+</section>
+
+<section id="table">
+  <span class="eyebrow">Full comparison</span>
+  <h2>Item by item</h2>
+  <div class="controls">
+    <input type="search" id="q" placeholder="Search, e.g. Blink, delegate, memo" autocomplete="off" aria-label="Search items">
+    <div class="seg" role="group" aria-label="Part">
+      <button type="button" data-g="all" aria-pressed="true">All</button>
+      <button type="button" data-g="rule" aria-pressed="false">Part 3 rules</button>
+      <button type="button" data-g="baseline" aria-pressed="false">Baseline B1&#8211;B8</button>
+      <button type="button" data-g="standout" aria-pressed="false">Standout X1&#8211;X10</button>
+    </div>
+    <div class="seg" role="group" aria-label="Verdict">
+      <button type="button" data-v="all" aria-pressed="true">Any verdict</button>
+      <button type="button" data-v="native" aria-pressed="false">On Solana</button>
+      <button type="button" data-v="combine" aria-pressed="false">Parts exist</button>
+      <button type="button" data-v="missing" aria-pressed="false">Not on Solana</button>
+      <button type="button" data-v="ours" aria-pressed="false">Our design</button>
+    </div>
+  </div>
+  <span class="count" id="count"></span>
+  <div class="tablebox"><table>
+    <thead><tr><th>#</th><th>Item</th><th>Solana features (status)</th><th>Verdict</th><th>How we use it / how we solve it</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+</section>
+
+<section id="unused">
+  <span class="eyebrow">Opportunities</span>
+  <h2>Solana features our plan doesn't use yet</h2>
+  <p class="note">From the field guide. Each could strengthen the plan; Kora and the Attestation Service are the quickest wins.</p>
+  <div class="tablebox"><table><thead><tr><th>Feature</th><th>Status</th><th>What it would give us</th></tr></thead><tbody id="unusedRows"></tbody></table></div>
+</section>
+
+<section id="evm">
+  <span class="eyebrow">Porting check</span>
+  <h2>Tools the ETHOnline winners used that Solana lacks</h2>
+  <p class="note">The winners built on Arc, Hedera, Sepolia and Sei. Where their tools have no Solana twin, this is what we use instead.</p>
+  <div class="tablebox"><table><thead><tr><th>Their tool</th><th>On Solana</th><th>Our substitute</th></tr></thead><tbody id="evmRows"></tbody></table></div>
+</section>
+
+<footer>
+  <span class="eyebrow">Legend and sources</span>
+  <p id="legend"></p>
+  <p>Feature statuses come from the Solana Field Guide 2026 (compiled 2 Oct 2026): LIVE on mainnet, STANDARD long-standing, DEVNET test networks only, PARTIAL partly activated, COMING scheduled. Items marked "verify" are untested assumptions to check on devnet first.</p>
+  <p>Plan items come from <code>Analysis/what-won-and-how-we-win.pdf</code> Parts 3 and 4. X10 is the drain-proof wallet discussed after that document and is not in it yet.</p>
+</footer>
+</div>
+
+<script>
+const D = {"meta":{"title":"Solana Fit Check","date":"3 Oct 2026","sources":"Solana Field Guide 2026 (compiled 2 Oct 2026, 161 entries) and 'What Won, and How We Win' Parts 3 and 4."},"verdicts":{"native":{"label":"On Solana","desc":"Solana has it today. We use it directly."},"combine":{"label":"Parts exist","desc":"Solana has the building blocks. We wire them together, with some of our own code."},"missing":{"label":"Not on Solana","desc":"No Solana feature does this. We fill the gap ourselves."},"ours":{"label":"Our design","desc":"Not a chain question. It is how we build the product."}},"rows":[{"id":"R1","group":"rule","name":"Enforce where the money moves","need":"Limits checked by the program that moves funds, not only by our app.","solana":[["SPL Token approve / revoke (P-Token)","LIVE"],["Squads spending limits","STANDARD"],["Token-2022 TransferHook","STANDARD"],["Fixed-delegation program","DEVNET"]],"verdict":"native","how":"The token program itself refuses a delegate transfer above the approved amount. Squads adds periods and allowed recipients."},{"id":"R2","group":"rule","name":"The model never holds the key","need":"A separate signer; the AI can only ask.","solana":[["Keychain (local keys, KMS, HSM, wallets)","LIVE"],["Embedded wallets with key policies (Privy, Turnkey)","STANDARD"],["Solana Agent Kit v2 (scoped keys, caps)","LIVE"]],"verdict":"combine","how":"Custody tools exist. Keeping the key out of the model's process is our design: a signer process with Keychain, and an AI process with an empty environment (Capsule pattern)."},{"id":"R3","group":"rule","name":"The agent can't choose who gets paid or how much","need":"Price and payee come from the 402 or the chain and must match policy.","solana":[["x402 facilitator (@x402/svm)","LIVE"],["Squads allowed destinations","STANDARD"]],"verdict":"combine","how":"x402 puts payTo and amount in the 402. Our gate reads them (never from the agent) and matches them against policy; Squads destinations make the chain refuse other recipients too."},{"id":"R4","group":"rule","name":"Refuse before signing, with reason codes","need":"Checks in order; a closed list of reasons the agent can act on.","solana":[["simulateTransaction (RPC)","STANDARD"],["Program custom errors","STANDARD"]],"verdict":"combine","how":"The gate is ours (core/ codes). Solana helps: simulate a payment for free before signing to catch an on-chain refusal early."},{"id":"R5","group":"rule","name":"Fail closed","need":"Unknown, unreadable or missing means no.","solana":[["Atomic transactions (all or nothing)","STANDARD"]],"verdict":"ours","how":"A product rule we apply everywhere. Solana's all-or-nothing transactions mean a failed check never leaves a half-done payment."},{"id":"R6","group":"rule","name":"Don't trust the facilitator; read the chain","need":"A payment counts as settled only after we read it back.","solana":[["RPC getTransaction","STANDARD"],["RPC WebSocket subscriptions","STANDARD"],["Confirmation levels","STANDARD"],["Alpenglow ~150 ms finality","COMING"]],"verdict":"native","how":"Read every payment back with getTransaction at 'confirmed'. Alpenglow (expected Oct 2026) would make this near-instant."},{"id":"R7","group":"rule","name":"Human approval bound to the exact purchase","need":"Approve exactly this payment, not a general permission.","solana":[["Actions & Blinks","STANDARD"],["Passkeys (Secp256r1)","STANDARD"],["Squads approvals","STANDARD"],["Partial signing","STANDARD"]],"verdict":"native","how":"A Blink hands the owner the exact transaction to sign, so the approval is bound to it by construction. Passkeys let a phone sign it."},{"id":"R8","group":"rule","name":"Kill switch that doesn't need our server","need":"Owner stops an agent directly on chain.","solana":[["SPL revoke","STANDARD"],["Squads: remove spending limit","STANDARD"]],"verdict":"native","how":"The owner signs one revoke from their own wallet. No server involved."},{"id":"R9","group":"rule","name":"Limit the blast radius in time","need":"Budgets per period; future budget can't be stolen now.","solana":[["Squads spending limits with periods","STANDARD"],["Fixed-delegation program (amount + expiry)","DEVNET"],["Streamflow per-second streams","LIVE"],["Subscriptions via delegation","STANDARD"]],"verdict":"combine","how":"Period budgets exist (Squads). NotYet's time-locked keys have no Solana equivalent; if we want them, drand time-lock encryption (tlock-js) works off chain and is chain-agnostic."},{"id":"R10","group":"rule","name":"Public audit trail","need":"Every payment, refusal, grant and revoke publicly readable.","solana":[["Payments with memos","STANDARD"],["RPC + Geyser streaming","STANDARD"],["Solana Attestation Service","LIVE"]],"verdict":"native","how":"Memos on payments, plus a memo-only transaction for refusals and revokes. No dedicated log service like Hedera HCS is needed."},{"id":"R11","group":"rule","name":"Prove it with an experiment","need":"Attack runs, with-vs-without tests, reproducible results.","solana":[["Surfpool (local validator)","LIVE"],["LiteSVM & Mollusk test harnesses","STANDARD"],["Verified builds","STANDARD"]],"verdict":"native","how":"Run the red-team attack thousands of times in LiteSVM, then live on devnet. Verified builds prove deployed code matches the repo."},{"id":"R12","group":"rule","name":"Label what is mocked","need":"Say exactly what is real.","solana":[],"verdict":"ours","how":"README and demo labels. Use devnet explorer links for everything that is real."},{"id":"R13","group":"rule","name":"Free to look, pay only when needed","need":"Discovery free; never pay for what can't be delivered.","solana":[["RPC reads and simulation (free)","STANDARD"],["Delivery vs Payment","STANDARD"]],"verdict":"combine","how":"Delivery vs Payment is atomic only for on-chain assets. For API data, settle after a valid response (TrueTick pattern) or use an escrow PDA (X4)."},{"id":"R14","group":"rule","name":"Legible to agents and judges","need":"MCP, OpenAPI, llms.txt, one-command setup.","solana":[["Solana Agent Kit v2","LIVE"],["x402 packages","LIVE"],["IDL & Codama client generation","STANDARD"],["AI tools docs","STANDARD"]],"verdict":"combine","how":"Agent tooling exists; our MCP server, llms.txt and one-command demo are ours."},{"id":"B1","group":"baseline","name":"Budget tree with ancestor debit","need":"Helpers get less than their parent; every spend counts all the way up.","solana":[["SPL approve (one delegate per account)","STANDARD"],["Squads spending limits (flat, per member)","STANDARD"],["Fixed-delegation (single level)","DEVNET"]],"verdict":"missing","how":"No Solana feature does a tree. Hackathon: core/ keeps the tree, and each agent's on-chain delegate amount is reset to min(its own remaining, every ancestor's remaining) after each spend, so the chain cap is never looser than the tree. Later: a small program with a PDA per node."},{"id":"B2","group":"baseline","name":"Cap enforced by Solana itself","need":"Over the cap, the chain refuses.","solana":[["SPL approve / revoke (P-Token, 95-98% fewer CU)","LIVE"],["Squads spending limits","STANDARD"]],"verdict":"native","how":"One token account per agent with an approved delegate. Note: only one delegate per token account at a time."},{"id":"B3","group":"baseline","name":"Refuse-before-sign gate","need":"Ordered checks with reason codes before any signature.","solana":[["simulateTransaction","STANDARD"]],"verdict":"ours","how":"Our gate in front of the signer, with core/ reason codes. Simulation catches chain-level refusals before sending."},{"id":"B4","group":"baseline","name":"The AI never holds a key; no pay tool","need":"Agent's only tool is fetch_paid(url, purpose).","solana":[["Keychain","LIVE"],["Embedded wallet policies","STANDARD"]],"verdict":"combine","how":"Signer behind Keychain (local key now, KMS later). The tool design is ours."},{"id":"B5","group":"baseline","name":"Real payments, verified from the chain","need":"x402 in USDC on devnet; settled only after reading it back.","solana":[["x402 facilitator (@x402/svm, PayAI, Coinbase CDP; 'exact')","LIVE"],["Kora fee abstraction (pay fees in USDC)","LIVE"],["getTransaction","STANDARD"]],"verdict":"native","how":"Use 'exact' pricing. Kora lets agents hold only USDC, no SOL, matching what Cordon praised about Arc. Verify Friday: does @x402/svm accept a delegate as the payer?","verify":"x402 + delegate payer untested; 'upto' still listed as EVM-only."},{"id":"B6","group":"baseline","name":"Receipt on every payment","need":"Each payment carries budget id and purpose hash.","solana":[["Payments with memos","STANDARD"],["Token-2022 MemoTransfer (requires memos)","STANDARD"]],"verdict":"native","how":"Add a memo instruction to every payment. MemoTransfer only applies to Token-2022 accounts; USDC is classic SPL, so we add the memo ourselves."},{"id":"B7","group":"baseline","name":"One-tap approval for big purchases","need":"Owner approves exactly one purchase from a phone.","solana":[["Actions & Blinks","STANDARD"],["Passkeys","STANDARD"]],"verdict":"native","how":"A Blink per held purchase, unfurling in chat or on X."},{"id":"B8","group":"baseline","name":"Kill switch without our server","need":"Owner revokes in one transaction; other agents keep working.","solana":[["SPL revoke","STANDARD"]],"verdict":"native","how":"Owner signs revoke on that agent's token account only."},{"id":"X1","group":"standout","name":"\u201cTurn off our server\u201d","need":"With our backend off, a compromised agent still can't overspend.","solana":[["SPL delegate cap in the token program","STANDARD"]],"verdict":"native","how":"Works out of the box: the delegate cap lives in the token account. This is our clearest 'why Solana'."},{"id":"X2","group":"standout","name":"Red-team arena","need":"Hostile agent tries to drain; scoreboard of attempts vs losses.","solana":[["LiteSVM / Surfpool","STANDARD"],["Devnet","STANDARD"]],"verdict":"combine","how":"Thousands of attack runs locally in LiteSVM (Cordon-style numbers), one live run on devnet."},{"id":"X3","group":"standout","name":"Blast-radius meter","need":"The most an attacker could take right now.","solana":[["getTokenAccountsByOwner (delegated amount per account)","STANDARD"],["RPC WebSocket","STANDARD"]],"verdict":"native","how":"Sum the delegated amounts across agent accounts; update live on each change."},{"id":"X4","group":"standout","name":"Receipt per request (no double charge)","need":"A receipt account keyed by request hash; paying twice is impossible.","solana":[["PDAs","STANDARD"],["Reduced rent (~90%)","PARTIAL"],["ZK Compression (rent-free accounts)","LIVE"]],"verdict":"missing","how":"No ready program. Write a small Anchor program: create PDA(request hash) + transfer in one transaction; a second attempt fails because the PDA exists. Roadmap; compression makes it cheap at scale."},{"id":"X5","group":"standout","name":"Money that carries its own rules","need":"Every transfer checks sellers and limits, wherever it goes.","solana":[["Token-2022 TransferHook","STANDARD"],["Token ACL (allow / block lists)","STANDARD"]],"verdict":"combine","how":"USDC is classic SPL, so hooks don't apply to it. We would wrap USDC into a Token-2022 mint with a hook. Roadmap."},{"id":"X6","group":"standout","name":"Chain-built invoice","need":"Report from memos, each line linked to its transaction.","solana":[["Memos","STANDARD"],["RPC / Helius indexing","STANDARD"]],"verdict":"native","how":"Read the agent accounts' history, parse memos, group by budget."},{"id":"X7","group":"standout","name":"Don't pay twice + savings number","need":"Reuse what the team already bought.","solana":[],"verdict":"ours","how":"A lookup in our server keyed by request hash; the hash also goes in the memo."},{"id":"X8","group":"standout","name":"Spending advisor","need":"Suggest revokes and smaller caps from spending history.","solana":[["RPC data","STANDARD"]],"verdict":"ours","how":"LLM over computed figures (LedgerMind pattern: do the math in code first)."},{"id":"X9","group":"standout","name":"Trust ramp for new sellers","need":"Trial limit for new sellers; track record anyone can rebuild.","solana":[["Memos","STANDARD"],["Solana Attestation Service","LIVE"],["Squads destinations","STANDARD"]],"verdict":"combine","how":"Outcomes in memos; publish seller scores as Solana Attestation Service credentials so any app can reuse them. Solana has no agent reputation registry (EVM has ERC-8004); SAS is the closest fit."},{"id":"X10","group":"standout","name":"Drain-proof wallet (discussed, not yet in the doc)","need":"Thief can't pay themselves; a small bucket refills slowly; refills stop on attack.","solana":[["Squads destinations + periods","STANDARD"],["Streamflow per-second streams","LIVE"],["RPC WebSocket / Geyser","STANDARD"],["SPL revoke","STANDARD"]],"verdict":"combine","how":"Recipient list and period cap via Squads. A capped refilling bucket does not exist: Streamflow streams keep accruing if unused, so the cap needs our refill service or a small program. We cannot freeze USDC accounts (Circle holds the freeze authority), so 'freeze' means revoking the delegate, via a Blink to the owner or a Squads guardian member.","verify":"Squads spending limits on devnet untested."}],"unused":[["Kora fee abstraction","LIVE","Agents pay fees in USDC and never hold SOL. Removes a setup step and matches Arc's 'one asset' story."],["Solana Attestation Service","LIVE","Reusable credentials: seller reputation (X9), verified-owner badges, KYC for business customers."],["Confidential balances","STANDARD","Hide spend amounts from competitors with an auditor key for the accountant. Token-2022 only, so with wrapped USDC."],["ZK Compression","LIVE","Rent-free receipt accounts at scale for X4."],["Streamflow","LIVE","Per-second budget streams; a ready-made drip for period budgets."],["Passkeys (Secp256r1)","STANDARD","Owner approves with Face ID / fingerprint, no wallet app."],["Fixed-delegation program","DEVNET","Capped, expiring agent budgets already on devnet. Could replace our own delegate handling, but maintainer unclear and devnet only."],["P-Token","LIVE","Token transfers 95-98% cheaper in compute; makes per-call payments even cheaper."],["Alpenglow","COMING","~150 ms finality expected Oct 2026; settlement checks become near-instant."],["Larger transactions (4 KB)","LIVE","Payment + memo + receipt instructions fit in one transaction."]],"evm_gaps":[["ENSv2 per-record permissions (Capsule, Harness, Batas)","SNS .sol names resolve to wallets but have no per-record write roles.","Keep permissions in Squads or our own program; use .sol only as a readable name."],["ERC-8004 agent identity and reputation","No standard agent registry on Solana.","Solana Attestation Service credentials for agent and seller identity."],["Hedera Consensus Service topics (public logs)","No dedicated log service.","Memo transactions or program events; index with RPC or Geyser."],["EIP-3009 gasless authorisations","No signed-authorisation transfer standard.","Kora pays fees; partial signing lets a fee payer co-sign."],["USDC as gas (Arc)","Fees are in SOL.","Kora fee abstraction lets users pay in USDC."],["Uniswap v4 hooks / SwapVM opcodes (Batas)","Different model.","Token-2022 TransferHook for transfer-level rules."],["drand time-lock keys (NotYet)","Not a chain feature anywhere.","tlock-js works off chain with any chain."]]};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const V = D.verdicts, order = ["native","combine","missing","ours"];
+const verdictChip = v => `<span class="verdict v-${v}">${esc(V[v].label)}</span>`;
+const colorVar = {native:"--native", combine:"--combine", missing:"--missing", ours:"--ours"};
+
+// Summary
+const counts = Object.fromEntries(order.map(v => [v, D.rows.filter(r => r.verdict === v).length]));
+const total = D.rows.length;
+document.getElementById("tally").innerHTML = order.map(v =>
+  `<div class="tile ${v}"><b>${counts[v]}</b><span class="k">${esc(V[v].label)}</span><span>${esc(V[v].desc)}</span></div>`).join("");
+document.getElementById("bar").innerHTML = order.map(v => `<i style="width:${counts[v]/total*100}%;background:var(${colorVar[v]})"></i>`).join("");
+document.getElementById("sumline").textContent =
+  `${total} items checked. ${counts.native + counts.combine} of them run on Solana features today, ${counts.missing} need something Solana does not provide, and ${counts.ours} are product decisions, not chain features.`;
+document.getElementById("legend").innerHTML = order.map(v => `${verdictChip(v)} ${esc(V[v].desc)}`).join("<br>");
+
+// Gap cards: missing verdicts + verify flags
+const gapItems = D.rows.filter(r => r.verdict === "missing" || r.verify);
+document.getElementById("gapCards").innerHTML = gapItems.map(r => `
+  <div class="card ${r.verdict === "missing" ? "gap" : ""}">
+    <div>${verdictChip(r.verdict)} <span class="count">${esc(r.id)}</span></div>
+    <h3>${esc(r.name)}</h3>
+    <p>${esc(r.need)}</p>
+    <p class="fix"><b>How we solve it:</b> ${esc(r.how)}</p>
+    ${r.verify ? `<p class="verify" style="color:var(--missing)"><b>Verify:</b> ${esc(r.verify)}</p>` : ""}
+  </div>`).join("");
+
+// Table
+const st = {g: "all", v: "all"};
+const q = document.getElementById("q");
+function render(){
+  const term = q.value.trim().toLowerCase();
+  const list = D.rows.filter(r => (st.g === "all" || r.group === st.g) && (st.v === "all" || r.verdict === st.v) &&
+    (!term || JSON.stringify(r).toLowerCase().includes(term)));
+  document.getElementById("count").textContent = `${list.length} of ${total} items`;
+  document.getElementById("rows").innerHTML = list.map(r => `
+    <tr class="r-${r.verdict}">
+      <td class="id">${esc(r.id)}</td>
+      <td class="item"><b>${esc(r.name)}</b><small>${esc(r.need)}</small></td>
+      <td>${r.solana.length ? `<div class="feats">${r.solana.map(([n,s]) => `<span class="feat"><span class="st ${s}">${s}</span>${esc(n)}</span>`).join("")}</div>` : '<span class="none">No chain feature needed</span>'}</td>
+      <td>${verdictChip(r.verdict)}</td>
+      <td class="how">${esc(r.how)}${r.verify ? `<span class="verify">Verify: ${esc(r.verify)}</span>` : ""}</td>
+    </tr>`).join("");
+}
+function wire(attr, key){
+  document.querySelectorAll(`[data-${attr}]`).forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll(`[data-${attr}]`).forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    st[key] = b.dataset[attr]; render();
+  }));
+}
+wire("g","g"); wire("v","v"); q.addEventListener("input", render); render();
+
+document.getElementById("unusedRows").innerHTML = D.unused.map(([n,s,w]) =>
+  `<tr><td><b>${esc(n)}</b></td><td><span class="st ${s}">${s}</span></td><td>${esc(w)}</td></tr>`).join("");
+document.getElementById("evmRows").innerHTML = D.evm_gaps.map(([a,b,c]) =>
+  `<tr><td><b>${esc(a)}</b></td><td>${esc(b)}</td><td>${esc(c)}</td></tr>`).join("");
+</script>
+
+</body>
+</html>
