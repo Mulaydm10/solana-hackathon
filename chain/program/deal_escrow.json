@@ -125,6 +125,10 @@
       "accounts": [
         {
           "name": "actor",
+          "docs": [
+            "Pays rent only when a v2-era deal settles before its reputation accounts exist."
+          ],
+          "writable": true,
           "signer": true
         },
         {
@@ -227,7 +231,68 @@
           "writable": true
         },
         {
+          "name": "seller_rep",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rep_pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -352,6 +417,10 @@
       "accounts": [
         {
           "name": "actor",
+          "docs": [
+            "Pays rent only when a v2-era deal settles before its reputation accounts exist."
+          ],
+          "writable": true,
           "signer": true
         },
         {
@@ -454,7 +523,68 @@
           "writable": true
         },
         {
+          "name": "seller_rep",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rep_pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -548,6 +678,58 @@
               {
                 "kind": "arg",
                 "path": "deal_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "seller_rep",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "seller"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rep_pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "seller"
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
               }
             ]
           }
@@ -718,6 +900,10 @@
       "accounts": [
         {
           "name": "actor",
+          "docs": [
+            "Pays rent only when a v2-era deal settles before its reputation accounts exist."
+          ],
+          "writable": true,
           "signer": true
         },
         {
@@ -820,7 +1006,68 @@
           "writable": true
         },
         {
+          "name": "seller_rep",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rep_pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -843,6 +1090,10 @@
       "accounts": [
         {
           "name": "actor",
+          "docs": [
+            "Pays rent only when a v2-era deal settles before its reputation accounts exist."
+          ],
+          "writable": true,
           "signer": true
         },
         {
@@ -945,7 +1196,68 @@
           "writable": true
         },
         {
+          "name": "seller_rep",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rep_pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -980,6 +1292,10 @@
       "accounts": [
         {
           "name": "actor",
+          "docs": [
+            "Pays rent only when a v2-era deal settles before its reputation accounts exist."
+          ],
+          "writable": true,
           "signer": true
         },
         {
@@ -1082,7 +1398,68 @@
           "writable": true
         },
         {
+          "name": "seller_rep",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rep_pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -1157,6 +1534,10 @@
       "accounts": [
         {
           "name": "actor",
+          "docs": [
+            "Pays rent only when a v2-era deal settles before its reputation accounts exist."
+          ],
+          "writable": true,
           "signer": true
         },
         {
@@ -1259,7 +1640,68 @@
           "writable": true
         },
         {
+          "name": "seller_rep",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rep_pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.seller",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -1348,6 +1790,32 @@
         162,
         182,
         219
+      ]
+    },
+    {
+      "name": "RepPair",
+      "discriminator": [
+        18,
+        154,
+        200,
+        198,
+        20,
+        143,
+        75,
+        57
+      ]
+    },
+    {
+      "name": "SellerRep",
+      "discriminator": [
+        22,
+        193,
+        183,
+        201,
+        33,
+        214,
+        4,
+        210
       ]
     }
   ],
@@ -1847,6 +2315,108 @@
             "type": {
               "vec": "pubkey"
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RepPair",
+      "docs": [
+        "The history between one seller and one buyer."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "completed",
+            "type": "u64"
+          },
+          {
+            "name": "failed",
+            "type": "u64"
+          },
+          {
+            "name": "volume",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SellerRep",
+      "docs": [
+        "A seller's track record in one token, written only by `settle`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "docs": [
+              "Amounts are only comparable within one mint; scoring reads the USDC record."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "completed",
+            "type": "u64"
+          },
+          {
+            "name": "failed",
+            "type": "u64"
+          },
+          {
+            "name": "neutral",
+            "type": "u64"
+          },
+          {
+            "name": "volume",
+            "docs": [
+              "Sum of amounts paid for completed work (min(invoice, order)), excluding stakes and bonds."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "distinct_buyers",
+            "docs": [
+              "Buyers with at least one completed deal with this seller."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_pair_volume",
+            "docs": [
+              "The largest completed volume with any single buyer (concentration check)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_settled_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }

@@ -13,6 +13,11 @@
 //! - Slashing is computed by this program from on-chain time and state only, never from a flag a
 //!   caller passes in (Xenia's resolveDispute let anyone slash).
 //!
+//! - Seller reputation (Assay): SellerRep and RepPair accounts, written only by `settle`, so a
+//!   reputation change always comes with a real payout. Keyed by mint, so deals settled in a
+//!   token the seller minted themselves never mix with (or inflate) the USDC record. Scoring (min deals, min distinct buyers,
+//!   concentration) is a pure function in core; the program only keeps honest counts.
+//!
 //! Tokens leave the vault only in `settle`, after every check, and only to the deal's own buyer and
 //! seller token accounts; a refused instruction moves nothing.
 use anchor_lang::prelude::*;
@@ -25,6 +30,7 @@ declare_id!("CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV");
 
 pub const DEAL_SEED: &[u8] = b"deal";
 pub const POLICY_SEED: &[u8] = b"policy";
+pub const REP_SEED: &[u8] = b"rep";
 pub const MAX_WINDOW_SECS: i64 = 30 * 86_400;
 pub const MIN_RESOLVE_SECS: i64 = 60;
 pub const MAX_TOLERANCE_BPS: u16 = 2_000;
@@ -110,6 +116,7 @@ pub mod deal_escrow {
             require_keys_eq!(approver.key(), policy.approver, DealError::ApprovalRequired);
         }
         policy.period_spent = spent;
+        init_rep(&mut ctx.accounts.seller_rep, &mut ctx.accounts.rep_pair, seller, buyer, ctx.accounts.mint.key(), ctx.bumps.seller_rep, ctx.bumps.rep_pair);
 
         ctx.accounts.deal.set_inner(Deal {
             buyer,
@@ -155,7 +162,7 @@ pub mod deal_escrow {
         require!(d.status == DealStatus::Open, DealError::WrongStatus);
         require_keys_eq!(ctx.accounts.actor.key(), d.buyer, DealError::Unauthorized);
         let to_buyer = total_held(d)?;
-        settle(ctx.accounts, 0, to_buyer, DealStatus::Cancelled, true)
+        settle(ctx.accounts, &ctx.bumps, 0, to_buyer, DealStatus::Cancelled, true)
     }
 
     /// Seller accepts the terms and posts the stake (Pact). Work starts only after this.
@@ -207,7 +214,7 @@ pub mod deal_escrow {
         require_keys_eq!(ctx.accounts.actor.key(), d.buyer, DealError::Unauthorized);
         require!(d.delivery_hash == expected_delivery_hash, DealError::DeliveryMismatch);
         let (to_seller, to_buyer) = pass_split(d, false)?;
-        settle(ctx.accounts, to_seller, to_buyer, DealStatus::Released, false)
+        settle(ctx.accounts, &ctx.bumps, to_seller, to_buyer, DealStatus::Released, false)
     }
 
     /// After the review window with no challenge, anyone may settle to the seller (buyer silence
@@ -218,7 +225,7 @@ pub mod deal_escrow {
         require!(d.status == DealStatus::Delivered, DealError::WrongStatus);
         require!(now >= d.delivered_at.saturating_add(d.review_secs), DealError::ReviewWindowOpen);
         let (to_seller, to_buyer) = pass_split(d, false)?;
-        settle(ctx.accounts, to_seller, to_buyer, DealStatus::Claimed, false)
+        settle(ctx.accounts, &ctx.bumps, to_seller, to_buyer, DealStatus::Claimed, false)
     }
 
     /// Buyer disputes the delivery inside the review window, posting a bond (Reckn / Recourse).
@@ -259,10 +266,10 @@ pub mod deal_escrow {
         require!(now <= d.challenged_at.saturating_add(d.resolve_secs), DealError::ResolveWindowClosed);
         if delivery_ok {
             let (to_seller, to_buyer) = pass_split(d, true)?;
-            settle(ctx.accounts, to_seller, to_buyer, DealStatus::VerifiedPass, false)
+            settle(ctx.accounts, &ctx.bumps, to_seller, to_buyer, DealStatus::VerifiedPass, false)
         } else {
             let to_buyer = total_held(d)?;
-            settle(ctx.accounts, 0, to_buyer, DealStatus::VerifiedFail, true)
+            settle(ctx.accounts, &ctx.bumps, 0, to_buyer, DealStatus::VerifiedFail, true)
         }
     }
 
@@ -276,7 +283,7 @@ pub mod deal_escrow {
         require!(now > d.challenged_at.saturating_add(d.resolve_secs), DealError::ResolveWindowOpen);
         let to_buyer = d.amount.checked_add(d.bond_posted).ok_or(DealError::MathOverflow)?;
         let to_seller = d.stake_posted;
-        settle(ctx.accounts, to_seller, to_buyer, DealStatus::NoVerdict, true)
+        settle(ctx.accounts, &ctx.bumps, to_seller, to_buyer, DealStatus::NoVerdict, true)
     }
 
     /// Deadline passed without delivery: anyone may refund. If the seller had accepted, the
@@ -290,7 +297,7 @@ pub mod deal_escrow {
         );
         require!(now > d.deadline, DealError::DeadlineNotReached);
         let to_buyer = total_held(d)?;
-        settle(ctx.accounts, 0, to_buyer, DealStatus::Refunded, true)
+        settle(ctx.accounts, &ctx.bumps, 0, to_buyer, DealStatus::Refunded, true)
     }
 }
 
@@ -354,7 +361,7 @@ fn move_in<'info>(
 
 /// The only place tokens leave the vault. The two payouts must add up to exactly what the vault
 /// holds for this deal; refunds credit the buyer's budget for the period the deal was charged to.
-fn settle(a: &mut Settle, to_seller: u64, to_buyer: u64, status: DealStatus, credit_budget: bool) -> Result<()> {
+fn settle(a: &mut Settle, bumps: &SettleBumps, to_seller: u64, to_buyer: u64, status: DealStatus, credit_budget: bool) -> Result<()> {
     let held = total_held(&a.deal)?;
     require!(
         to_seller.checked_add(to_buyer).ok_or(DealError::MathOverflow)? == held,
@@ -387,8 +394,59 @@ fn settle(a: &mut Settle, to_seller: u64, to_buyer: u64, status: DealStatus, cre
     if credit_budget && a.deal.created_at >= a.policy.period_start {
         a.policy.period_spent = a.policy.period_spent.saturating_sub(a.deal.amount);
     }
+    // Deals opened under v2 have no reputation accounts yet; `init_if_needed` made them above.
+    init_rep(&mut a.seller_rep, &mut a.rep_pair, a.deal.seller, a.deal.buyer, a.deal.mint, bumps.seller_rep, bumps.rep_pair);
+    record_outcome(&mut a.seller_rep, &mut a.rep_pair, &a.deal, status)?;
     a.deal.status = status;
     emit!(DealEvent { deal: a.deal.key(), status });
+    Ok(())
+}
+
+/// Fills in a reputation account pair the first time it is seen (all-zero = just created).
+fn init_rep(rep: &mut SellerRep, pair: &mut RepPair, seller: Pubkey, buyer: Pubkey, mint: Pubkey, rep_bump: u8, pair_bump: u8) {
+    if rep.seller == Pubkey::default() {
+        rep.seller = seller;
+        rep.mint = mint;
+        rep.bump = rep_bump;
+    }
+    if pair.seller == Pubkey::default() {
+        pair.seller = seller;
+        pair.buyer = buyer;
+        pair.mint = mint;
+        pair.bump = pair_bump;
+    }
+}
+
+/// How a settled deal counts for the seller. Completed adds the amount actually paid for the
+/// work (never the stake or the bond); a failed delivery or a missed deadline after accepting
+/// counts against; a withdrawn offer, a missing verdict or an offer never accepted is neutral.
+fn record_outcome(rep: &mut SellerRep, pair: &mut RepPair, d: &Deal, status: DealStatus) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    match status {
+        DealStatus::Released | DealStatus::Claimed | DealStatus::VerifiedPass => {
+            let paid = d.invoice_amount.min(d.amount);
+            if pair.completed == 0 {
+                rep.distinct_buyers = rep.distinct_buyers.checked_add(1).ok_or(DealError::MathOverflow)?;
+            }
+            rep.completed = rep.completed.checked_add(1).ok_or(DealError::MathOverflow)?;
+            rep.volume = rep.volume.checked_add(paid).ok_or(DealError::MathOverflow)?;
+            pair.completed = pair.completed.checked_add(1).ok_or(DealError::MathOverflow)?;
+            pair.volume = pair.volume.checked_add(paid).ok_or(DealError::MathOverflow)?;
+            rep.max_pair_volume = rep.max_pair_volume.max(pair.volume);
+        }
+        DealStatus::VerifiedFail => {
+            rep.failed = rep.failed.checked_add(1).ok_or(DealError::MathOverflow)?;
+            pair.failed = pair.failed.checked_add(1).ok_or(DealError::MathOverflow)?;
+        }
+        DealStatus::Refunded if d.accepted_at != 0 => {
+            rep.failed = rep.failed.checked_add(1).ok_or(DealError::MathOverflow)?;
+            pair.failed = pair.failed.checked_add(1).ok_or(DealError::MathOverflow)?;
+        }
+        _ => {
+            rep.neutral = rep.neutral.checked_add(1).ok_or(DealError::MathOverflow)?;
+        }
+    }
+    rep.last_settled_at = now;
     Ok(())
 }
 
@@ -475,6 +533,39 @@ pub struct Deal {
     pub bump: u8,
 }
 
+/// A seller's track record in one token, written only by `settle`.
+#[account]
+#[derive(InitSpace)]
+pub struct SellerRep {
+    pub seller: Pubkey,
+    /// Amounts are only comparable within one mint; scoring reads the USDC record.
+    pub mint: Pubkey,
+    pub completed: u64,
+    pub failed: u64,
+    pub neutral: u64,
+    /// Sum of amounts paid for completed work (min(invoice, order)), excluding stakes and bonds.
+    pub volume: u64,
+    /// Buyers with at least one completed deal with this seller.
+    pub distinct_buyers: u64,
+    /// The largest completed volume with any single buyer (concentration check).
+    pub max_pair_volume: u64,
+    pub last_settled_at: i64,
+    pub bump: u8,
+}
+
+/// The history between one seller and one buyer.
+#[account]
+#[derive(InitSpace)]
+pub struct RepPair {
+    pub seller: Pubkey,
+    pub buyer: Pubkey,
+    pub mint: Pubkey,
+    pub completed: u64,
+    pub failed: u64,
+    pub volume: u64,
+    pub bump: u8,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace, Debug)]
 pub enum DealStatus {
     Open,
@@ -537,6 +628,10 @@ pub struct CreateDeal<'info> {
         bump,
     )]
     pub deal: Box<Account<'info, Deal>>,
+    #[account(init_if_needed, payer = buyer, space = 8 + SellerRep::INIT_SPACE, seeds = [REP_SEED, seller.key().as_ref(), mint.key().as_ref()], bump)]
+    pub seller_rep: Box<Account<'info, SellerRep>>,
+    #[account(init_if_needed, payer = buyer, space = 8 + RepPair::INIT_SPACE, seeds = [REP_SEED, seller.key().as_ref(), buyer.key().as_ref(), mint.key().as_ref()], bump)]
+    pub rep_pair: Box<Account<'info, RepPair>>,
     #[account(
         init,
         payer = buyer,
@@ -587,6 +682,8 @@ pub struct Challenge<'info> {
 /// buyer and seller token accounts, so the caller (`actor`) never chooses where money goes.
 #[derive(Accounts)]
 pub struct Settle<'info> {
+    /// Pays rent only when a v2-era deal settles before its reputation accounts exist.
+    #[account(mut)]
     pub actor: Signer<'info>,
     #[account(mut, has_one = mint)]
     pub deal: Box<Account<'info, Deal>>,
@@ -599,7 +696,12 @@ pub struct Settle<'info> {
     pub buyer_token: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = mint, token::authority = deal.seller, token::token_program = token_program)]
     pub seller_token: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(init_if_needed, payer = actor, space = 8 + SellerRep::INIT_SPACE, seeds = [REP_SEED, deal.seller.as_ref(), deal.mint.as_ref()], bump)]
+    pub seller_rep: Box<Account<'info, SellerRep>>,
+    #[account(init_if_needed, payer = actor, space = 8 + RepPair::INIT_SPACE, seeds = [REP_SEED, deal.seller.as_ref(), deal.buyer.as_ref(), deal.mint.as_ref()], bump)]
+    pub rep_pair: Box<Account<'info, RepPair>>,
     pub token_program: Interface<'info, TokenInterface>,
+    pub system_program: Program<'info, System>,
 }
 
 #[error_code]

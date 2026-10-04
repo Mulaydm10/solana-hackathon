@@ -8,6 +8,8 @@ import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/t
 import {
   fetchMaybeDeal,
   fetchMaybeBuyerPolicy,
+  fetchMaybeSellerRep,
+  fetchMaybeRepPair,
   getAcceptInstructionAsync,
   getCancelInstructionAsync,
   getChallengeInstructionAsync,
@@ -22,7 +24,7 @@ import {
   getUpdatePolicyInstructionAsync,
   type PolicyParamsArgs,
 } from "./generated/index.ts";
-import { dealAddress, policyAddress, programErrorName, STATUS_NAMES } from "./index.ts";
+import { dealAddress, policyAddress, programErrorName, repPairAddress, sellerRepAddress, STATUS_NAMES } from "./index.ts";
 import { isRateLimited, isTransient } from "./retry.ts";
 
 /** The parts of a Kit client the library needs. Any plugin client (RPC, LiteSVM, wallet) fits. */
@@ -85,6 +87,30 @@ export type PolicyView = {
   approver: Address;
   allowAnySeller: boolean;
   allowedSellers: Address[];
+};
+
+/** On-chain seller reputation in one mint (counts only; scoring is core `repScore`). Amounts are decimal strings. */
+export type SellerRepView = {
+  address: Address;
+  seller: Address;
+  mint: Address;
+  completed: number;
+  failed: number;
+  neutral: number;
+  volume: string;
+  distinctBuyers: number;
+  maxPairVolume: string;
+  lastSettledAt: number;
+};
+
+export type RepPairView = {
+  address: Address;
+  seller: Address;
+  buyer: Address;
+  mint: Address;
+  completed: number;
+  failed: number;
+  volume: string;
 };
 
 export type OpenParams = {
@@ -227,6 +253,29 @@ export async function getPolicy(ctx: DealContext, buyer: Address): Promise<Polic
   };
 }
 
+/** A seller's on-chain track record in the context's mint, as plain JSON; all zeros if none. */
+export async function getSellerRep(ctx: DealContext, seller: Address): Promise<SellerRepView> {
+  const address = await sellerRepAddress(seller, ctx.mint);
+  const r = await readWithRetry(ctx, () => fetchMaybeSellerRep(ctx.client.rpc, address));
+  const x = r.exists ? r.data : null;
+  return {
+    address, seller, mint: ctx.mint, completed: Number(x?.completed ?? 0), failed: Number(x?.failed ?? 0), neutral: Number(x?.neutral ?? 0),
+    volume: (x?.volume ?? 0n).toString(), distinctBuyers: Number(x?.distinctBuyers ?? 0),
+    maxPairVolume: (x?.maxPairVolume ?? 0n).toString(), lastSettledAt: Number(x?.lastSettledAt ?? 0),
+  };
+}
+
+/** The history between one seller and one buyer; all zeros if they never dealt. */
+export async function getRepPair(ctx: DealContext, seller: Address, buyer: Address): Promise<RepPairView> {
+  const address = await repPairAddress(seller, buyer, ctx.mint);
+  const r = await readWithRetry(ctx, () => fetchMaybeRepPair(ctx.client.rpc, address));
+  const x = r.exists ? r.data : null;
+  return {
+    address, seller, buyer, mint: ctx.mint, completed: Number(x?.completed ?? 0), failed: Number(x?.failed ?? 0),
+    volume: (x?.volume ?? 0n).toString(),
+  };
+}
+
 const statusIs = (ctx: DealContext, deal: Address, ...names: string[]) => async () => {
   const d = await rawDeal(ctx, deal);
   return d !== null && names.includes(STATUS_NAMES[d.status] ?? "");
@@ -239,6 +288,7 @@ async function settleAccounts(ctx: DealContext, actor: TransactionSigner, deal: 
   return {
     actor, deal, policy: await policyAddress(d.buyer), mint: ctx.mint,
     buyerToken: await ata(ctx, d.buyer), sellerToken: await ata(ctx, d.seller),
+    sellerRep: await sellerRepAddress(d.seller, d.mint), repPair: await repPairAddress(d.seller, d.buyer, d.mint),
   };
 }
 

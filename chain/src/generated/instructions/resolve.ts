@@ -31,9 +31,9 @@ import {
   type InstructionWithAccounts,
   type InstructionWithData,
   type ReadonlyAccount,
-  type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type WritableAccount,
+  type WritableSignerAccount,
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
@@ -63,15 +63,19 @@ export type ResolveInstruction<
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountBuyerToken extends string | AccountMeta<string> = string,
   TAccountSellerToken extends string | AccountMeta<string> = string,
+  TAccountSellerRep extends string | AccountMeta<string> = string,
+  TAccountRepPair extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  TAccountSystemProgram extends string | AccountMeta<string> =
+    "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
   InstructionWithAccounts<
     [
       TAccountActor extends string
-        ? ReadonlySignerAccount<TAccountActor> &
+        ? WritableSignerAccount<TAccountActor> &
             AccountSignerMeta<TAccountActor>
         : TAccountActor,
       TAccountDeal extends string
@@ -92,9 +96,18 @@ export type ResolveInstruction<
       TAccountSellerToken extends string
         ? WritableAccount<TAccountSellerToken>
         : TAccountSellerToken,
+      TAccountSellerRep extends string
+        ? WritableAccount<TAccountSellerRep>
+        : TAccountSellerRep,
+      TAccountRepPair extends string
+        ? WritableAccount<TAccountRepPair>
+        : TAccountRepPair,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
+      TAccountSystemProgram extends string
+        ? ReadonlyAccount<TAccountSystemProgram>
+        : TAccountSystemProgram,
       ...TRemainingAccounts,
     ]
   >;
@@ -141,9 +154,14 @@ export type ResolveAsyncInput<
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountSellerToken extends InstructionAccountInput = InstructionAccountInput,
+  TAccountSellerRep extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
+  TAccountSystemProgram extends InstructionAccountInput =
+    InstructionAccountInput,
 > = {
+  /** Pays rent only when a v2-era deal settles before its reputation accounts exist. */
   actor: TAccountActor;
   deal: TAccountDeal;
   policy: TAccountPolicy;
@@ -151,7 +169,10 @@ export type ResolveAsyncInput<
   vault?: TAccountVault;
   buyerToken: TAccountBuyerToken;
   sellerToken: TAccountSellerToken;
+  sellerRep: TAccountSellerRep;
+  repPair: TAccountRepPair;
   tokenProgram?: TAccountTokenProgram;
+  systemProgram?: TAccountSystemProgram;
   deliveryOk: ResolveInstructionDataArgs["deliveryOk"];
 };
 
@@ -163,7 +184,10 @@ export async function getResolveInstructionAsync<
   TAccountVault extends InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput,
   TAccountSellerToken extends InstructionAccountInput,
+  TAccountSellerRep extends InstructionAccountInput,
+  TAccountRepPair extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
+  TAccountSystemProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
   input: ResolveAsyncInput<
@@ -174,7 +198,10 @@ export async function getResolveInstructionAsync<
     TAccountVault,
     TAccountBuyerToken,
     TAccountSellerToken,
-    TAccountTokenProgram
+    TAccountSellerRep,
+    TAccountRepPair,
+    TAccountTokenProgram,
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -209,8 +236,20 @@ export async function getResolveInstructionAsync<
       InstructionAccountInputAddress<TAccountSellerToken>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountSellerRep,
+      InstructionAccountInputAddress<TAccountSellerRep>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountRepPair,
+      InstructionAccountInputAddress<TAccountRepPair>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountSystemProgram,
+      InstructionAccountInputAddress<TAccountSystemProgram>
     >
   >
 > {
@@ -222,7 +261,7 @@ export async function getResolveInstructionAsync<
 
   // Original accounts.
   const originalAccounts = {
-    actor: { value: input.actor ?? null, isSigner: true, isWritable: false },
+    actor: { value: input.actor ?? null, isSigner: true, isWritable: true },
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
     policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
@@ -237,8 +276,23 @@ export async function getResolveInstructionAsync<
       isSigner: false,
       isWritable: true,
     },
+    sellerRep: {
+      value: input.sellerRep ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    repPair: {
+      value: input.repPair ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
     tokenProgram: {
       value: input.tokenProgram ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
+    systemProgram: {
+      value: input.systemProgram ?? null,
       isSigner: false,
       isWritable: false,
     },
@@ -276,6 +330,10 @@ export async function getResolveInstructionAsync<
       ],
     });
   }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
 
   return Object.freeze({
     accounts: [
@@ -286,7 +344,10 @@ export async function getResolveInstructionAsync<
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("buyerToken", accounts.buyerToken),
       getAccountMeta("sellerToken", accounts.sellerToken),
+      getAccountMeta("sellerRep", accounts.sellerRep),
+      getAccountMeta("repPair", accounts.repPair),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
+      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getResolveInstructionDataEncoder().encode(
       args as ResolveInstructionDataArgs,
@@ -323,8 +384,20 @@ export async function getResolveInstructionAsync<
       InstructionAccountInputAddress<TAccountSellerToken>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountSellerRep,
+      InstructionAccountInputAddress<TAccountSellerRep>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountRepPair,
+      InstructionAccountInputAddress<TAccountRepPair>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountSystemProgram,
+      InstructionAccountInputAddress<TAccountSystemProgram>
     >
   >);
 }
@@ -337,9 +410,14 @@ export type ResolveInput<
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountSellerToken extends InstructionAccountInput = InstructionAccountInput,
+  TAccountSellerRep extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
+  TAccountSystemProgram extends InstructionAccountInput =
+    InstructionAccountInput,
 > = {
+  /** Pays rent only when a v2-era deal settles before its reputation accounts exist. */
   actor: TAccountActor;
   deal: TAccountDeal;
   policy: TAccountPolicy;
@@ -347,7 +425,10 @@ export type ResolveInput<
   vault: TAccountVault;
   buyerToken: TAccountBuyerToken;
   sellerToken: TAccountSellerToken;
+  sellerRep: TAccountSellerRep;
+  repPair: TAccountRepPair;
   tokenProgram?: TAccountTokenProgram;
+  systemProgram?: TAccountSystemProgram;
   deliveryOk: ResolveInstructionDataArgs["deliveryOk"];
 };
 
@@ -359,7 +440,10 @@ export function getResolveInstruction<
   TAccountVault extends InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput,
   TAccountSellerToken extends InstructionAccountInput,
+  TAccountSellerRep extends InstructionAccountInput,
+  TAccountRepPair extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
+  TAccountSystemProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
   input: ResolveInput<
@@ -370,7 +454,10 @@ export function getResolveInstruction<
     TAccountVault,
     TAccountBuyerToken,
     TAccountSellerToken,
-    TAccountTokenProgram
+    TAccountSellerRep,
+    TAccountRepPair,
+    TAccountTokenProgram,
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): ResolveInstruction<
@@ -404,8 +491,20 @@ export function getResolveInstruction<
     InstructionAccountInputAddress<TAccountSellerToken>
   >,
   ResolvedInstructionAccountMeta<
+    TAccountSellerRep,
+    InstructionAccountInputAddress<TAccountSellerRep>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountRepPair,
+    InstructionAccountInputAddress<TAccountRepPair>
+  >,
+  ResolvedInstructionAccountMeta<
     TAccountTokenProgram,
     InstructionAccountInputAddress<TAccountTokenProgram>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountSystemProgram,
+    InstructionAccountInputAddress<TAccountSystemProgram>
   >
 > {
   // Program address.
@@ -416,7 +515,7 @@ export function getResolveInstruction<
 
   // Original accounts.
   const originalAccounts = {
-    actor: { value: input.actor ?? null, isSigner: true, isWritable: false },
+    actor: { value: input.actor ?? null, isSigner: true, isWritable: true },
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
     policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
@@ -431,8 +530,23 @@ export function getResolveInstruction<
       isSigner: false,
       isWritable: true,
     },
+    sellerRep: {
+      value: input.sellerRep ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    repPair: {
+      value: input.repPair ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
     tokenProgram: {
       value: input.tokenProgram ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
+    systemProgram: {
+      value: input.systemProgram ?? null,
       isSigner: false,
       isWritable: false,
     },
@@ -450,6 +564,10 @@ export function getResolveInstruction<
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
   }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
 
   return Object.freeze({
     accounts: [
@@ -460,7 +578,10 @@ export function getResolveInstruction<
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("buyerToken", accounts.buyerToken),
       getAccountMeta("sellerToken", accounts.sellerToken),
+      getAccountMeta("sellerRep", accounts.sellerRep),
+      getAccountMeta("repPair", accounts.repPair),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
+      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getResolveInstructionDataEncoder().encode(
       args as ResolveInstructionDataArgs,
@@ -497,8 +618,20 @@ export function getResolveInstruction<
       InstructionAccountInputAddress<TAccountSellerToken>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountSellerRep,
+      InstructionAccountInputAddress<TAccountSellerRep>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountRepPair,
+      InstructionAccountInputAddress<TAccountRepPair>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountSystemProgram,
+      InstructionAccountInputAddress<TAccountSystemProgram>
     >
   >);
 }
@@ -509,6 +642,7 @@ export type ParsedResolveInstruction<
 > = {
   programAddress: Address<TProgram>;
   accounts: {
+    /** Pays rent only when a v2-era deal settles before its reputation accounts exist. */
     actor: TAccountMetas[0];
     deal: TAccountMetas[1];
     policy: TAccountMetas[2];
@@ -516,7 +650,10 @@ export type ParsedResolveInstruction<
     vault: TAccountMetas[4];
     buyerToken: TAccountMetas[5];
     sellerToken: TAccountMetas[6];
-    tokenProgram: TAccountMetas[7];
+    sellerRep: TAccountMetas[7];
+    repPair: TAccountMetas[8];
+    tokenProgram: TAccountMetas[9];
+    systemProgram: TAccountMetas[10];
   };
   data: ResolveInstructionData;
 };
@@ -529,12 +666,12 @@ export function parseResolveInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedResolveInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 8) {
+  if (instruction.accounts.length < 11) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 8,
+        expectedAccountMetas: 11,
       },
     );
   }
@@ -554,7 +691,10 @@ export function parseResolveInstruction<
       vault: getNextAccount(),
       buyerToken: getNextAccount(),
       sellerToken: getNextAccount(),
+      sellerRep: getNextAccount(),
+      repPair: getNextAccount(),
       tokenProgram: getNextAccount(),
+      systemProgram: getNextAccount(),
     },
     data: getResolveInstructionDataDecoder().decode(instruction.data),
   };

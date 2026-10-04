@@ -8,3 +8,5 @@
 
 export * from "./deal";
 export * from "./policy";
+export * from "./repPair";
+export * from "./sellerRep";

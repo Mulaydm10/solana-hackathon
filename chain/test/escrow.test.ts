@@ -2,7 +2,7 @@
 // exact program error, and each settlement asserts who ended up with which tokens.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DealStatus, getClaimInstructionAsync } from "../src/index.ts";
+import { DealStatus, getClaimInstructionAsync, repPairAddress, sellerRepAddress } from "../src/index.ts";
 import { DEFAULT_POLICY, HOUR, NONE, USDC, hash, rejects, setup } from "./harness.ts";
 
 test("happy path: open, accept with stake, deliver, release pays the invoice and returns the stake", async () => {
@@ -221,6 +221,7 @@ test("a caller cannot redirect a payout to their own token account", async () =>
       await getClaimInstructionAsync({
         actor: t.stranger, deal, policy: t.policy, mint: t.mint.address,
         buyerToken: await t.ata(t.buyer.address), sellerToken: await t.ata(t.stranger.address),
+        sellerRep: await sellerRepAddress(t.seller.address, t.mint.address), repPair: await repPairAddress(t.seller.address, t.buyer.address, t.mint.address),
       }),
     ]),
   );

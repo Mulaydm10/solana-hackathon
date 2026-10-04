@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Address } from "@solana/kit";
-import { deals, getDeal, getPolicy, safeSend, type DealClient, type DealContext } from "../src/index.ts";
+import { deals, getDeal, getPolicy, getRepPair, getSellerRep, safeSend, type DealClient, type DealContext } from "../src/index.ts";
 import { HOUR, USDC, hash, setup } from "./harness.ts";
 
 async function lib() {
@@ -34,6 +34,23 @@ test("library: open, accept, deliver, release; views read back", async () => {
   assert.equal(v?.deliveryHash, "03".repeat(32));
   const p = await getPolicy(ctx, t.buyer.address);
   assert.equal(p?.periodSpent, String(5n * USDC));
+});
+
+test("library: reputation views read back after settlement; unknown sellers read as zeros", async () => {
+  const { t, ctx, open } = await lib();
+  const deal = (await open() as { deal: Address }).deal;
+  await deals.accept(ctx, t.seller, deal);
+  await deals.deliver(ctx, t.seller, deal, hash(3), 5n * USDC);
+  await deals.release(ctx, t.buyer, deal, hash(3));
+  const rep = await getSellerRep(ctx, t.seller.address);
+  assert.deepEqual(
+    { completed: rep.completed, failed: rep.failed, volume: rep.volume, distinctBuyers: rep.distinctBuyers },
+    { completed: 1, failed: 0, volume: String(5n * USDC), distinctBuyers: 1 },
+  );
+  assert.equal((await getRepPair(ctx, t.seller.address, t.buyer.address)).completed, 1);
+  const none = await getSellerRep(ctx, t.stranger.address);
+  assert.equal(none.completed, 0);
+  assert.equal(none.volume, "0");
 });
 
 test("library: refusals come back as program error names, not exceptions", async () => {

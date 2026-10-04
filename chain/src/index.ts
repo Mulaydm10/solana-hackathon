@@ -3,7 +3,7 @@
 // This entry must stay browser/bundler-safe (web and mcp lanes): no Node built-ins, no file paths.
 // Node-only helpers (the program binary path) live in ./node.ts, exported as "@deal/chain/node".
 import type { Address } from "@solana/kit";
-import { findPolicyPda, findDealPda } from "./generated/index.ts";
+import { findPolicyPda, findDealPda, findSellerRepPda, findRepPairPda } from "./generated/index.ts";
 import idl from "../program/deal_escrow.json" with { type: "json" };
 
 export * from "./generated/index.ts";
@@ -18,6 +18,18 @@ export async function dealAddress(buyer: Address, dealId: bigint): Promise<Addre
 /** Buyer policy PDA. */
 export async function policyAddress(buyer: Address): Promise<Address> {
   const [address] = await findPolicyPda({ buyer });
+  return address;
+}
+
+/** Seller reputation PDA in one mint (written only when a deal settles). */
+export async function sellerRepAddress(seller: Address, mint: Address): Promise<Address> {
+  const [address] = await findSellerRepPda({ seller, mint });
+  return address;
+}
+
+/** Reputation PDA for one (seller, buyer) pair in one mint. */
+export async function repPairAddress(seller: Address, buyer: Address, mint: Address): Promise<Address> {
+  const [address] = await findRepPairPda({ seller, buyer, mint });
   return address;
 }
 
