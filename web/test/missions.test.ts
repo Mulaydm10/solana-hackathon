@@ -7,7 +7,7 @@ import { blueprintHash, canonicalize, sha256Hex, validateBlueprint, DEFAULT_LIMI
 import { createNoopSigner, generateKeyPairSigner, getCompiledTransactionMessageDecoder, getTransactionDecoder } from "@solana/kit";
 import { dealAddress, getApproveStageInstructionDataDecoder, getCreateDealInstructionDataDecoder, getRevokeMandateInstruction } from "@deal/chain";
 import { FIXTURES } from "../lib/registry.ts";
-import { blueprintFor, TEAM_BLUEPRINTS } from "../lib/teams.ts";
+import { blueprintFor, TEAM_BLUEPRINTS, TRIP_DATA_SELLER, TRIP_PLANNER } from "../lib/teams.ts";
 import { transactionBytes } from "../lib/wallet-tx.ts";
 import { POST as prepare } from "../app/api/missions/prepare/route.ts";
 import { GET as status } from "../app/api/missions/[mission]/route.ts";
@@ -192,4 +192,15 @@ test("inbox memory: newest first, malformed entries dropped, blocked storage nev
   assert.deepEqual(listMissions(blocked), []);
   saveMission({ mission: MISSION, feeDeal: null, team: "t", at: 1 }, blocked);
   assert.equal(missionLink({ mission: MISSION, feeDeal: BUYER }), `/missions?m=${MISSION}&fee=${BUYER}`);
+});
+
+test("the Trip planner researcher may pay the data seller and its 1 USDC purchase fits the per-payment cap; the fixture lists that blueprint", () => {
+  const researcher = TRIP_PLANNER.roles.find((r) => r.name === "researcher")!;
+  assert.deepEqual(researcher.payees, [TRIP_DATA_SELLER]);
+  assert.ok(researcher.perTxCap >= 1_000_000n);
+  const team = FIXTURES.find((f) => f.kind === "Team" && f.meta.name === "Trip planner")!;
+  assert.equal(blueprintFor(team.contentHash), TRIP_PLANNER);
+  assert.equal(team.meta.kind === "Team" && team.meta.blueprintHash, team.contentHash);
+  // The devnet listing still commits to the first Trip planner until it is updated; it stays hireable meanwhile.
+  assert.ok(blueprintFor("d0789d9f8e3dbb5c92e5f0a70b6230866f1fef26104554800dcaa7b89dafafeb"));
 });

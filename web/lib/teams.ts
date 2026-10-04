@@ -5,22 +5,32 @@ import { blueprintHash, type Blueprint } from "@deal/core";
 
 const USDC = 1_000_000n;
 
+/** The devnet data seller the Trip planner researcher buys market data from (its listings are on chain). */
+export const TRIP_DATA_SELLER = "CntPDGuHGHnpG24n6SmZUjTfqdwa6SpPfWUZjiX9CjHR";
+
+const tripPlanner = (researcher: Pick<Blueprint["roles"][number], "payees">): Blueprint => ({
+  version: 1,
+  name: "Trip planner",
+  roles: [
+    { name: "researcher", purpose: "Finds options and prices for the trip", capabilities: ["market:read"], cap: 5n * USDC, perTxCap: 2n * USDC, ...researcher },
+    { name: "writer", purpose: "Writes the day-by-day plan", capabilities: [], cap: 1n * USDC, perTxCap: 1n * USDC },
+  ],
+  stages: [
+    { name: "Research", roles: ["researcher"], cap: 5n * USDC, gate: "human" },
+    { name: "Write the plan", roles: ["writer"], cap: 1n * USDC, gate: "human" },
+  ],
+  deliverable: { description: "A day-by-day trip plan", check: "sha256" },
+  maxDuration: 604_800,
+});
+
+/** The Trip planner whose researcher may pay the data seller (one 1 USDC purchase fits its 2 USDC per-payment cap). */
+export const TRIP_PLANNER = tripPlanner({ payees: [TRIP_DATA_SELLER] });
+
 const KNOWN: Blueprint[] = [
-  // Trip planner
-  {
-    version: 1,
-    name: "Trip planner",
-    roles: [
-      { name: "researcher", purpose: "Finds options and prices for the trip", capabilities: ["market:read"], cap: 5n * USDC, perTxCap: 2n * USDC },
-      { name: "writer", purpose: "Writes the day-by-day plan", capabilities: [], cap: 1n * USDC, perTxCap: 1n * USDC },
-    ],
-    stages: [
-      { name: "Research", roles: ["researcher"], cap: 5n * USDC, gate: "human" },
-      { name: "Write the plan", roles: ["writer"], cap: 1n * USDC, gate: "human" },
-    ],
-    deliverable: { description: "A day-by-day trip plan", check: "sha256" },
-    maxDuration: 604_800,
-  },
+  TRIP_PLANNER,
+  // The first Trip planner, still committed to by the devnet Team listing until it is updated to TRIP_PLANNER's hash.
+  // Its researcher has no payees, so its missions buy nothing (NO_PAYEE). Remove once that listing is updated.
+  tripPlanner({}),
 ];
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
