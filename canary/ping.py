@@ -3,3 +3,5 @@
 
 def ping() -> str:
     return "pong"
+
+# canary for #30 (lanes web, mcp)
