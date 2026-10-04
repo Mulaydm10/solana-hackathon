@@ -7,6 +7,9 @@
  *   4. the seller's code runs
  *   5. no valid answer (throw, non-2xx, or the body fails `isValid`) -> the payment is NEVER settled
  *   6. only now settle; if settlement fails the answer is withheld (the seller was not paid)
+ * Risk sits with the seller, by design: if the payment stops being settleable between verify and settle (funds
+ * moved, the same payload sent twice, blockhash expired), settlement fails and the answer is withheld, so the
+ * seller loses only the compute for that call and the buyer is never charged for nothing.
  * Framework-agnostic: give it a header getter, get back status, headers and body.
  */
 import type { x402ResourceServer } from "@x402/core/server";
