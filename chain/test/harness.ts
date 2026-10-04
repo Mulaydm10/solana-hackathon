@@ -18,6 +18,8 @@ import {
   dealAddress,
   fetchDeal,
   fetchMaybeDeal,
+  fetchMaybeRepPair,
+  fetchMaybeSellerRep,
   getAcceptInstructionAsync,
   getCancelInstructionAsync,
   getChallengeInstructionAsync,
@@ -31,9 +33,13 @@ import {
   getTimeoutRefundInstructionAsync,
   getUpdatePolicyInstructionAsync,
   policyAddress,
+  sellerRepAddress,
+  repPairAddress,
   type PolicyParamsArgs,
 } from "../src/index.ts";
 import { PROGRAM_SO } from "../src/node.ts";
+
+const SYSTEM = "11111111111111111111111111111111" as Address;
 
 export const USDC = 1_000_000n;
 export const HOUR = 3600n;
@@ -156,7 +162,10 @@ export async function setup(opts: { policy?: (s: Address, a: Address) => PolicyP
   }
   const settleAccounts = async (actor: TransactionSigner, deal: Address) => {
     const d = (await fetchDeal(client.rpc, deal)).data;
-    return { actor, deal, policy, mint: mint.address, buyerToken: await ata(d.buyer), sellerToken: await ata(d.seller) };
+    return {
+      actor, deal, policy: await policyAddress(d.buyer), mint: mint.address, buyerToken: await ata(d.buyer), sellerToken: await ata(d.seller),
+      sellerRep: await sellerRepAddress(d.seller), repPair: await repPairAddress(d.seller, d.buyer),
+    };
   };
   const ops = {
     accept: async (deal: Address, by: TransactionSigner = seller) =>
@@ -182,6 +191,17 @@ export async function setup(opts: { policy?: (s: Address, a: Address) => PolicyP
   };
   const deal = async (address: Address) => (await fetchDeal(client.rpc, address)).data;
   const maybeDeal = async (address: Address) => fetchMaybeDeal(client.rpc, address);
+  const rep = async (seller: Address) => {
+    const r = await fetchMaybeSellerRep(client.rpc, await sellerRepAddress(seller));
+    return r.exists ? r.data : null;
+  };
+  const pair = async (seller: Address, b: Address = buyer.address) => {
+    const r = await fetchMaybeRepPair(client.rpc, await repPairAddress(seller, b));
+    return r.exists ? r.data : null;
+  };
+  /** Delete an account, to recreate states from before v3 (deals opened without reputation accounts). */
+  const wipe = (address: Address) =>
+    client.svm.setAccount({ address, data: new Uint8Array(), executable: false, lamports: lamports(0n), programAddress: SYSTEM, space: 0n });
   const vaultBalance = async (address: Address) => {
     const [vault] = await findAssociatedTokenPda({ owner: address, mint: mint.address, tokenProgram: TOKEN_PROGRAM_ADDRESS });
     return (await fetchToken(client.rpc, vault)).data.amount;
@@ -189,6 +209,6 @@ export async function setup(opts: { policy?: (s: Address, a: Address) => PolicyP
 
   return {
     client, buyer, seller, stranger, verifier, approver, mint, policy, ata, balance, now, warp, send, open, deal, maybeDeal,
-    vaultBalance, ...ops,
+    vaultBalance, rep, pair, wipe, fund, ...ops,
   };
 }

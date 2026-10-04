@@ -188,6 +188,30 @@ test(`attack search: ${RUNS} random sequences x ${STEPS} steps, model-checked af
       for (const p of [t.stranger, t.verifier, t.approver]) {
         if ((await bal(p)) > 0n) { violations++; assert.fail(`${where}: ${p.address} gained ${await bal(p)}`); }
       }
+      // Reputation must equal the model built from final outcomes alone (one buyer in this search).
+      const model = new Map<Address, { completed: bigint; failed: bigint; neutral: bigint; volume: bigint }>();
+      for (const d of deals) {
+        const x = await t.deal(d);
+        if (!FINAL.has(x.status)) continue;
+        const m = model.get(x.seller) ?? { completed: 0n, failed: 0n, neutral: 0n, volume: 0n };
+        if (x.status === DealStatus.Released || x.status === DealStatus.Claimed || x.status === DealStatus.VerifiedPass) {
+          m.completed++;
+          m.volume += x.invoiceAmount < x.amount ? x.invoiceAmount : x.amount;
+        } else if (x.status === DealStatus.VerifiedFail || (x.status === DealStatus.Refunded && x.acceptedAt !== 0n)) m.failed++;
+        else m.neutral++;
+        model.set(x.seller, m);
+      }
+      for (const p of parties) {
+        const m = model.get(p.address) ?? { completed: 0n, failed: 0n, neutral: 0n, volume: 0n };
+        const rep = await t.rep(p.address);
+        const got = { completed: rep?.completed ?? 0n, failed: rep?.failed ?? 0n, neutral: rep?.neutral ?? 0n, volume: rep?.volume ?? 0n };
+        const distinct = rep?.distinctBuyers ?? 0n;
+        if (got.completed !== m.completed || got.failed !== m.failed || got.neutral !== m.neutral || got.volume !== m.volume
+          || distinct !== (m.completed > 0n ? 1n : 0n) || (rep?.maxPairVolume ?? 0n) !== m.volume) {
+          violations++;
+          assert.fail(`${where}: reputation of ${p.address} ${JSON.stringify(got, (_k, v) => (typeof v === "bigint" ? v.toString() : v))} != model ${JSON.stringify(m, (_k, v) => (typeof v === "bigint" ? v.toString() : v))}`);
+        }
+      }
     };
 
     for (let step = 0; step < STEPS; step++) {

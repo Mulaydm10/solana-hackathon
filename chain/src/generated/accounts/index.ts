@@ -8,3 +8,5 @@
 
 export * from "./buyerPolicy";
 export * from "./deal";
+export * from "./repPair";
+export * from "./sellerRep";

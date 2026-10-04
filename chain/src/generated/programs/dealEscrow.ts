@@ -36,10 +36,16 @@ import {
 import {
   getBuyerPolicyCodec,
   getDealCodec,
+  getRepPairCodec,
+  getSellerRepCodec,
   type BuyerPolicy,
   type BuyerPolicyArgs,
   type Deal,
   type DealArgs,
+  type RepPair,
+  type RepPairArgs,
+  type SellerRep,
+  type SellerRepArgs,
 } from "../accounts";
 import {
   getAcceptInstructionAsync,
@@ -91,7 +97,12 @@ import {
   type TimeoutRefundAsyncInput,
   type UpdatePolicyAsyncInput,
 } from "../instructions";
-import { findDealPda, findPolicyPda } from "../pdas";
+import {
+  findDealPda,
+  findPolicyPda,
+  findRepPairPda,
+  findSellerRepPda,
+} from "../pdas";
 
 export const DEAL_ESCROW_PROGRAM_ADDRESS =
   "CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV" as Address<"CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV">;
@@ -99,6 +110,8 @@ export const DEAL_ESCROW_PROGRAM_ADDRESS =
 export enum DealEscrowAccount {
   BuyerPolicy,
   Deal,
+  RepPair,
+  SellerRep,
 }
 
 export function identifyDealEscrowAccount(
@@ -126,6 +139,28 @@ export function identifyDealEscrowAccount(
     )
   ) {
     return DealEscrowAccount.Deal;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([18, 154, 200, 198, 20, 143, 75, 57]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowAccount.RepPair;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([22, 193, 183, 201, 33, 214, 4, 210]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowAccount.SellerRep;
   }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_ACCOUNT,
@@ -467,6 +502,10 @@ export type DealEscrowPluginAccounts = {
   buyerPolicy: ReturnType<typeof getBuyerPolicyCodec> &
     SelfFetchFunctions<BuyerPolicyArgs, BuyerPolicy>;
   deal: ReturnType<typeof getDealCodec> & SelfFetchFunctions<DealArgs, Deal>;
+  repPair: ReturnType<typeof getRepPairCodec> &
+    SelfFetchFunctions<RepPairArgs, RepPair>;
+  sellerRep: ReturnType<typeof getSellerRepCodec> &
+    SelfFetchFunctions<SellerRepArgs, SellerRep>;
 };
 
 export type DealEscrowPluginInstructions = {
@@ -517,6 +556,8 @@ export type DealEscrowPluginInstructions = {
 export type DealEscrowPluginPdas = {
   policy: typeof findPolicyPda;
   deal: typeof findDealPda;
+  sellerRep: typeof findSellerRepPda;
+  repPair: typeof findRepPairPda;
 };
 
 export type DealEscrowPluginRequirements = ClientWithRpc<
@@ -534,6 +575,8 @@ export function dealEscrowProgram() {
         accounts: {
           buyerPolicy: addSelfFetchFunctions(client, getBuyerPolicyCodec()),
           deal: addSelfFetchFunctions(client, getDealCodec()),
+          repPair: addSelfFetchFunctions(client, getRepPairCodec()),
+          sellerRep: addSelfFetchFunctions(client, getSellerRepCodec()),
         },
         instructions: {
           accept: (input) =>
@@ -597,7 +640,12 @@ export function dealEscrowProgram() {
               getUpdatePolicyInstructionAsync(input),
             ),
         },
-        pdas: { policy: findPolicyPda, deal: findDealPda },
+        pdas: {
+          policy: findPolicyPda,
+          deal: findDealPda,
+          sellerRep: findSellerRepPda,
+          repPair: findRepPairPda,
+        },
         identifyAccount: identifyDealEscrowAccount,
         identifyInstruction: identifyDealEscrowInstruction,
         parseInstruction: parseDealEscrowInstruction,
