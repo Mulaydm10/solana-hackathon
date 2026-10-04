@@ -11,7 +11,9 @@ what order), then set yourself up as below. The first time, follow the **worker 
   `docs/` and `contracts/`.
 - **Worker:** you (login `vedant059`).
 - **Both build.** On Dhruv's instruction (4 Oct 2026) design also claims lane issues. The claim ref is the lock, so two
-  agents never hold the same issue. Pick from the queue as usual. Design says in the issue when a task is meant for you.
+  agents never hold the same issue. The plan is divided by **GitHub assignee**: pick only queued issues assigned to
+  you (`gh issue list --label status:queued --assignee @me`), in the usual order. Issues assigned to the other agent are
+  skipped unless design reassigns them.
 - **Human:** Dhruv merges. You never merge and never push to `main`.
 - **Reviews go both ways.** Design reviews your PRs. You review design's PRs (`design/*`) and design's claim PRs, by
   commenting `reviewed at <full head sha>` after reading the diff and the CI checks. A merge needs a non-author review
