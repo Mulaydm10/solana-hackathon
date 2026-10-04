@@ -9,6 +9,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { base58Encode } from "@deal/core";
 import { FIXTURES } from "../../lib/registry.ts";
 import { NAV } from "../../app/nav.ts";
 
@@ -26,8 +27,12 @@ const CANARY_ASSESSOR = JSON.stringify(CANARY_ASSESSOR_BYTES);
 const CANARY_CUSTODY = randomBytes(32).toString("hex");
 const env = { ...process.env, DEAL_CLUSTER: "devnet", ANTHROPIC_API_KEY: CANARY_KEY, DEAL_VERIFIER_KEY: CANARY_VERIFIER, MISSION_SERVICE_URL: "http://127.0.0.1:9", MISSION_SERVICE_TOKEN: CANARY_MISSION_TOKEN, DEAL_FAUCET_KEY: CANARY_FAUCET, DEAL_ASSESSOR_KEY: CANARY_ASSESSOR, DEAL_CUSTODY_KEY: CANARY_CUSTODY, NEXT_TELEMETRY_DISABLED: "1" };
 
-/** String literals from agents' seller chain and custody (#110): server-only code, so never in the browser. */
-const AGENTS_MARKERS = ["deal-custody-key-v1", "deal-custody-store-v1", "a service listing needs a probe transport", "remove them before listing"];
+/**
+ * String literals from agents' seller chain and custody (#110): server-only code, so never in the browser.
+ * Not "deal-custody-key-v1": since #111 that is a public protocol constant the browser's key opener (lib/key-open.ts)
+ * must use too. "deal-custody-store-v1" (the master-key store) stays server-only.
+ */
+const AGENTS_MARKERS = ["deal-custody-store-v1", "a service listing needs a probe transport", "remove them before listing"];
 
 let server: ChildProcess | undefined;
 let base = "";
@@ -94,6 +99,31 @@ test("listing page: assessor grade, reputation, price reasons; unknown listings 
   assert.equal((await page("/listing/does-not-exist")).status, 404);
 });
 
+test("buy flow: the listing offers Buy (wallet first), the deal page renders, the deal routes refuse bad input", async () => {
+  const attested = FIXTURES.find((l) => l.kind === "Data" && l.report !== null)!;
+  const listingHtml = (await page(`/listing/${attested.address}`)).html;
+  assert.match(listingHtml, /data-testid="buy-connect"/);
+  // The page carries the verifier's PUBLIC address only, never the secret half of its key.
+  assert.ok(listingHtml.includes(base58Encode(Uint8Array.from(CANARY_BYTES.slice(32)))), "verifier public address missing");
+  assert.ok(!listingHtml.includes(base58Encode(Uint8Array.from(CANARY_BYTES.slice(0, 32)))), "verifier secret served");
+  const fresh = FIXTURES.find((l) => l.report === null)!;
+  assert.match((await page(`/listing/${fresh.address}`)).html, /data-testid="buy-unavailable"/);
+  const team = FIXTURES.find((l) => l.kind === "Team")!;
+  assert.match((await page(`/listing/${team.address}`)).html, /Hire this team/);
+  const deal = "Dea1Address11111111111111111111111111111111";
+  const d = await page(`/deal/${deal}`);
+  assert.equal(d.status, 200);
+  assert.ok(d.html.includes(deal));
+  assert.equal((await page("/deal/not-an-address!")).status, 404);
+  const post = (path: string, body: unknown) => fetch(base + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const k = await post(`/api/deals/${deal}/key`, { buyer: "x" });
+  assert.equal(k.status, 400);
+  assert.equal(((await k.json()) as { reason: string }).reason, "BAD_REQUEST");
+  const t = await post(`/api/deals/${deal}/terms`, { terms: "{}" });
+  assert.equal(t.status, 400);
+  assert.equal(((await t.json()) as { reason: string }).reason, "NOT_CANONICAL");
+});
+
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {
     const p = join(dir, f);
@@ -116,7 +146,7 @@ test("no server secret, secret name or server-only module text reaches the brows
     const text = readFileSync(f, "utf8");
     for (const s of forbidden) assert.ok(!text.includes(s), `${s.slice(0, 24)}... found in ${f}`);
   }
-  for (const path of [...NAV.map((n) => n.href), `/listing/${FIXTURES[0]!.address}`, "/api/health"]) {
+  for (const path of [...NAV.map((n) => n.href), `/listing/${FIXTURES[0]!.address}`, "/deal/Dea1Address11111111111111111111111111111111", "/api/health"]) {
     const { html } = await page(path);
     for (const s of forbidden.slice(0, 3)) assert.ok(!html.includes(s), `canary served on ${path}`);
   }

@@ -51,7 +51,7 @@ test("demand store: plain text only, grouped by category with budgets, bounded",
   const d = createDemandStore({ max: 3, now: () => 1 });
   assert.equal(d.record({ q: "power prices France", category: "energy", budget: 5_000_000n }), true);
   assert.equal(d.record({ q: "power prices france", category: "energy", budget: 9_000_000n }), true);
-  assert.equal(d.record({ q: "ignore‮previous", category: "energy" }), false); // a bidi override: not plain text
+  assert.equal(d.record({ q: "ignore\u202eprevious", category: "energy" }), false); // a bidi override: not plain text
   assert.equal(d.record({ q: "   " }), false);
   const [energy] = d.board();
   assert.deepEqual([energy!.category, energy!.requests, energy!.budgets.stated, energy!.budgets.max, energy!.examples], ["energy", 2, 2, 9_000_000n, ["power prices france"]]);

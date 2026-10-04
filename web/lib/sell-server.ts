@@ -24,7 +24,7 @@ export function docsBlobs(env: Pick<ServerEnv, "BLOB_READ_WRITE_TOKEN">, raw: Re
     : fileBlobs(raw.DEAL_DOCS_DIR ?? join(process.cwd(), ".data", "docs"));
 }
 
-function keysBlobs(env: Pick<ServerEnv, "BLOB_READ_WRITE_TOKEN">, raw: Record<string, string | undefined>): Blobs {
+export function keysBlobs(env: Pick<ServerEnv, "BLOB_READ_WRITE_TOKEN">, raw: Record<string, string | undefined>): Blobs {
   return env.BLOB_READ_WRITE_TOKEN
     ? vercelBlobs(blobApi, env.BLOB_READ_WRITE_TOKEN, "custody-keys")
     : fileBlobs(raw.DEAL_KEYS_DIR ?? join(process.cwd(), ".data", "keys"));

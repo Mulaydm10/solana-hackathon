@@ -1,7 +1,16 @@
 import { notFound } from "next/navigation";
-import { describeListing, describeRep, repScore, suggestPrice } from "@deal/core";
+import { base58Encode, describeListing, describeRep, repScore, suggestPrice } from "@deal/core";
+import { parseEnv } from "../../../lib/env";
 import { siteRegistry } from "../../../lib/site-registry";
 import { explorer, usdc } from "../../format";
+import { BuyPanel } from "./buy-panel";
+
+/** The verifier's public address (never the key): the last 32 bytes of DEAL_VERIFIER_KEY. Default key = no verifier. */
+function verifierAddress(): string {
+  const e = parseEnv(process.env);
+  if (!e.ok || !e.env.DEAL_VERIFIER_KEY) return "11111111111111111111111111111111";
+  return base58Encode(Uint8Array.from((JSON.parse(e.env.DEAL_VERIFIER_KEY) as number[]).slice(32)));
+}
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +64,15 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
         <li>Content hash <code>{l.contentHash.slice(0, 16)}…</code>{l.kind === "Data" ? " (a delivery must match it exactly)" : ""}</li>
         <li>{l.sales} completed sales</li>
       </ul>
-      <p><em>Buying opens in the next release (#72): your wallet signs the escrow deal; the site never holds your key.</em></p>
+      {l.kind === "Team" ? (
+        <p><a href="/hire">Hire this team</a>: a team is hired with a mission, not bought.</p>
+      ) : (
+        <BuyPanel
+          listing={{ address: l.address, seller: l.seller, kind: l.kind, mint: l.mint, price: l.price.toString(), contentHash: l.contentHash, name: l.meta.name }}
+          verifier={verifierAddress()}
+          attested={l.report !== null}
+        />
+      )}
     </main>
   );
 }
