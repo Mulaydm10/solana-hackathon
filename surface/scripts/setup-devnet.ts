@@ -86,11 +86,25 @@ const balanceOf = async (owner: Address) => {
   const t = await withRetry(() => fetchMaybeToken(client.rpc, a));
   return t.exists ? t.data.amount : 0n;
 };
-/** Top an account up to `target` test tokens (idempotent: re-runs do not inflate balances). */
+/**
+ * Top an account up to `target` test tokens. Never blind-retries a send: a 429 can arrive after
+ * the mint landed (seen live: a seller got minted twice). After any failure the balance is re-read
+ * and only the remaining shortfall is minted.
+ */
 const topUp = async (owner: Address, target: bigint) => {
-  const have = await balanceOf(owner);
-  if (have >= target) return;
-  await send(await getMintToATAInstructionPlanAsync({ payer: buyer, owner, mint, mintAuthority: buyer, amount: target - have, decimals: DECIMALS }));
+  for (let attempt = 1; ; attempt++) {
+    const have = await balanceOf(owner);
+    if (have >= target) return;
+    try {
+      await client.sendTransaction(
+        await getMintToATAInstructionPlanAsync({ payer: buyer, owner, mint, mintAuthority: buyer, amount: target - have, decimals: DECIMALS }),
+      );
+      return;
+    } catch (e) {
+      if (attempt >= 5) throw e;
+      await new Promise((r) => setTimeout(r, 1_500 * attempt)); // then re-read: it may have landed
+    }
+  }
 };
 
 await topUp(buyer.address, 1000n * USDC);

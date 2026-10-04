@@ -55,7 +55,12 @@ export function createApp(deps: AppDeps) {
   const refuse = (res: Response, reason: string, message: string) => res.json({ ok: false, reason, message });
   /** Library results -> JSON. Refusals are normal results; only infrastructure failures are 502. */
   const respond = (res: Response, r: Sent, rec: Record_ | undefined, step: string, extra: object = {}) => {
-    if (!r.ok) return res.status(r.reason === "CHAIN_ERROR" ? 502 : 200).json(r);
+    if (!r.ok) {
+      // Infrastructure failures are logged with their message so they can be diagnosed later;
+      // program refusals are normal outcomes and are not.
+      if (["CHAIN_ERROR", "RPC_UNAVAILABLE", "CONFIRMATION_TIMEOUT"].includes(r.reason)) console.error(`[${step}] ${r.reason}: ${r.message}`);
+      return res.status(r.reason === "CHAIN_ERROR" ? 502 : 200).json(r);
+    }
     rec?.log.push({ step, signature: r.signature });
     res.json({ ok: true, signature: r.signature, explorer: explorer(r.signature), ...extra });
   };
