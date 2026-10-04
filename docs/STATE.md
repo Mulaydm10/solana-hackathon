@@ -39,7 +39,8 @@ design: Mulaydm10
 - Branch protection on `main` requires `lane` + `run` (enforce_admins off, so the owner can still override). Applied by bootstrap on the public repo.
 - Lane `package.json` manifests are read from the PR head, not BASE (see docs/setup.sh). Team mode is untested upstream.
 - Design is a human login (Mulaydm10), not a bot: repo variable `DESIGN_BOT=Mulaydm10`. Design and merge are the same person, so the only independent review of a design PR is the worker's (vedant059).
-- The standing canary claim (#4) is held by Mulaydm10, i.e. design — a deviation from "canaries are worker-authored". Its PR is on `claim/4`, so CI still judges it on the lane path.
+- The standing canary claim (#4) is held by Mulaydm10, i.e. design — a deviation from "canaries are worker-authored". It is handed to vedant059's worker during the worker handshake (design renames `claim/4` to `abandoned/4-mac-<ts>`, the worker claims #4 and opens a new draft canary PR).
+- Old `claim/<n>` refs of merged issues (#18–#52) still exist; they are not locks on open work and are to be renamed `done/<n>`.
 - Actions minutes are one pool per repo; check quota before a team event.
 
 ## Log
@@ -47,3 +48,4 @@ design: Mulaydm10
 - 2026-09-29: no Devin on this repo. Design = Dhruv's Claude Code on `mac` (Mulaydm10); the only worker = vedant059. Omen is not in this project's pool. Teammate setup is plugin-free: vedant059 follows AGENTS.md via docs/TEAMMATE.md.
 - 2026-10-04: direction set to the AI procurement layer (pay-on-delivery escrow program). On Dhruv's instruction the design session also builds the first lane tasks (deviation from "design never claims lane tasks"); vedant059 reviews.
 - 2026-10-04: lanes `web` (Vercel site) and `mcp` (npx MCP package) added as infrastructure only; no product code yet. Shared code must stay browser-safe (core, chain).
+- 2026-10-04: plan for v3 onward is `docs/PLAN.md` (#57). vedant059 back online: worker handshake issue opened; from now on design and the worker both claim lane issues (Dhruv's instruction), reviews go both ways, merges need a non-author review naming the head sha.
