@@ -34,3 +34,31 @@ export function toBase64(bytes: Uint8Array): string {
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(s);
 }
+
+type Finding = { type: string; count: number };
+type Report = {
+  scope?: string; format?: string; sizeBytes?: number; integrity?: { parses?: boolean };
+  quality?: { rows: number; columns: number; nullBps: number; duplicateRows: number; outliers: Finding[]; newestDate?: string; ageDays?: number };
+  safety?: { pii: Finding[]; secrets: Finding[] };
+  probe?: { status: number; schemaOk: boolean; latencyMs: number };
+  dryRun?: { stages: number; capabilities: number };
+};
+const findings = (f: Finding[] | undefined) => (f?.length ? f.map((x) => `${x.type} (${x.count})`).join(", ") : "none");
+
+/** The assessor's report as plain lines, written by code from its numbers (seller text is never shown as a finding). */
+export function reportLines(r: Report | undefined): string[] {
+  if (!r) return [];
+  const out: string[] = [];
+  out.push(`Scope: ${r.scope === "sample" ? "a sample" : "the full content"}${r.format ? `, ${r.format}` : ""}${r.sizeBytes !== undefined ? `, ${r.sizeBytes} bytes` : ""}`);
+  if (r.integrity) out.push(`Integrity: ${r.integrity.parses ? "parses cleanly" : "does not parse"}`);
+  const q = r.quality;
+  if (q) {
+    out.push(`Quality: ${q.rows} rows, ${q.columns} columns, ${(q.nullBps / 100).toFixed(2)}% empty cells, ${q.duplicateRows} duplicate rows`);
+    out.push(`Outliers: ${findings(q.outliers)}`);
+    if (q.newestDate) out.push(`Newest data: ${q.newestDate}${q.ageDays !== undefined ? ` (${q.ageDays} days old)` : ""}`);
+  }
+  if (r.safety) out.push(`Personal data: ${findings(r.safety.pii)}; secrets: ${findings(r.safety.secrets)}`);
+  if (r.probe) out.push(`Probe: HTTP ${r.probe.status}, output ${r.probe.schemaOk ? "matches" : "does not match"} the schema, ${r.probe.latencyMs} ms`);
+  if (r.dryRun) out.push(`Dry run: ${r.dryRun.stages} stages, ${r.dryRun.capabilities} capabilities`);
+  return out;
+}
