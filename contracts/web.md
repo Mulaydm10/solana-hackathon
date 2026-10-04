@@ -8,3 +8,36 @@ Public marketplace site, deployed on Vercel. Infrastructure only for now; featur
   verifier key. Secrets come from Vercel environment variables, never from the repo.
 - Uses `@deal/core` (terms) and `@deal/chain` (program client) through their browser-safe entry points.
 - Verify: `npm test --prefix web` (unit tests + a production build).
+
+## Registry (the one data interface for pages, API routes and the MCP package)
+
+From #99/#105 (`web/lib/registry.ts`). Fixtures implement it today; the `@deal/chain` implementation follows the
+devnet upgrade, behind the same interface.
+
+```ts
+interface Registry {
+  list(): Promise<RegistryListing[]>;               // active listings only
+  get(address: string): Promise<RegistryListing | null>;
+}
+
+type RegistryListing = {
+  address: string; seller: string; kind: "Data" | "Service" | "Team"; mint: string;
+  price: bigint;                 // token base units; per call for a Service
+  contentHash: string;           // sha256 hex
+  meta: ListingMeta;             // core listing.ts, seller-written, bound by meta_hash: display only, always quoted
+  report: AttestedReport | null; // null until a registered assessor attests
+  active: boolean;
+  sales: number;                 // statistic only (can be under-counted), never for ranking
+  rep: RepCounts;                // core rep.ts, from SellerRep in this mint
+  createdAt: number;
+};
+
+type AttestedReport = {
+  grade: "A" | "B" | "C" | "D";  // from the assessor's report, verified against Listing.report_hash
+  reportHash: string; assessor: string; assessedAt: number; ageDays?: number; containsPersonalData: boolean;
+};
+```
+
+Rules: grade, quality and trust shown anywhere come from `report` and `rep`, never from `meta`. The chain
+implementation drops any listing whose stored metadata or report JSON does not hash to `meta_hash` / `report_hash`.
+Seller-written text may be matched for search but must never outrank verified signals on its own.
