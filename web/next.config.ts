@@ -14,7 +14,7 @@ const securityHeaders = [
 ];
 
 const config: NextConfig = {
-  transpilePackages: ["@deal/core", "@deal/chain"],
+  transpilePackages: ["@deal/core", "@deal/chain", "@deal/agents"],
   turbopack: { root: repoRoot },
   outputFileTracingRoot: repoRoot,
   poweredByHeader: false,

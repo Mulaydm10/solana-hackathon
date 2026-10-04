@@ -7,7 +7,7 @@ import { blueprintHash, canonicalize, sha256Hex, validateBlueprint, DEFAULT_LIMI
 import { createNoopSigner, generateKeyPairSigner, getCompiledTransactionMessageDecoder, getTransactionDecoder } from "@solana/kit";
 import { dealAddress, getApproveStageInstructionDataDecoder, getCreateDealInstructionDataDecoder, getRevokeMandateInstruction } from "@deal/chain";
 import { FIXTURES } from "../lib/registry.ts";
-import { TEAM_BLUEPRINTS } from "../lib/teams.ts";
+import { blueprintFor, TEAM_BLUEPRINTS } from "../lib/teams.ts";
 import { transactionBytes } from "../lib/wallet-tx.ts";
 import { POST as prepare } from "../app/api/missions/prepare/route.ts";
 import { GET as status } from "../app/api/missions/[mission]/route.ts";
@@ -20,12 +20,16 @@ const BUYER = "Buyer1111111111111111111111111111111111111";
 const MISSION = "Mission111111111111111111111111111111111111";
 const TOKEN = "s".repeat(40);
 
-test("every hireable team's blueprint is valid and hashes to its listing's on-chain content hash", () => {
-  for (const [listing, bp] of Object.entries(TEAM_BLUEPRINTS)) {
-    assert.ok(validateBlueprint(bp, { limits: DEFAULT_LIMITS, capabilities: ["market:read", "booking:quote", "booking:pay"] }).ok, listing);
-    const fixture = FIXTURES.find((f) => f.address === listing)!;
-    assert.equal(Buffer.from(blueprintHash(bp)).toString("hex"), fixture.contentHash);
+test("every known team blueprint is valid and keyed by its own hash; the fixture Team listing finds it by content hash", () => {
+  for (const [hash, bp] of Object.entries(TEAM_BLUEPRINTS)) {
+    assert.ok(validateBlueprint(bp, { limits: DEFAULT_LIMITS, capabilities: ["market:read", "booking:quote", "booking:pay"] }).ok, hash);
+    assert.equal(Buffer.from(blueprintHash(bp)).toString("hex"), hash);
   }
+  const team = FIXTURES.find((f) => f.kind === "Team")!;
+  assert.ok(blueprintFor(team.contentHash), "fixture team not hireable");
+  assert.equal(blueprintFor(team.contentHash.toUpperCase()), blueprintFor(team.contentHash));
+  // Any listing address works, on chain or not: only the committed content hash matters.
+  assert.equal(blueprintFor("00".repeat(32)), undefined);
 });
 
 async function withService(fn: (url: string, seen: { auth: string[]; bodies: unknown[] }) => Promise<void>) {
