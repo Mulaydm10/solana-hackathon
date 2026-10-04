@@ -8,6 +8,20 @@ import { usdc } from "./format";
 export const dynamic = "force-dynamic";
 
 const HERO_WORDS = "Buy data, services and whole AI agent teams; the chain enforces every rule".split(" ");
+const KINDS = [
+  { kind: "Data", href: "/?kind=Data#catalogue", copy: "The exact assessed bytes, checked against the content hash on chain.", settles: "escrow deal · sealed key", proof: "content hash" },
+  { kind: "Service", href: "/?kind=Service#catalogue", copy: "Answers per call from an API whose method stays private.", settles: "x402 per call", proof: "no answer, no charge" },
+  { kind: "Team", href: "/hire", copy: "A whole agent team with capped mandates and your approval at every stage.", settles: "mission budget", proof: "capped mandates" },
+] as const;
+
+/** The hero loupe's "on-chain view": the real content and report hashes behind the listings, repeated to fill. */
+function hashWall(all: { address: string; contentHash: string; report?: { reportHash: string } | null }[]): string {
+  const parts = all.flatMap((l) => [l.address, l.contentHash, l.report?.reportHash ?? ""]).filter(Boolean);
+  if (parts.length === 0) return "";
+  let out = "";
+  for (let i = 0; out.length < 3200; i++) out += `${parts[i % parts.length]} `;
+  return out;
+}
 
 export default async function Catalogue({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
@@ -30,25 +44,61 @@ export default async function Catalogue({ searchParams }: { searchParams: Promis
   if (results.length === 0) demand.record({ q: query.q, category: query.category, kind: query.kind, budget: query.maxPrice });
   return (
     <main>
-      <section className="hero" aria-labelledby="hero-h">
-        <span className="eyebrow">Agent marketplace · Solana devnet</span>
-        <h1 id="hero-h" aria-label="Buy data, services and whole AI agent teams; the chain enforces every rule">
-          {HERO_WORDS.map((w, i) => (
-            <span key={i} className="word" aria-hidden><span style={{ animationDelay: `${0.08 * i}s` }}>{i >= 8 ? <em>{w}</em> : w}</span></span>
-          ))}
-        </h1>
-        <p>Grades are attested, money waits in escrow, and agents can&apos;t spend a cent without your approval.</p>
-        <div className="hero-actions">
-          <a className="btn" href="#catalogue">Browse catalogue ↓</a>
-          <Link className="btn btn-ghost" href="/sell">Sell something</Link>
+      <section className="hero" data-loupe aria-labelledby="hero-h">
+        <div className="hero-face">
+          <span className="eyebrow">Agent marketplace · Solana devnet</span>
+          <h1 id="hero-h" aria-label="Buy data, services and whole AI agent teams; the chain enforces every rule">
+            {HERO_WORDS.map((w, i) => (
+              <span key={i} className="word" aria-hidden><span style={{ animationDelay: `calc(${(0.08 * i).toFixed(2)}s + var(--intro, 0s))` }}>{i >= 8 ? <em>{w}</em> : w}</span></span>
+            ))}
+          </h1>
+          <p>Grades are attested, money waits in escrow, and agents can&apos;t spend a cent without your approval.</p>
+          <div className="hero-actions">
+            <a className="btn" data-magnet href="#catalogue">Browse catalogue ↓</a>
+            <Link className="btn btn-ghost" data-magnet href="/sell">Sell something</Link>
+          </div>
+          <span className="coords">A–H · 1–4 · the chain is underneath</span>
         </div>
-        <span className="coords">A–H · 1–4 · the chain is underneath</span>
+        <div className="hero-ink" aria-hidden>
+          <div className="hash-wall">{hashWall(all)}</div>
+          <div className="hero-face">
+            <span className="eyebrow">On-chain view · verified</span>
+            <div className="hero-title">{HERO_WORDS.map((w, i) => <span key={i} className="word"><span>{i >= 8 ? <em>{w}</em> : w}</span></span>)}</div>
+            <p>Grades are attested, money waits in escrow, and agents can&apos;t spend a cent without your approval.</p>
+            <div className="hero-actions"><span className="pill-fn">create_deal()</span><span className="pill-fn">create_listing()</span></div>
+            <span className="coords">Every claim above resolves to an account on Solana</span>
+          </div>
+        </div>
+        <div className="loupe-ring" aria-hidden><i /><i /><i /><i /><span>On-chain view</span></div>
       </section>
 
+      <div className="tiles-head">
+        <span className="eyebrow-mono">Three ways to trade · hover to flip</span>
+        <h2>Data, services, whole teams.</h2>
+      </div>
       <div className="kind-tiles" aria-label="What you can buy">
-        <Link className="tile" data-kind="Data" href="/?kind=Data#catalogue"><span className="fig">Kind 01</span><h3>Data</h3><p>The exact assessed bytes, checked against the content hash on chain.</p><span className="foot">Escrow deal · sealed key</span></Link>
-        <Link className="tile" data-kind="Service" href="/?kind=Service#catalogue"><span className="fig">Kind 02</span><h3>Service</h3><p>Answers per call from an API whose method stays private.</p><span className="foot">x402 per call · no answer, no charge</span></Link>
-        <Link className="tile" data-kind="Team" href="/hire"><span className="fig">Kind 03</span><h3>Team</h3><p>A whole agent team with capped mandates and your approval at every stage.</p><span className="foot">Mission budget · revoke in one click</span></Link>
+        {KINDS.map((k, i) => (
+          <Link key={k.kind} className="flip" data-kind={k.kind} href={k.href}>
+            <span className="flip-inner">
+              <span className="flip-face flip-front">
+                <span className="fig">Specimen {String(i + 1).padStart(2, "0")} · {all.filter((l) => l.kind === k.kind).length} listed</span>
+                <span className={`flip-shape shape-${k.kind}`} aria-hidden />
+                <h3>{k.kind}</h3>
+                <span className="flip-copy">{k.copy}</span>
+              </span>
+              <span className="flip-face flip-back">
+                <span className="fig">On-chain view</span>
+                <span className="flip-rows">
+                  <span><span>kind</span><span>{k.kind}</span></span>
+                  <span><span>settles</span><span>{k.settles}</span></span>
+                  <span><span>proof</span><span>{k.proof}</span></span>
+                  <span><span>listed</span><span>{all.filter((l) => l.kind === k.kind).length}</span></span>
+                </span>
+                <span className="flip-cta">{k.kind === "Team" ? "Hire a team →" : "Open catalogue →"}</span>
+              </span>
+            </span>
+          </Link>
+        ))}
       </div>
 
       <div className="trust-strip" aria-label="How trust works">
@@ -85,7 +135,7 @@ export default async function Catalogue({ searchParams }: { searchParams: Promis
       </form>
       <ul className="listing-grid">
         {results.map((l, i) => (
-          <li key={l.address} data-testid="listing" style={{ animationDelay: `${Math.min(i, 8) * 0.06}s` }}>
+          <li key={l.address} data-testid="listing" style={{ animationDelay: `${Math.min(i, 8) * 0.06}s` }}><div className="listing-card" data-tilt>
             <div className="listing-meta">
               <span className={`chip chip-${l.kind}`}>{l.kind}</span>
               <span className="chip">{l.meta.category}</span>
@@ -95,7 +145,7 @@ export default async function Catalogue({ searchParams }: { searchParams: Promis
             <Link className="name" href={`/listing/${l.address}`}><strong>{l.meta.name}</strong></Link>
             <span className="rep">seller {describeRep(l.score)}</span>
             <div className="listing-price"><span>{usdc(l.price)}{l.kind === "Service" ? " per call" : ""}</span><span>devnet</span></div>
-          </li>
+          </div></li>
         ))}
       </ul>
     </main>

@@ -109,13 +109,13 @@ function Inbox() {
   }, []);
   if (saved.length === 0) return <p data-testid="inbox-empty">No missions hired from this browser yet. <a href="/hire">Hire a team</a>, or open a mission with <code>?m=&lt;mission address&gt;</code>.</p>;
   return (
-    <ul data-testid="inbox">
+    <ul data-testid="inbox" className="inbox">
       {saved.map((m) => {
         const s = status[m.mission];
         const waiting = s?.ok ? waitingStage(s.events) : null;
         const delivered = s?.ok && s.events.some((e) => e.type === "delivered");
         return (
-          <li key={m.mission}>
+          <li key={m.mission} data-tilt>
             <a href={missionLink(m)}><code>{m.mission.slice(0, 8)}…</code></a>{" "}
             {s === undefined ? "loading…" : !s?.ok ? `not available (${s?.reason ?? "no answer"})`
               : s.state === "closed" ? "closed: what was left went back to you"
