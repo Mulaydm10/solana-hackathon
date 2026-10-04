@@ -7,3 +7,4 @@
  */
 
 export * from "./deal";
+export * from "./policy";

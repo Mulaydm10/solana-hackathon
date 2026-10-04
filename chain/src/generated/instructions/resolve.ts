@@ -11,6 +11,8 @@ import {
   fixDecoderSize,
   fixEncoderSize,
   getAddressEncoder,
+  getBooleanDecoder,
+  getBooleanEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getProgramDerivedAddress,
@@ -44,15 +46,15 @@ import {
 } from "@solana/program-client-core";
 import { DEAL_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
-export const RELEASE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
-  253, 249, 15, 206, 28, 127, 193, 241,
+export const RESOLVE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
+  246, 150, 236, 206, 108, 63, 58, 10,
 ]);
 
-export function getReleaseDiscriminatorBytes(): ReadonlyUint8Array {
-  return fixEncoderSize(getBytesEncoder(), 8).encode(RELEASE_DISCRIMINATOR);
+export function getResolveDiscriminatorBytes(): ReadonlyUint8Array {
+  return fixEncoderSize(getBytesEncoder(), 8).encode(RESOLVE_DISCRIMINATOR);
 }
 
-export type ReleaseInstruction<
+export type ResolveInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
   TAccountActor extends string | AccountMeta<string> = string,
   TAccountDeal extends string | AccountMeta<string> = string,
@@ -97,43 +99,41 @@ export type ReleaseInstruction<
     ]
   >;
 
-export type ReleaseInstructionData = {
+export type ResolveInstructionData = {
   discriminator: ReadonlyUint8Array;
-  expectedDeliveryHash: ReadonlyUint8Array;
+  deliveryOk: boolean;
 };
 
-export type ReleaseInstructionDataArgs = {
-  expectedDeliveryHash: ReadonlyUint8Array;
-};
+export type ResolveInstructionDataArgs = { deliveryOk: boolean };
 
-export function getReleaseInstructionDataEncoder(): FixedSizeEncoder<ReleaseInstructionDataArgs> {
+export function getResolveInstructionDataEncoder(): FixedSizeEncoder<ResolveInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["expectedDeliveryHash", fixEncoderSize(getBytesEncoder(), 32)],
+      ["deliveryOk", getBooleanEncoder()],
     ]),
-    (value) => ({ ...value, discriminator: RELEASE_DISCRIMINATOR }),
+    (value) => ({ ...value, discriminator: RESOLVE_DISCRIMINATOR }),
   );
 }
 
-export function getReleaseInstructionDataDecoder(): FixedSizeDecoder<ReleaseInstructionData> {
+export function getResolveInstructionDataDecoder(): FixedSizeDecoder<ResolveInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["expectedDeliveryHash", fixDecoderSize(getBytesDecoder(), 32)],
+    ["deliveryOk", getBooleanDecoder()],
   ]);
 }
 
-export function getReleaseInstructionDataCodec(): FixedSizeCodec<
-  ReleaseInstructionDataArgs,
-  ReleaseInstructionData
+export function getResolveInstructionDataCodec(): FixedSizeCodec<
+  ResolveInstructionDataArgs,
+  ResolveInstructionData
 > {
   return combineCodec(
-    getReleaseInstructionDataEncoder(),
-    getReleaseInstructionDataDecoder(),
+    getResolveInstructionDataEncoder(),
+    getResolveInstructionDataDecoder(),
   );
 }
 
-export type ReleaseAsyncInput<
+export type ResolveAsyncInput<
   TAccountActor extends InstructionSignerInput = InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
@@ -152,10 +152,10 @@ export type ReleaseAsyncInput<
   buyerToken: TAccountBuyerToken;
   sellerToken: TAccountSellerToken;
   tokenProgram?: TAccountTokenProgram;
-  expectedDeliveryHash: ReleaseInstructionDataArgs["expectedDeliveryHash"];
+  deliveryOk: ResolveInstructionDataArgs["deliveryOk"];
 };
 
-export async function getReleaseInstructionAsync<
+export async function getResolveInstructionAsync<
   TAccountActor extends InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput,
   TAccountPolicy extends InstructionAccountInput,
@@ -166,7 +166,7 @@ export async function getReleaseInstructionAsync<
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: ReleaseAsyncInput<
+  input: ResolveAsyncInput<
     TAccountActor,
     TAccountDeal,
     TAccountPolicy,
@@ -178,7 +178,7 @@ export async function getReleaseInstructionAsync<
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
-  ReleaseInstruction<
+  ResolveInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
       TAccountActor,
@@ -288,11 +288,11 @@ export async function getReleaseInstructionAsync<
       getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
-    data: getReleaseInstructionDataEncoder().encode(
-      args as ReleaseInstructionDataArgs,
+    data: getResolveInstructionDataEncoder().encode(
+      args as ResolveInstructionDataArgs,
     ),
     programAddress,
-  } as ReleaseInstruction<
+  } as ResolveInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
       TAccountActor,
@@ -329,7 +329,7 @@ export async function getReleaseInstructionAsync<
   >);
 }
 
-export type ReleaseInput<
+export type ResolveInput<
   TAccountActor extends InstructionSignerInput = InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
@@ -348,10 +348,10 @@ export type ReleaseInput<
   buyerToken: TAccountBuyerToken;
   sellerToken: TAccountSellerToken;
   tokenProgram?: TAccountTokenProgram;
-  expectedDeliveryHash: ReleaseInstructionDataArgs["expectedDeliveryHash"];
+  deliveryOk: ResolveInstructionDataArgs["deliveryOk"];
 };
 
-export function getReleaseInstruction<
+export function getResolveInstruction<
   TAccountActor extends InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput,
   TAccountPolicy extends InstructionAccountInput,
@@ -362,7 +362,7 @@ export function getReleaseInstruction<
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: ReleaseInput<
+  input: ResolveInput<
     TAccountActor,
     TAccountDeal,
     TAccountPolicy,
@@ -373,7 +373,7 @@ export function getReleaseInstruction<
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
-): ReleaseInstruction<
+): ResolveInstruction<
   TProgramAddress,
   ResolvedInstructionAccountMeta<
     TAccountActor,
@@ -462,11 +462,11 @@ export function getReleaseInstruction<
       getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
-    data: getReleaseInstructionDataEncoder().encode(
-      args as ReleaseInstructionDataArgs,
+    data: getResolveInstructionDataEncoder().encode(
+      args as ResolveInstructionDataArgs,
     ),
     programAddress,
-  } as ReleaseInstruction<
+  } as ResolveInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
       TAccountActor,
@@ -503,7 +503,7 @@ export function getReleaseInstruction<
   >);
 }
 
-export type ParsedReleaseInstruction<
+export type ParsedResolveInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
@@ -518,17 +518,17 @@ export type ParsedReleaseInstruction<
     sellerToken: TAccountMetas[6];
     tokenProgram: TAccountMetas[7];
   };
-  data: ReleaseInstructionData;
+  data: ResolveInstructionData;
 };
 
-export function parseReleaseInstruction<
+export function parseResolveInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedReleaseInstruction<TProgram, TAccountMetas> {
+): ParsedResolveInstruction<TProgram, TAccountMetas> {
   if (instruction.accounts.length < 8) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -556,6 +556,6 @@ export function parseReleaseInstruction<
       sellerToken: getNextAccount(),
       tokenProgram: getNextAccount(),
     },
-    data: getReleaseInstructionDataDecoder().decode(instruction.data),
+    data: getResolveInstructionDataDecoder().decode(instruction.data),
   };
 }

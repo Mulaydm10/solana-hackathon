@@ -6,8 +6,15 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./accept";
+export * from "./cancel";
+export * from "./challenge";
 export * from "./claim";
 export * from "./createDeal";
+export * from "./initPolicy";
 export * from "./refund";
 export * from "./release";
+export * from "./resolve";
 export * from "./submitDelivery";
+export * from "./timeoutRefund";
+export * from "./updatePolicy";

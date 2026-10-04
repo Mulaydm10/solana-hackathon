@@ -32,28 +32,112 @@ export const DEAL_ESCROW_ERROR__DEADLINE_NOT_REACHED = 0x1776; // 6006
 export const DEAL_ESCROW_ERROR__REVIEW_WINDOW_OPEN = 0x1777; // 6007
 /** Unauthorized: Signer is not a party to this deal */
 export const DEAL_ESCROW_ERROR__UNAUTHORIZED = 0x1778; // 6008
+/** DeadlineTooFar: Deadline is more than 30 days away */
+export const DEAL_ESCROW_ERROR__DEADLINE_TOO_FAR = 0x1779; // 6009
+/** BadTolerance: Invoice tolerance must be at most 20% */
+export const DEAL_ESCROW_ERROR__BAD_TOLERANCE = 0x177a; // 6010
+/** BadBond: Challenge bond must be at most 50% */
+export const DEAL_ESCROW_ERROR__BAD_BOND = 0x177b; // 6011
+/** BadResolveWindow: Resolve window must be between 60 seconds and 30 days */
+export const DEAL_ESCROW_ERROR__BAD_RESOLVE_WINDOW = 0x177c; // 6012
+/** VerifierNotIndependent: The verifier must be neither buyer nor seller */
+export const DEAL_ESCROW_ERROR__VERIFIER_NOT_INDEPENDENT = 0x177d; // 6013
+/** PolicyMintMismatch: Policy is for a different token */
+export const DEAL_ESCROW_ERROR__POLICY_MINT_MISMATCH = 0x177e; // 6014
+/** SellerNotAllowed: Seller is not on the buyer's allowlist */
+export const DEAL_ESCROW_ERROR__SELLER_NOT_ALLOWED = 0x177f; // 6015
+/** OverMaxPrice: Amount is above the buyer's max price */
+export const DEAL_ESCROW_ERROR__OVER_MAX_PRICE = 0x1780; // 6016
+/** OverPeriodBudget: Amount would exceed the buyer's budget for this period */
+export const DEAL_ESCROW_ERROR__OVER_PERIOD_BUDGET = 0x1781; // 6017
+/** ApprovalRequired: Amount is above the approval threshold and the approver did not sign */
+export const DEAL_ESCROW_ERROR__APPROVAL_REQUIRED = 0x1782; // 6018
+/** EmptyDelivery: Delivery hash must not be empty */
+export const DEAL_ESCROW_ERROR__EMPTY_DELIVERY = 0x1783; // 6019
+/** InvoiceMismatch: Invoice does not match the order amount within tolerance */
+export const DEAL_ESCROW_ERROR__INVOICE_MISMATCH = 0x1784; // 6020
+/** DeliveryMismatch: Release names a different delivery than the one submitted */
+export const DEAL_ESCROW_ERROR__DELIVERY_MISMATCH = 0x1785; // 6021
+/** NoVerifier: This deal has no verifier, so it cannot be challenged */
+export const DEAL_ESCROW_ERROR__NO_VERIFIER = 0x1786; // 6022
+/** ReviewWindowClosed: Review window has closed */
+export const DEAL_ESCROW_ERROR__REVIEW_WINDOW_CLOSED = 0x1787; // 6023
+/** NotVerifier: Only the deal's verifier can resolve */
+export const DEAL_ESCROW_ERROR__NOT_VERIFIER = 0x1788; // 6024
+/** ResolveWindowClosed: Resolve window has closed */
+export const DEAL_ESCROW_ERROR__RESOLVE_WINDOW_CLOSED = 0x1789; // 6025
+/** ResolveWindowOpen: Resolve window is still open */
+export const DEAL_ESCROW_ERROR__RESOLVE_WINDOW_OPEN = 0x178a; // 6026
+/** Conservation: Payout does not equal what the vault holds for this deal */
+export const DEAL_ESCROW_ERROR__CONSERVATION = 0x178b; // 6027
+/** MathOverflow: Arithmetic overflow */
+export const DEAL_ESCROW_ERROR__MATH_OVERFLOW = 0x178c; // 6028
+/** BadPolicy: Invalid policy parameters */
+export const DEAL_ESCROW_ERROR__BAD_POLICY = 0x178d; // 6029
 
 export type DealEscrowError =
+  | typeof DEAL_ESCROW_ERROR__APPROVAL_REQUIRED
+  | typeof DEAL_ESCROW_ERROR__BAD_BOND
+  | typeof DEAL_ESCROW_ERROR__BAD_POLICY
+  | typeof DEAL_ESCROW_ERROR__BAD_RESOLVE_WINDOW
   | typeof DEAL_ESCROW_ERROR__BAD_REVIEW_WINDOW
+  | typeof DEAL_ESCROW_ERROR__BAD_TOLERANCE
+  | typeof DEAL_ESCROW_ERROR__CONSERVATION
   | typeof DEAL_ESCROW_ERROR__DEADLINE_IN_PAST
   | typeof DEAL_ESCROW_ERROR__DEADLINE_NOT_REACHED
   | typeof DEAL_ESCROW_ERROR__DEADLINE_PASSED
+  | typeof DEAL_ESCROW_ERROR__DEADLINE_TOO_FAR
+  | typeof DEAL_ESCROW_ERROR__DELIVERY_MISMATCH
+  | typeof DEAL_ESCROW_ERROR__EMPTY_DELIVERY
+  | typeof DEAL_ESCROW_ERROR__INVOICE_MISMATCH
+  | typeof DEAL_ESCROW_ERROR__MATH_OVERFLOW
+  | typeof DEAL_ESCROW_ERROR__NOT_VERIFIER
+  | typeof DEAL_ESCROW_ERROR__NO_VERIFIER
+  | typeof DEAL_ESCROW_ERROR__OVER_MAX_PRICE
+  | typeof DEAL_ESCROW_ERROR__OVER_PERIOD_BUDGET
+  | typeof DEAL_ESCROW_ERROR__POLICY_MINT_MISMATCH
+  | typeof DEAL_ESCROW_ERROR__RESOLVE_WINDOW_CLOSED
+  | typeof DEAL_ESCROW_ERROR__RESOLVE_WINDOW_OPEN
+  | typeof DEAL_ESCROW_ERROR__REVIEW_WINDOW_CLOSED
   | typeof DEAL_ESCROW_ERROR__REVIEW_WINDOW_OPEN
   | typeof DEAL_ESCROW_ERROR__SELF_DEAL
+  | typeof DEAL_ESCROW_ERROR__SELLER_NOT_ALLOWED
   | typeof DEAL_ESCROW_ERROR__UNAUTHORIZED
+  | typeof DEAL_ESCROW_ERROR__VERIFIER_NOT_INDEPENDENT
   | typeof DEAL_ESCROW_ERROR__WRONG_STATUS
   | typeof DEAL_ESCROW_ERROR__ZERO_AMOUNT;
 
 let dealEscrowErrorMessages: Record<DealEscrowError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   dealEscrowErrorMessages = {
+    [DEAL_ESCROW_ERROR__APPROVAL_REQUIRED]: `Amount is above the approval threshold and the approver did not sign`,
+    [DEAL_ESCROW_ERROR__BAD_BOND]: `Challenge bond must be at most 50%`,
+    [DEAL_ESCROW_ERROR__BAD_POLICY]: `Invalid policy parameters`,
+    [DEAL_ESCROW_ERROR__BAD_RESOLVE_WINDOW]: `Resolve window must be between 60 seconds and 30 days`,
     [DEAL_ESCROW_ERROR__BAD_REVIEW_WINDOW]: `Review window must be between 0 and 30 days`,
+    [DEAL_ESCROW_ERROR__BAD_TOLERANCE]: `Invoice tolerance must be at most 20%`,
+    [DEAL_ESCROW_ERROR__CONSERVATION]: `Payout does not equal what the vault holds for this deal`,
     [DEAL_ESCROW_ERROR__DEADLINE_IN_PAST]: `Deadline must be in the future`,
     [DEAL_ESCROW_ERROR__DEADLINE_NOT_REACHED]: `Deadline has not passed yet`,
     [DEAL_ESCROW_ERROR__DEADLINE_PASSED]: `Delivery deadline has passed`,
+    [DEAL_ESCROW_ERROR__DEADLINE_TOO_FAR]: `Deadline is more than 30 days away`,
+    [DEAL_ESCROW_ERROR__DELIVERY_MISMATCH]: `Release names a different delivery than the one submitted`,
+    [DEAL_ESCROW_ERROR__EMPTY_DELIVERY]: `Delivery hash must not be empty`,
+    [DEAL_ESCROW_ERROR__INVOICE_MISMATCH]: `Invoice does not match the order amount within tolerance`,
+    [DEAL_ESCROW_ERROR__MATH_OVERFLOW]: `Arithmetic overflow`,
+    [DEAL_ESCROW_ERROR__NOT_VERIFIER]: `Only the deal's verifier can resolve`,
+    [DEAL_ESCROW_ERROR__NO_VERIFIER]: `This deal has no verifier, so it cannot be challenged`,
+    [DEAL_ESCROW_ERROR__OVER_MAX_PRICE]: `Amount is above the buyer's max price`,
+    [DEAL_ESCROW_ERROR__OVER_PERIOD_BUDGET]: `Amount would exceed the buyer's budget for this period`,
+    [DEAL_ESCROW_ERROR__POLICY_MINT_MISMATCH]: `Policy is for a different token`,
+    [DEAL_ESCROW_ERROR__RESOLVE_WINDOW_CLOSED]: `Resolve window has closed`,
+    [DEAL_ESCROW_ERROR__RESOLVE_WINDOW_OPEN]: `Resolve window is still open`,
+    [DEAL_ESCROW_ERROR__REVIEW_WINDOW_CLOSED]: `Review window has closed`,
     [DEAL_ESCROW_ERROR__REVIEW_WINDOW_OPEN]: `Buyer review window is still open`,
     [DEAL_ESCROW_ERROR__SELF_DEAL]: `Buyer and seller must differ`,
+    [DEAL_ESCROW_ERROR__SELLER_NOT_ALLOWED]: `Seller is not on the buyer's allowlist`,
     [DEAL_ESCROW_ERROR__UNAUTHORIZED]: `Signer is not a party to this deal`,
+    [DEAL_ESCROW_ERROR__VERIFIER_NOT_INDEPENDENT]: `The verifier must be neither buyer nor seller`,
     [DEAL_ESCROW_ERROR__WRONG_STATUS]: `Deal is not in the right status for this action`,
     [DEAL_ESCROW_ERROR__ZERO_AMOUNT]: `Amount must be greater than zero`,
   };

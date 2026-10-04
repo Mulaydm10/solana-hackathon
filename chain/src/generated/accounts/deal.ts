@@ -23,6 +23,8 @@ import {
   getI64Encoder,
   getStructDecoder,
   getStructEncoder,
+  getU16Decoder,
+  getU16Encoder,
   getU64Decoder,
   getU64Encoder,
   getU8Decoder,
@@ -60,15 +62,27 @@ export type Deal = {
   buyer: Address;
   seller: Address;
   mint: Address;
+  /** Default pubkey = no verifier; challenges are then impossible. */
+  verifier: Address;
   dealId: bigint;
+  /** The order (PO) amount the buyer escrowed. */
   amount: bigint;
+  invoiceAmount: bigint;
+  toleranceBps: number;
+  stakeRequired: bigint;
+  stakePosted: bigint;
+  bondBps: number;
+  bondPosted: bigint;
   deadline: bigint;
   reviewSecs: bigint;
+  resolveSecs: bigint;
   /** sha256 of the canonical terms the buyer approved (core `termsHash`). */
   termsHash: ReadonlyUint8Array;
   deliveryHash: ReadonlyUint8Array;
   createdAt: bigint;
+  acceptedAt: bigint;
   deliveredAt: bigint;
+  challengedAt: bigint;
   status: DealStatus;
   bump: number;
 };
@@ -77,15 +91,27 @@ export type DealArgs = {
   buyer: Address;
   seller: Address;
   mint: Address;
+  /** Default pubkey = no verifier; challenges are then impossible. */
+  verifier: Address;
   dealId: number | bigint;
+  /** The order (PO) amount the buyer escrowed. */
   amount: number | bigint;
+  invoiceAmount: number | bigint;
+  toleranceBps: number;
+  stakeRequired: number | bigint;
+  stakePosted: number | bigint;
+  bondBps: number;
+  bondPosted: number | bigint;
   deadline: number | bigint;
   reviewSecs: number | bigint;
+  resolveSecs: number | bigint;
   /** sha256 of the canonical terms the buyer approved (core `termsHash`). */
   termsHash: ReadonlyUint8Array;
   deliveryHash: ReadonlyUint8Array;
   createdAt: number | bigint;
+  acceptedAt: number | bigint;
   deliveredAt: number | bigint;
+  challengedAt: number | bigint;
   status: DealStatusArgs;
   bump: number;
 };
@@ -98,14 +124,24 @@ export function getDealEncoder(): FixedSizeEncoder<DealArgs> {
       ["buyer", getAddressEncoder()],
       ["seller", getAddressEncoder()],
       ["mint", getAddressEncoder()],
+      ["verifier", getAddressEncoder()],
       ["dealId", getU64Encoder()],
       ["amount", getU64Encoder()],
+      ["invoiceAmount", getU64Encoder()],
+      ["toleranceBps", getU16Encoder()],
+      ["stakeRequired", getU64Encoder()],
+      ["stakePosted", getU64Encoder()],
+      ["bondBps", getU16Encoder()],
+      ["bondPosted", getU64Encoder()],
       ["deadline", getI64Encoder()],
       ["reviewSecs", getI64Encoder()],
+      ["resolveSecs", getI64Encoder()],
       ["termsHash", fixEncoderSize(getBytesEncoder(), 32)],
       ["deliveryHash", fixEncoderSize(getBytesEncoder(), 32)],
       ["createdAt", getI64Encoder()],
+      ["acceptedAt", getI64Encoder()],
       ["deliveredAt", getI64Encoder()],
+      ["challengedAt", getI64Encoder()],
       ["status", getDealStatusEncoder()],
       ["bump", getU8Encoder()],
     ]),
@@ -120,14 +156,24 @@ export function getDealDecoder(): FixedSizeDecoder<Deal> {
     ["buyer", getAddressDecoder()],
     ["seller", getAddressDecoder()],
     ["mint", getAddressDecoder()],
+    ["verifier", getAddressDecoder()],
     ["dealId", getU64Decoder()],
     ["amount", getU64Decoder()],
+    ["invoiceAmount", getU64Decoder()],
+    ["toleranceBps", getU16Decoder()],
+    ["stakeRequired", getU64Decoder()],
+    ["stakePosted", getU64Decoder()],
+    ["bondBps", getU16Decoder()],
+    ["bondPosted", getU64Decoder()],
     ["deadline", getI64Decoder()],
     ["reviewSecs", getI64Decoder()],
+    ["resolveSecs", getI64Decoder()],
     ["termsHash", fixDecoderSize(getBytesDecoder(), 32)],
     ["deliveryHash", fixDecoderSize(getBytesDecoder(), 32)],
     ["createdAt", getI64Decoder()],
+    ["acceptedAt", getI64Decoder()],
     ["deliveredAt", getI64Decoder()],
+    ["challengedAt", getI64Decoder()],
     ["status", getDealStatusDecoder()],
     ["bump", getU8Decoder()],
   ]);
@@ -192,5 +238,5 @@ export async function fetchAllMaybeDeal(
 }
 
 export function getDealSize(): number {
-  return 218;
+  return 310;
 }

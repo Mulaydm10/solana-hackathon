@@ -8,19 +8,19 @@
   },
   "instructions": [
     {
-      "name": "claim",
+      "name": "accept",
       "docs": [
-        "Seller collects after delivering if the buyer stayed silent for the whole review window."
+        "Seller accepts the terms and posts the stake (Pact). Work starts only after this."
       ],
       "discriminator": [
-        62,
-        198,
-        214,
-        193,
-        213,
-        159,
-        108,
-        210
+        65,
+        150,
+        70,
+        216,
+        133,
+        6,
+        107,
+        4
       ],
       "accounts": [
         {
@@ -108,9 +108,361 @@
       "args": []
     },
     {
+      "name": "cancel",
+      "docs": [
+        "Buyer withdraws an offer the seller has not accepted. Full refund, budget credited back."
+      ],
+      "discriminator": [
+        232,
+        219,
+        223,
+        41,
+        219,
+        236,
+        220,
+        190
+      ],
+      "accounts": [
+        {
+          "name": "actor",
+          "signer": true
+        },
+        {
+          "name": "deal",
+          "writable": true
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "deal"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "deal"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "buyer_token",
+          "writable": true
+        },
+        {
+          "name": "seller_token",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "challenge",
+      "docs": [
+        "Buyer disputes the delivery inside the review window, posting a bond (Reckn / Recourse).",
+        "Only possible when the deal names a verifier, so a challenge can always be decided."
+      ],
+      "discriminator": [
+        16,
+        107,
+        14,
+        39,
+        244,
+        150,
+        81,
+        187
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "signer": true,
+          "relations": [
+            "deal"
+          ]
+        },
+        {
+          "name": "deal",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "deal"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "deal"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "buyer_token",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "claim",
+      "docs": [
+        "After the review window with no challenge, anyone may settle to the seller (buyer silence",
+        "= acceptance). Funds can only go to the deal's own seller and buyer token accounts."
+      ],
+      "discriminator": [
+        62,
+        198,
+        214,
+        193,
+        213,
+        159,
+        108,
+        210
+      ],
+      "accounts": [
+        {
+          "name": "actor",
+          "signer": true
+        },
+        {
+          "name": "deal",
+          "writable": true
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "deal"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "deal"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "buyer_token",
+          "writable": true
+        },
+        {
+          "name": "seller_token",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "create_deal",
       "docs": [
-        "Buyer opens a deal and moves `amount` into the vault in the same instruction."
+        "Buyer opens a deal and moves the order amount into the vault. Policy is checked first."
       ],
       "discriminator": [
         198,
@@ -126,10 +478,47 @@
         {
           "name": "buyer",
           "writable": true,
-          "signer": true
+          "signer": true,
+          "relations": [
+            "policy"
+          ]
         },
         {
-          "name": "seller"
+          "name": "seller",
+          "docs": [
+            "tokens into its own token account."
+          ]
+        },
+        {
+          "name": "approver",
+          "docs": [
+            "Required only when the amount is above the policy's approval threshold."
+          ],
+          "signer": true,
+          "optional": true
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
         },
         {
           "name": "mint"
@@ -238,24 +627,74 @@
           "type": "u64"
         },
         {
-          "name": "amount",
-          "type": "u64"
-        },
-        {
-          "name": "deadline",
-          "type": "i64"
-        },
-        {
-          "name": "review_secs",
-          "type": "i64"
-        },
-        {
-          "name": "terms_hash",
+          "name": "p",
           "type": {
-            "array": [
-              "u8",
-              32
+            "defined": {
+              "name": "DealParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "init_policy",
+      "docs": [
+        "Buyer creates their spending policy. Deals can only be opened through a policy."
+      ],
+      "discriminator": [
+        45,
+        234,
+        110,
+        100,
+        209,
+        146,
+        191,
+        86
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
             ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "PolicyParams"
+            }
           }
         }
       ]
@@ -263,7 +702,8 @@
     {
       "name": "refund",
       "docs": [
-        "Anyone may refund the buyer once the deadline has passed without a delivery."
+        "Deadline passed without delivery: anyone may refund. If the seller had accepted, the",
+        "stake is slashed to the buyer (Pact's late penalty; computed from chain time, not a flag)."
       ],
       "discriminator": [
         2,
@@ -277,8 +717,36 @@
       ],
       "accounts": [
         {
+          "name": "actor",
+          "signer": true
+        },
+        {
           "name": "deal",
           "writable": true
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              }
+            ]
+          }
         },
         {
           "name": "mint",
@@ -348,6 +816,10 @@
           "writable": true
         },
         {
+          "name": "seller_token",
+          "writable": true
+        },
+        {
           "name": "token_program"
         }
       ],
@@ -356,7 +828,7 @@
     {
       "name": "release",
       "docs": [
-        "Buyer accepts the delivery; the vault pays the seller."
+        "Buyer approves exactly the delivery it names (approval bound to the hash, AutoVoyage)."
       ],
       "discriminator": [
         253,
@@ -370,15 +842,36 @@
       ],
       "accounts": [
         {
-          "name": "buyer",
-          "signer": true,
-          "relations": [
-            "deal"
-          ]
+          "name": "actor",
+          "signer": true
         },
         {
           "name": "deal",
           "writable": true
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              }
+            ]
+          }
         },
         {
           "name": "mint",
@@ -444,6 +937,10 @@
           }
         },
         {
+          "name": "buyer_token",
+          "writable": true
+        },
+        {
           "name": "seller_token",
           "writable": true
         },
@@ -451,12 +948,155 @@
           "name": "token_program"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "expected_delivery_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "resolve",
+      "docs": [
+        "The deal's verifier decides a challenge within the resolve window.",
+        "Pass: seller paid as on release, plus the buyer's bond. Fail: buyer gets everything back",
+        "and the seller's stake is slashed to the buyer."
+      ],
+      "discriminator": [
+        246,
+        150,
+        236,
+        206,
+        108,
+        63,
+        58,
+        10
+      ],
+      "accounts": [
+        {
+          "name": "actor",
+          "signer": true
+        },
+        {
+          "name": "deal",
+          "writable": true
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "deal"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "deal"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "buyer_token",
+          "writable": true
+        },
+        {
+          "name": "seller_token",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "delivery_ok",
+          "type": "bool"
+        }
+      ]
     },
     {
       "name": "submit_delivery",
       "docs": [
-        "Seller records a hash of what was delivered. Only while funded and before the deadline."
+        "Seller records the delivery hash and invoices. The invoice must match the order amount",
+        "within the agreed tolerance (Procure's match, enforced on chain)."
       ],
       "discriminator": [
         217,
@@ -490,11 +1130,213 @@
               32
             ]
           }
+        },
+        {
+          "name": "invoice_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "timeout_refund",
+      "docs": [
+        "No verdict within the resolve window: anyone may refund the buyer (order + bond); the",
+        "seller gets the stake back, since the missing verdict is not the seller's fault. Its own",
+        "status (NoVerdict) keeps it distinguishable from a missed-deadline refund on chain."
+      ],
+      "discriminator": [
+        194,
+        205,
+        141,
+        37,
+        231,
+        118,
+        147,
+        9
+      ],
+      "accounts": [
+        {
+          "name": "actor",
+          "signer": true
+        },
+        {
+          "name": "deal",
+          "writable": true
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal.buyer",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "deal"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "deal"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "buyer_token",
+          "writable": true
+        },
+        {
+          "name": "seller_token",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_policy",
+      "docs": [
+        "Buyer changes their policy. Spent-in-period is kept, so a change can't reset the budget."
+      ],
+      "discriminator": [
+        212,
+        245,
+        246,
+        7,
+        163,
+        151,
+        18,
+        57
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "signer": true,
+          "relations": [
+            "policy"
+          ]
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "PolicyParams"
+            }
+          }
         }
       ]
     }
   ],
   "accounts": [
+    {
+      "name": "BuyerPolicy",
+      "discriminator": [
+        232,
+        126,
+        32,
+        90,
+        20,
+        181,
+        165,
+        248
+      ]
+    },
     {
       "name": "Deal",
       "discriminator": [
@@ -569,9 +1411,175 @@
       "code": 6008,
       "name": "Unauthorized",
       "msg": "Signer is not a party to this deal"
+    },
+    {
+      "code": 6009,
+      "name": "DeadlineTooFar",
+      "msg": "Deadline is more than 30 days away"
+    },
+    {
+      "code": 6010,
+      "name": "BadTolerance",
+      "msg": "Invoice tolerance must be at most 20%"
+    },
+    {
+      "code": 6011,
+      "name": "BadBond",
+      "msg": "Challenge bond must be at most 50%"
+    },
+    {
+      "code": 6012,
+      "name": "BadResolveWindow",
+      "msg": "Resolve window must be between 60 seconds and 30 days"
+    },
+    {
+      "code": 6013,
+      "name": "VerifierNotIndependent",
+      "msg": "The verifier must be neither buyer nor seller"
+    },
+    {
+      "code": 6014,
+      "name": "PolicyMintMismatch",
+      "msg": "Policy is for a different token"
+    },
+    {
+      "code": 6015,
+      "name": "SellerNotAllowed",
+      "msg": "Seller is not on the buyer's allowlist"
+    },
+    {
+      "code": 6016,
+      "name": "OverMaxPrice",
+      "msg": "Amount is above the buyer's max price"
+    },
+    {
+      "code": 6017,
+      "name": "OverPeriodBudget",
+      "msg": "Amount would exceed the buyer's budget for this period"
+    },
+    {
+      "code": 6018,
+      "name": "ApprovalRequired",
+      "msg": "Amount is above the approval threshold and the approver did not sign"
+    },
+    {
+      "code": 6019,
+      "name": "EmptyDelivery",
+      "msg": "Delivery hash must not be empty"
+    },
+    {
+      "code": 6020,
+      "name": "InvoiceMismatch",
+      "msg": "Invoice does not match the order amount within tolerance"
+    },
+    {
+      "code": 6021,
+      "name": "DeliveryMismatch",
+      "msg": "Release names a different delivery than the one submitted"
+    },
+    {
+      "code": 6022,
+      "name": "NoVerifier",
+      "msg": "This deal has no verifier, so it cannot be challenged"
+    },
+    {
+      "code": 6023,
+      "name": "ReviewWindowClosed",
+      "msg": "Review window has closed"
+    },
+    {
+      "code": 6024,
+      "name": "NotVerifier",
+      "msg": "Only the deal's verifier can resolve"
+    },
+    {
+      "code": 6025,
+      "name": "ResolveWindowClosed",
+      "msg": "Resolve window has closed"
+    },
+    {
+      "code": 6026,
+      "name": "ResolveWindowOpen",
+      "msg": "Resolve window is still open"
+    },
+    {
+      "code": 6027,
+      "name": "Conservation",
+      "msg": "Payout does not equal what the vault holds for this deal"
+    },
+    {
+      "code": 6028,
+      "name": "MathOverflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6029,
+      "name": "BadPolicy",
+      "msg": "Invalid policy parameters"
     }
   ],
   "types": [
+    {
+      "name": "BuyerPolicy",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "period_secs",
+            "type": "i64"
+          },
+          {
+            "name": "period_start",
+            "type": "i64"
+          },
+          {
+            "name": "period_budget",
+            "type": "u64"
+          },
+          {
+            "name": "period_spent",
+            "type": "u64"
+          },
+          {
+            "name": "max_price",
+            "type": "u64"
+          },
+          {
+            "name": "approval_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "approver",
+            "docs": [
+              "Default pubkey = nobody may approve, so amounts above the threshold are refused."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "allow_any_seller",
+            "type": "bool"
+          },
+          {
+            "name": "allowed_sellers",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
     {
       "name": "Deal",
       "type": {
@@ -590,11 +1598,45 @@
             "type": "pubkey"
           },
           {
+            "name": "verifier",
+            "docs": [
+              "Default pubkey = no verifier; challenges are then impossible."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "deal_id",
             "type": "u64"
           },
           {
             "name": "amount",
+            "docs": [
+              "The order (PO) amount the buyer escrowed."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "invoice_amount",
+            "type": "u64"
+          },
+          {
+            "name": "tolerance_bps",
+            "type": "u16"
+          },
+          {
+            "name": "stake_required",
+            "type": "u64"
+          },
+          {
+            "name": "stake_posted",
+            "type": "u64"
+          },
+          {
+            "name": "bond_bps",
+            "type": "u16"
+          },
+          {
+            "name": "bond_posted",
             "type": "u64"
           },
           {
@@ -603,6 +1645,10 @@
           },
           {
             "name": "review_secs",
+            "type": "i64"
+          },
+          {
+            "name": "resolve_secs",
             "type": "i64"
           },
           {
@@ -631,7 +1677,15 @@
             "type": "i64"
           },
           {
+            "name": "accepted_at",
+            "type": "i64"
+          },
+          {
             "name": "delivered_at",
+            "type": "i64"
+          },
+          {
+            "name": "challenged_at",
             "type": "i64"
           },
           {
@@ -670,10 +1724,62 @@
       }
     },
     {
+      "name": "DealParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "deadline",
+            "type": "i64"
+          },
+          {
+            "name": "review_secs",
+            "type": "i64"
+          },
+          {
+            "name": "resolve_secs",
+            "type": "i64"
+          },
+          {
+            "name": "tolerance_bps",
+            "type": "u16"
+          },
+          {
+            "name": "stake_required",
+            "type": "u64"
+          },
+          {
+            "name": "bond_bps",
+            "type": "u16"
+          },
+          {
+            "name": "verifier",
+            "type": "pubkey"
+          },
+          {
+            "name": "terms_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "DealStatus",
       "type": {
         "kind": "enum",
         "variants": [
+          {
+            "name": "Open"
+          },
           {
             "name": "Funded"
           },
@@ -681,13 +1787,66 @@
             "name": "Delivered"
           },
           {
+            "name": "Challenged"
+          },
+          {
             "name": "Released"
+          },
+          {
+            "name": "Claimed"
           },
           {
             "name": "Refunded"
           },
           {
-            "name": "Claimed"
+            "name": "Cancelled"
+          },
+          {
+            "name": "VerifiedPass"
+          },
+          {
+            "name": "VerifiedFail"
+          },
+          {
+            "name": "NoVerdict"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "period_secs",
+            "type": "i64"
+          },
+          {
+            "name": "period_budget",
+            "type": "u64"
+          },
+          {
+            "name": "max_price",
+            "type": "u64"
+          },
+          {
+            "name": "approval_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "approver",
+            "type": "pubkey"
+          },
+          {
+            "name": "allow_any_seller",
+            "type": "bool"
+          },
+          {
+            "name": "allowed_sellers",
+            "type": {
+              "vec": "pubkey"
+            }
           }
         ]
       }

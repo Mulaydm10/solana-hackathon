@@ -44,15 +44,17 @@ import {
 } from "@solana/program-client-core";
 import { DEAL_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
-export const RELEASE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
-  253, 249, 15, 206, 28, 127, 193, 241,
+export const TIMEOUT_REFUND_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
+  194, 205, 141, 37, 231, 118, 147, 9,
 ]);
 
-export function getReleaseDiscriminatorBytes(): ReadonlyUint8Array {
-  return fixEncoderSize(getBytesEncoder(), 8).encode(RELEASE_DISCRIMINATOR);
+export function getTimeoutRefundDiscriminatorBytes(): ReadonlyUint8Array {
+  return fixEncoderSize(getBytesEncoder(), 8).encode(
+    TIMEOUT_REFUND_DISCRIMINATOR,
+  );
 }
 
-export type ReleaseInstruction<
+export type TimeoutRefundInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
   TAccountActor extends string | AccountMeta<string> = string,
   TAccountDeal extends string | AccountMeta<string> = string,
@@ -97,43 +99,36 @@ export type ReleaseInstruction<
     ]
   >;
 
-export type ReleaseInstructionData = {
+export type TimeoutRefundInstructionData = {
   discriminator: ReadonlyUint8Array;
-  expectedDeliveryHash: ReadonlyUint8Array;
 };
 
-export type ReleaseInstructionDataArgs = {
-  expectedDeliveryHash: ReadonlyUint8Array;
-};
+export type TimeoutRefundInstructionDataArgs = {};
 
-export function getReleaseInstructionDataEncoder(): FixedSizeEncoder<ReleaseInstructionDataArgs> {
+export function getTimeoutRefundInstructionDataEncoder(): FixedSizeEncoder<TimeoutRefundInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([
-      ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["expectedDeliveryHash", fixEncoderSize(getBytesEncoder(), 32)],
-    ]),
-    (value) => ({ ...value, discriminator: RELEASE_DISCRIMINATOR }),
+    getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
+    (value) => ({ ...value, discriminator: TIMEOUT_REFUND_DISCRIMINATOR }),
   );
 }
 
-export function getReleaseInstructionDataDecoder(): FixedSizeDecoder<ReleaseInstructionData> {
+export function getTimeoutRefundInstructionDataDecoder(): FixedSizeDecoder<TimeoutRefundInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["expectedDeliveryHash", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 
-export function getReleaseInstructionDataCodec(): FixedSizeCodec<
-  ReleaseInstructionDataArgs,
-  ReleaseInstructionData
+export function getTimeoutRefundInstructionDataCodec(): FixedSizeCodec<
+  TimeoutRefundInstructionDataArgs,
+  TimeoutRefundInstructionData
 > {
   return combineCodec(
-    getReleaseInstructionDataEncoder(),
-    getReleaseInstructionDataDecoder(),
+    getTimeoutRefundInstructionDataEncoder(),
+    getTimeoutRefundInstructionDataDecoder(),
   );
 }
 
-export type ReleaseAsyncInput<
+export type TimeoutRefundAsyncInput<
   TAccountActor extends InstructionSignerInput = InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
@@ -152,10 +147,9 @@ export type ReleaseAsyncInput<
   buyerToken: TAccountBuyerToken;
   sellerToken: TAccountSellerToken;
   tokenProgram?: TAccountTokenProgram;
-  expectedDeliveryHash: ReleaseInstructionDataArgs["expectedDeliveryHash"];
 };
 
-export async function getReleaseInstructionAsync<
+export async function getTimeoutRefundInstructionAsync<
   TAccountActor extends InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput,
   TAccountPolicy extends InstructionAccountInput,
@@ -166,7 +160,7 @@ export async function getReleaseInstructionAsync<
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: ReleaseAsyncInput<
+  input: TimeoutRefundAsyncInput<
     TAccountActor,
     TAccountDeal,
     TAccountPolicy,
@@ -178,7 +172,7 @@ export async function getReleaseInstructionAsync<
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
-  ReleaseInstruction<
+  TimeoutRefundInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
       TAccountActor,
@@ -248,9 +242,6 @@ export async function getReleaseInstructionAsync<
     ResolvedInstructionAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
@@ -288,11 +279,9 @@ export async function getReleaseInstructionAsync<
       getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
-    data: getReleaseInstructionDataEncoder().encode(
-      args as ReleaseInstructionDataArgs,
-    ),
+    data: getTimeoutRefundInstructionDataEncoder().encode({}),
     programAddress,
-  } as ReleaseInstruction<
+  } as TimeoutRefundInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
       TAccountActor,
@@ -329,7 +318,7 @@ export async function getReleaseInstructionAsync<
   >);
 }
 
-export type ReleaseInput<
+export type TimeoutRefundInput<
   TAccountActor extends InstructionSignerInput = InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
@@ -348,10 +337,9 @@ export type ReleaseInput<
   buyerToken: TAccountBuyerToken;
   sellerToken: TAccountSellerToken;
   tokenProgram?: TAccountTokenProgram;
-  expectedDeliveryHash: ReleaseInstructionDataArgs["expectedDeliveryHash"];
 };
 
-export function getReleaseInstruction<
+export function getTimeoutRefundInstruction<
   TAccountActor extends InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput,
   TAccountPolicy extends InstructionAccountInput,
@@ -362,7 +350,7 @@ export function getReleaseInstruction<
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: ReleaseInput<
+  input: TimeoutRefundInput<
     TAccountActor,
     TAccountDeal,
     TAccountPolicy,
@@ -373,7 +361,7 @@ export function getReleaseInstruction<
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
-): ReleaseInstruction<
+): TimeoutRefundInstruction<
   TProgramAddress,
   ResolvedInstructionAccountMeta<
     TAccountActor,
@@ -442,9 +430,6 @@ export function getReleaseInstruction<
     ResolvedInstructionAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
@@ -462,11 +447,9 @@ export function getReleaseInstruction<
       getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
-    data: getReleaseInstructionDataEncoder().encode(
-      args as ReleaseInstructionDataArgs,
-    ),
+    data: getTimeoutRefundInstructionDataEncoder().encode({}),
     programAddress,
-  } as ReleaseInstruction<
+  } as TimeoutRefundInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
       TAccountActor,
@@ -503,7 +486,7 @@ export function getReleaseInstruction<
   >);
 }
 
-export type ParsedReleaseInstruction<
+export type ParsedTimeoutRefundInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
@@ -518,17 +501,17 @@ export type ParsedReleaseInstruction<
     sellerToken: TAccountMetas[6];
     tokenProgram: TAccountMetas[7];
   };
-  data: ReleaseInstructionData;
+  data: TimeoutRefundInstructionData;
 };
 
-export function parseReleaseInstruction<
+export function parseTimeoutRefundInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedReleaseInstruction<TProgram, TAccountMetas> {
+): ParsedTimeoutRefundInstruction<TProgram, TAccountMetas> {
   if (instruction.accounts.length < 8) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -556,6 +539,6 @@ export function parseReleaseInstruction<
       sellerToken: getNextAccount(),
       tokenProgram: getNextAccount(),
     },
-    data: getReleaseInstructionDataDecoder().decode(instruction.data),
+    data: getTimeoutRefundInstructionDataDecoder().decode(instruction.data),
   };
 }
