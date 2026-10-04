@@ -6,7 +6,7 @@ test("defaults to devnet with the public RPC and no signer", () => {
   const r = loadConfig({});
   assert.deepEqual(r, {
     ok: true,
-    config: { cluster: "devnet", rpcUrl: "https://api.devnet.solana.com", keypairPath: null, mint: DEVNET_USDC, verifier: null, siteUrl: null },
+    config: { cluster: "devnet", rpcUrl: "https://api.devnet.solana.com", keypairPath: null, mint: DEVNET_USDC, verifier: null, assessor: null, siteUrl: null },
   });
 });
 

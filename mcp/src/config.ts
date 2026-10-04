@@ -12,6 +12,8 @@ const Env = z.object({
   DEAL_MINT: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(),
   /** The marketplace verifier to name on deals (challenges need one). */
   DEAL_VERIFIER: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(),
+  /** The marketplace assessor to name on listings this agent publishes (must be registered on chain). */
+  DEAL_ASSESSOR: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(),
   /** The marketplace site, for search and for links a human must open (approvals). */
   DEAL_SITE_URL: z.string().url().optional(),
 });
@@ -22,6 +24,7 @@ export type Config = {
   keypairPath: string | null;
   mint: string;
   verifier: string | null;
+  assessor: string | null;
   siteUrl: string | null;
 };
 
@@ -44,7 +47,7 @@ export function loadConfig(env: Record<string, string | undefined>): ConfigResul
     ok: true,
     config: {
       cluster: e.DEAL_CLUSTER, rpcUrl: e.DEAL_RPC_URL ?? DEFAULT_RPC[e.DEAL_CLUSTER], keypairPath: e.DEAL_KEYPAIR ?? null,
-      mint: e.DEAL_MINT ?? DEVNET_USDC, verifier: e.DEAL_VERIFIER ?? null, siteUrl: e.DEAL_SITE_URL ?? null,
+      mint: e.DEAL_MINT ?? DEVNET_USDC, verifier: e.DEAL_VERIFIER ?? null, assessor: e.DEAL_ASSESSOR ?? null, siteUrl: e.DEAL_SITE_URL ?? null,
     },
   };
 }
