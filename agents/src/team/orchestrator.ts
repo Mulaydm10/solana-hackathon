@@ -18,7 +18,7 @@
 import { generateKeyPairSigner, type Address, type KeyPairSigner, type TransactionSigner } from "@solana/kit";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { canonicalize, missionTerms, roleHash, sha256Bytes, validateBlueprint, DEFAULT_LIMITS, type Blueprint, type Json } from "@deal/core";
-import { deals, mandatesDigest, missions, type DealContext, type MandateInput } from "@deal/chain";
+import { deals, findMissionPda, getMission, mandatesDigest, missions, type DealContext, type MandateInput } from "@deal/chain";
 import type { Broker } from "../broker/broker.ts";
 import { createDeterministicReader, type Reader } from "../reader/reader.ts";
 import { s } from "../reader/schema.ts";
@@ -97,111 +97,161 @@ export async function readWorkerMessage(reader: Reader, message: unknown): Promi
   return { kind: "refused", reason: asSpend.reason };
 }
 
-export async function* runMission(o: MissionOptions): AsyncGenerator<MissionEvent> {
+/** Everything the buyer signs for a mission, computed in code from the blueprint and the goal. */
+export type PreparedMission = {
+  buyer: Address;
+  missionId: bigint;
+  mission: Address;
+  blueprint: Blueprint;
+  goal: string;
+  budget: bigint;
+  expiresAt: bigint;
+  terms: { hash: Uint8Array; canonical: string };
+  /** One per role, in terms order. The keypairs stay with the orchestrator (agents hold no keys). */
+  roles: { role: string; agent: KeyPairSigner; mandate: MandateInput }[];
+  digest: Uint8Array;
+  /** The plan of each stage, rendered by code; the buyer approves exactly these hashes. */
+  plans: { stage: number; plan: string; planHash: Uint8Array }[];
+  createParams: Parameters<typeof missions.create>[2];
+};
+
+export type PrepareOptions = Pick<MissionOptions, "blueprint" | "goal" | "budget" | "missionId" | "expiresAt" | "capabilities" | "dealRules" | "rentLamports"> & {
+  buyer: Address;
+};
+
+/**
+ * Step 1, no signatures: validate the blueprint, build the terms, make one keypair per role, and render
+ * every stage's plan. The browser (or a test) then has the buyer sign create_mission, each add_mandate and
+ * approve_stage itself; the orchestrator never holds the buyer's key.
+ */
+export async function prepareMission(o: PrepareOptions): Promise<{ ok: true; value: PreparedMission } | { ok: false; reason: string; message: string }> {
   const v = validateBlueprint(o.blueprint, { limits: DEFAULT_LIMITS, capabilities: o.capabilities });
-  if (!v.ok) return yield { type: "failed", reason: v.reason, message: `blueprint refused at ${v.at}` };
+  if (!v.ok) return { ok: false, reason: v.reason, message: `blueprint refused at ${v.at}` };
   const bp: Blueprint = v.value;
   const t = missionTerms(bp, o.goal, o.budget);
-  if (!t.ok) return yield { type: "failed", reason: t.reason, message: "mission terms refused" };
-  yield { type: "terms", hash: bytesToHex(t.value.hash), canonical: t.value.canonical };
-
-  const created = await missions.create(o.ctx, o.buyer, {
-    missionId: o.missionId, budget: o.budget, termsHash: t.value.hash, stageCaps: bp.stages.map((st) => st.cap), expiresAt: o.expiresAt,
-    verifier: o.dealRules.verifier, minReviewSecs: o.dealRules.minReviewSecs, minResolveSecs: o.dealRules.minResolveSecs,
-    maxToleranceBps: o.dealRules.maxToleranceBps, rentLamports: o.rentLamports,
-  });
-  if (!created.ok) return yield { type: "failed", reason: created.reason, message: created.message };
-  const mission = created.mission;
-  yield { type: "created", mission };
-
-  // One keypair per role, kept here; the chain mandate is built from the signed terms.
-  const agents = new Map<string, KeyPairSigner>();
-  const inputs: MandateInput[] = [];
+  if (!t.ok) return { ok: false, reason: t.reason, message: "mission terms refused" };
+  const [mission] = await findMissionPda({ buyer: o.buyer, missionId: o.missionId });
+  const roles: PreparedMission["roles"] = [];
   for (const m of t.value.terms.mandates) {
     const role = bp.roles.find((r) => r.name === m.role)!;
     const agent = await generateKeyPairSigner();
-    const input: MandateInput = {
-      agent: agent.address, roleHash: roleHash(role), cap: m.cap, perTxCap: m.perTxCap, payees: m.payees as Address[],
-      stageMask: m.stages.reduce((mask, i) => mask | (1 << i), 0), expiresAt: o.expiresAt,
-    };
-    const r = await missions.addMandate(o.ctx, o.buyer, mission, input);
-    if (!r.ok) return yield { type: "failed", reason: r.reason, message: r.message };
-    agents.set(m.role, agent);
-    inputs.push(input);
-    o.onAgent?.(m.role, agent);
-    yield { type: "mandate", role: m.role, agent: agent.address };
+    roles.push({
+      role: m.role, agent,
+      mandate: {
+        agent: agent.address, roleHash: roleHash(role), cap: m.cap, perTxCap: m.perTxCap, payees: m.payees as Address[],
+        stageMask: m.stages.reduce((mask, i) => mask | (1 << i), 0), expiresAt: o.expiresAt,
+      },
+    });
   }
-  o.broker.registerMission(mission, { buyer: o.buyer.address, blueprint: bp, agents: Object.fromEntries([...agents].map(([r, a]) => [a.address, r])) });
-  const digest = mandatesDigest(inputs);
+  const plans = bp.stages.map((stage, i) => {
+    const plan = canonicalize({ mission, stage: i, name: stage.name, roles: [...stage.roles].sort(), cap: stage.cap, goal: o.goal } as unknown as Json);
+    return { stage: i, plan, planHash: sha256Bytes(plan) };
+  });
+  return {
+    ok: true,
+    value: {
+      buyer: o.buyer, missionId: o.missionId, mission, blueprint: bp, goal: o.goal, budget: o.budget, expiresAt: o.expiresAt,
+      terms: { hash: t.value.hash, canonical: t.value.canonical }, roles, digest: mandatesDigest(roles.map((r) => r.mandate)), plans,
+      createParams: {
+        missionId: o.missionId, budget: o.budget, termsHash: t.value.hash, stageCaps: bp.stages.map((st) => st.cap), expiresAt: o.expiresAt,
+        verifier: o.dealRules.verifier, minReviewSecs: o.dealRules.minReviewSecs, minResolveSecs: o.dealRules.minResolveSecs,
+        maxToleranceBps: o.dealRules.maxToleranceBps, rentLamports: o.rentLamports,
+      },
+    },
+  };
+}
+
+export type RunStagesOptions = Pick<MissionOptions, "ctx" | "broker" | "workers" | "workerEnv" | "live" | "team" | "runner"> & {
+  prepared: PreparedMission;
+  /** How often to check the chain for the buyer's next approval. Default 2 s. */
+  pollMs?: number;
+  /** Give up waiting for an approval after this long (ms). Default: until the mission expires. */
+  approvalTimeoutMs?: number;
+  /** Test hook: called while waiting for stage i's approval. */
+  onWaiting?: (stage: number) => Promise<void> | void;
+};
+
+/**
+ * Step 2: runs each stage only once the chain shows the buyer approved exactly that stage's plan hash (signed
+ * by the buyer's own wallet). Agents work under their on-chain mandates; the final product hash is delivered.
+ */
+export async function* runStages(o: RunStagesOptions): AsyncGenerator<MissionEvent> {
+  const p = o.prepared;
+  const mission = p.mission;
+  const agents = new Map(p.roles.map((r) => [r.role, r.agent]));
+  o.broker.registerMission(mission, { buyer: p.buyer, blueprint: p.blueprint, agents: Object.fromEntries(p.roles.map((r) => [r.agent.address, r.role])) });
   const reader = createDeterministicReader();
   const results: { role: string; output: string }[] = [];
+  const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
-  for (const [i, stage] of bp.stages.entries()) {
-    // The plan is built in code from the signed terms: what the human approves is what runs.
-    const plan = canonicalize({ mission, stage: i, name: stage.name, roles: [...stage.roles].sort(), cap: stage.cap, goal: o.goal } as unknown as Json);
-    const planHash = sha256Bytes(plan);
+  for (const { stage: i, planHash, plan } of p.plans) {
     yield { type: "plan", stage: i, planHash: bytesToHex(planHash), plan };
-    if (!(await o.approve(i, plan, planHash))) {
-      yield { type: "declined", stage: i };
-      await missions.close(o.ctx, o.buyer, mission);
-      return;
+    // Wait for the buyer's own approval of this exact plan, on chain.
+    const started = Date.now();
+    for (;;) {
+      const m = await getMission(o.ctx, mission);
+      if (!m) return yield { type: "failed", reason: "MISSION_NOT_FOUND", message: "the mission is not on chain" };
+      if (m.closed) return yield { type: "declined", stage: i };
+      const st = m.stages[i];
+      if (st && st.approvedAt > 0) {
+        if (st.planHash !== bytesToHex(planHash)) return yield { type: "failed", reason: "PLAN_MISMATCH", message: `stage ${i} was approved for a different plan` };
+        break;
+      }
+      if (o.approvalTimeoutMs !== undefined && Date.now() - started > o.approvalTimeoutMs) return yield { type: "failed", reason: "APPROVAL_TIMEOUT", message: `no approval for stage ${i}` };
+      await o.onWaiting?.(i);
+      await sleep(o.pollMs ?? 2_000);
     }
-    const ok = await missions.approveStage(o.ctx, o.buyer, mission, i, planHash, digest);
-    if (!ok.ok) return yield { type: "failed", reason: ok.reason, message: ok.message };
     yield { type: "approved", stage: i };
 
     const events: MissionEvent[] = [];
-    const runs = stage.roles.map(async (roleName) => {
+    const stage = p.blueprint.stages[i]!;
+    await Promise.all(stage.roles.map(async (roleName) => {
       const agent = agents.get(roleName)!;
-      const role = bp.roles.find((r) => r.name === roleName)!;
+      const role = p.blueprint.roles.find((r) => r.name === roleName)!;
       // One capability token per provider the role uses, scoped to the role's actions.
-      const env: Record<string, string> = { ...(o.workerEnv?.[roleName] ?? {}), ROLE: roleName, GOAL: o.goal.slice(0, 500) };
+      const env: Record<string, string> = { ...(o.workerEnv?.[roleName] ?? {}), ROLE: roleName, GOAL: p.goal.slice(0, 500) };
       const byProvider = new Map<string, string[]>();
       for (const c of role.capabilities) {
-        const [p, a] = c.split(":") as [string, string];
-        byProvider.set(p, [...(byProvider.get(p) ?? []), a]);
+        const [prov, a] = c.split(":") as [string, string];
+        byProvider.set(prov, [...(byProvider.get(prov) ?? []), a]);
       }
       for (const [provider, actions] of byProvider) {
         const g = await o.broker.grant({ provider, resource: "*", actions, mission, agent: agent.address });
         if (g.ok) env[`CAP_${provider.toUpperCase()}`] = g.token;
         else events.push({ type: "refused", role: roleName, reason: g.reason });
       }
-      const started = await startAgent(
+      const run = await startAgent(
         { mission, agent: agent.address, entry: o.workers[roleName]!, env, maxSecs: o.runner?.maxSecs },
         {
           live: o.live,
           call: async (presenter, token, action, args) => o.broker.call(token, action, args, presenter),
           onMessage: async (_a, message) => {
-            const m = await readWorkerMessage(reader, message);
-            if (m.kind === "spend") {
-              const r = await missions.spend(o.ctx, agent, mission, m.payee, m.amount, m.receipt);
-              events.push({ type: "spend", role: roleName, payee: m.payee, amount: m.amount.toString(), ok: r.ok, reason: r.ok ? undefined : r.reason });
+            const msg = await readWorkerMessage(reader, message);
+            if (msg.kind === "spend") {
+              const r = await missions.spend(o.ctx, agent, mission, msg.payee, msg.amount, msg.receipt);
+              events.push({ type: "spend", role: roleName, payee: msg.payee, amount: msg.amount.toString(), ok: r.ok, reason: r.ok ? undefined : r.reason });
               return r.ok ? { ok: true } : { ok: false, reason: r.reason };
             }
-            if (m.kind === "result") {
-              results.push({ role: roleName, output: m.output });
-              events.push({ type: "result", role: roleName, output: m.output });
+            if (msg.kind === "result") {
+              results.push({ role: roleName, output: msg.output });
+              events.push({ type: "result", role: roleName, output: msg.output });
               return { ok: true };
             }
-            events.push({ type: "refused", role: roleName, reason: m.reason });
+            events.push({ type: "refused", role: roleName, reason: msg.reason });
             return { ok: false, reason: "UNREADABLE" };
           },
           mode: o.runner?.mode,
           pollMs: o.runner?.pollMs,
         },
       );
-      if (!started.ok) {
-        events.push({ type: "refused", role: roleName, reason: started.reason });
-        return;
-      }
-      events.push({ type: "worker-exit", role: roleName, exit: await started.handle.done });
-    });
-    await Promise.all(runs);
+      if (!run.ok) return void events.push({ type: "refused", role: roleName, reason: run.reason });
+      events.push({ type: "worker-exit", role: roleName, exit: await run.handle.done });
+    }));
     for (const e of events) yield e;
   }
 
   // The final product: the workers' results in role order, hashed. The buyer checks it against this hash.
-  const product = canonicalize({ mission, goal: o.goal, results: [...results].sort((a, b) => (a.role < b.role ? -1 : 1)) } as unknown as Json);
+  const product = canonicalize({ mission, goal: p.goal, results: [...results].sort((a, b) => (a.role < b.role ? -1 : 1)) } as unknown as Json);
   const productHash = sha256Bytes(product);
   if (o.team) {
     const acc = await deals.accept(o.ctx, o.team.seller, o.team.feeDeal);
@@ -210,3 +260,48 @@ export async function* runMission(o: MissionOptions): AsyncGenerator<MissionEven
   }
   yield { type: "delivered", deliverableHash: bytesToHex(productHash) };
 }
+
+/**
+ * All in one, for servers that hold a buyer key (tests, an agent buying for its own owner): prepare, sign
+ * create_mission and the mandates as the buyer, then for each stage ask `approve` and sign approve_stage,
+ * while runStages runs what the chain shows approved. The website uses prepareMission + the buyer's wallet
+ * + runStages instead.
+ */
+export async function* runMission(o: MissionOptions): AsyncGenerator<MissionEvent> {
+  const prep = await prepareMission({ ...o, buyer: o.buyer.address });
+  if (!prep.ok) return yield { type: "failed", reason: prep.reason, message: prep.message };
+  const p = prep.value;
+  yield { type: "terms", hash: bytesToHex(p.terms.hash), canonical: p.terms.canonical };
+  const created = await missions.create(o.ctx, o.buyer, p.createParams);
+  if (!created.ok) return yield { type: "failed", reason: created.reason, message: created.message };
+  yield { type: "created", mission: p.mission };
+  for (const r of p.roles) {
+    const added = await missions.addMandate(o.ctx, o.buyer, p.mission, r.mandate);
+    if (!added.ok) return yield { type: "failed", reason: added.reason, message: added.message };
+    o.onAgent?.(r.role, r.agent);
+    yield { type: "mandate", role: r.role, agent: r.agent.address };
+  }
+  const decided = new Set<number>();
+  const declined: number[] = [];
+  const gen = runStages({
+    ...o, prepared: p, pollMs: 10,
+    onWaiting: async (i) => {
+      if (decided.has(i)) return;
+      decided.add(i);
+      const plan = p.plans[i]!;
+      if (await o.approve(i, plan.plan, plan.planHash)) {
+        const ok = await missions.approveStage(o.ctx, o.buyer, p.mission, i, plan.planHash, p.digest);
+        if (!ok.ok) throw Object.assign(new Error(ok.message), { reason: ok.reason });
+      } else {
+        declined.push(i);
+        await missions.close(o.ctx, o.buyer, p.mission);
+      }
+    },
+  });
+  for await (const e of gen) {
+    yield e;
+    if (e.type === "declined") return;
+  }
+  void declined;
+}
+

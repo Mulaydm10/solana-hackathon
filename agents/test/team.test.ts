@@ -8,10 +8,10 @@ import { createClient, generateKeyPairSigner, lamports, type Address, type KeyPa
 import { litesvm } from "@solana/kit-plugin-litesvm";
 import { airdropSigner, generatedSigner } from "@solana/kit-plugin-signer";
 import { fetchToken, findAssociatedTokenPda, getCreateMintInstructionPlan, getMintToATAInstructionPlanAsync, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import { DEAL_ESCROW_PROGRAM_ADDRESS, deals, getInitPolicyInstructionAsync, getMission, type DealClient, type DealContext } from "@deal/chain";
+import { DEAL_ESCROW_PROGRAM_ADDRESS, deals, getInitPolicyInstructionAsync, getMission, missions, type DealClient, type DealContext } from "@deal/chain";
 import { PROGRAM_SO } from "@deal/chain/node";
 import type { Blueprint } from "@deal/core";
-import { createBroker, createDeterministicReader, createVault, liveFrom, mandateSourceFromChain, mockBooking, mockMarketData, readWorkerMessage, runMission, sealCredential, type MissionEvent } from "../src/index.ts";
+import { createBroker, createDeterministicReader, createVault, liveFrom, mandateSourceFromChain, mockBooking, mockMarketData, prepareMission, readWorkerMessage, runMission, runStages, sealCredential, type MissionEvent } from "../src/index.ts";
 import { ATTACKER, LISTINGS, REPLIES, WEB } from "./injection/corpus.ts";
 
 const USDC = 1_000_000n;
@@ -193,5 +193,52 @@ test("a well-formed spend to an attacker is refused by the chain mandate, not by
   assert.equal(spend.ok, false);
   assert.equal(spend.reason, "PayeeNotAllowed");
   assert.equal(await c.balance(attacker), before);
+});
+
+test("website path: prepare without keys, the buyer signs everything itself, workers run only after its on-chain approval", async () => {
+  const c = await chain();
+  const { broker: b, live } = broker(c);
+  const prep = await prepareMission({
+    blueprint: blueprint(c.seller.address), goal: "Brief", budget: 10n * USDC, missionId: 6n, expiresAt: c.now() + 3_600n,
+    capabilities: ["market:read"], dealRules: { verifier: c.verifier }, buyer: c.buyer.address,
+  });
+  assert.ok(prep.ok);
+  const p = prep.value;
+  // The buyer's wallet signs these (here: the test's buyer key; in the site: Phantom).
+  assert.ok((await missions.create(c.ctx, c.buyer, p.createParams)).ok);
+  for (const r of p.roles) assert.ok((await missions.addMandate(c.ctx, c.buyer, p.mission, r.mandate)).ok);
+
+  const events: MissionEvent[] = [];
+  let waits = 0;
+  for await (const e of runStages({
+    ctx: c.ctx, prepared: p, broker: b, live, pollMs: 5,
+    workers: { researcher: worker("worker-researcher.mjs"), writer: worker("worker-writer.mjs") },
+    workerEnv: { researcher: { PAYEE: c.seller.address, AMOUNT: String(1n * USDC) } }, runner: { pollMs: 200 },
+    onWaiting: async (i) => {
+      if (waits++ === 0) assert.ok(!events.some((x) => x.type === "worker-exit")); // nothing ran before the approval
+      // The buyer approves stage i in its wallet, naming the plan hash and mandate digest it was shown.
+      await missions.approveStage(c.ctx, c.buyer, p.mission, i, p.plans[i]!.planHash, p.digest);
+    },
+  })) events.push(e);
+  assert.equal(events.at(-1)!.type, "delivered");
+  assert.equal(events.filter((e) => e.type === "approved").length, 2);
+});
+
+test("a stage approved for a different plan never runs", async () => {
+  const c = await chain();
+  const { broker: b, live } = broker(c);
+  const prep = await prepareMission({
+    blueprint: blueprint(c.seller.address), goal: "Brief", budget: 10n * USDC, missionId: 7n, expiresAt: c.now() + 3_600n,
+    capabilities: ["market:read"], dealRules: { verifier: c.verifier }, buyer: c.buyer.address,
+  });
+  assert.ok(prep.ok);
+  const p = prep.value;
+  await missions.create(c.ctx, c.buyer, p.createParams);
+  for (const r of p.roles) await missions.addMandate(c.ctx, c.buyer, p.mission, r.mandate);
+  await missions.approveStage(c.ctx, c.buyer, p.mission, 0, new Uint8Array(32).fill(9), p.digest); // not the plan shown
+  const events: MissionEvent[] = [];
+  for await (const e of runStages({ ctx: c.ctx, prepared: p, broker: b, live, pollMs: 5, workers: { researcher: worker("worker-researcher.mjs"), writer: worker("worker-writer.mjs") } })) events.push(e);
+  assert.deepEqual(events.map((e) => e.type), ["plan", "failed"]);
+  assert.equal((events[1] as { reason: string }).reason, "PLAN_MISMATCH");
 });
 
