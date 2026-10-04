@@ -187,8 +187,9 @@ export function roleHash(r: Role): Uint8Array {
   return sha256Bytes(canonicalize(roleJson(r)));
 }
 
-/** `roleHash` is hex. */
-export type MissionMandate = { role: string; roleHash: string; capabilities: string[]; cap: bigint; perTxCap: bigint; payees: string[] };
+/** `roleHash` is hex. `stages` = indices of the stages this role works in; on chain it becomes
+ * `Mandate.stage_mask` (bit i = may spend in stage i), so a mandate can only spend in its own stages. */
+export type MissionMandate = { role: string; roleHash: string; capabilities: string[]; cap: bigint; perTxCap: bigint; payees: string[]; stages: number[] };
 
 export type MissionTerms = {
   version: 1;
@@ -228,7 +229,11 @@ export function missionTerms(bp: Blueprint, goal: string, budget: bigint): Missi
     blueprintHash: bytesToHex(blueprintHash(bp)),
     mandates: [...bp.roles]
       .sort((a, b) => (a.name < b.name ? -1 : 1))
-      .map((r) => ({ role: r.name, roleHash: bytesToHex(roleHash(r)), capabilities: sortStr(r.capabilities), cap: r.cap, perTxCap: r.perTxCap, payees: sortStr(r.payees ?? []) })),
+      .map((r) => ({
+        role: r.name, roleHash: bytesToHex(roleHash(r)), capabilities: sortStr(r.capabilities), cap: r.cap, perTxCap: r.perTxCap,
+        payees: sortStr(r.payees ?? []),
+        stages: bp.stages.flatMap((s, i) => (s.roles.includes(r.name) ? [i] : [])),
+      })),
     stages: bp.stages.map((s) => ({ name: s.name, roles: sortStr(s.roles), cap: s.cap })),
     deliverable: { description: bp.deliverable.description, check: bp.deliverable.check },
     maxDuration: bp.maxDuration,

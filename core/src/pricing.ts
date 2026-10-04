@@ -23,10 +23,14 @@ export type Comparable = {
   /** A completed sale (stronger evidence) rather than an asking price. */
   sold: boolean;
   sizeBytes?: number;
+  /** Who listed or sold it; the seller's own comparables are left out of its price. */
+  seller?: string;
 };
 
 export type PriceInput = {
   kind: ListingKind;
+  /** The seller asking for the suggestion: its own listings and sales never count as evidence. */
+  seller?: string;
   assessment?: Assessment;
   comparables: readonly Comparable[];
   rep?: RepScore;
@@ -83,10 +87,13 @@ export function freshnessBps(ageDays: number): bigint {
 export function suggestPrice(input: PriceInput): PriceSuggestion {
   const money = (x: bigint) => `${formatAmount(x, input.decimals ?? 6)} ${input.symbol ?? "USDC"}`;
   const reasons: string[] = [];
-  const same = input.comparables.filter((c) => c.kind === input.kind && c.price > 0n);
+  const kindMatch = input.comparables.filter((c) => c.kind === input.kind && c.price > 0n);
+  const same = input.seller === undefined ? kindMatch : kindMatch.filter((c) => c.seller !== input.seller);
+  const own = kindMatch.length - same.length;
   const sales = same.filter((c) => c.sold);
   const evidence = sales.length >= PRICING.minSales ? sales : same;
 
+  if (own > 0) reasons.push(`Left out ${own} of your own listing${own === 1 ? "" : "s"} and sales.`);
   let mid: bigint;
   if (evidence.length > 0) {
     mid = median(evidence.map((c) => c.price));
