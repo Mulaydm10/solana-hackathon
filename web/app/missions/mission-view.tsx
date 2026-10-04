@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createNoopSigner, createSolanaRpc, type Address, type Instruction } from "@solana/kit";
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import { fetchMaybeDeal, fetchMaybeDealLink, findLinkPda, findMandatePda, getCloseMissionInstructionAsync, getRevokeMandateInstruction, policyAddress, STATUS_NAMES } from "@deal/chain";
+import { fetchMaybeDeal, fetchMaybeDealLink, fetchMaybeMandate, findLinkPda, findMandatePda, getCloseMissionInstructionAsync, getRevokeMandateInstruction, policyAddress, STATUS_NAMES } from "@deal/chain";
 import { useWallet } from "../wallet";
 import { sendWithWallet } from "../../lib/wallet-tx";
 import { PUBLIC_MINT, PUBLIC_RPC } from "../../lib/public-config";
@@ -53,6 +53,47 @@ async function readFeeDeal(deal: string): Promise<FeeDealState | null> {
   }
 }
 
+type MandateView = { cap: bigint; perTxCap: bigint; spent: bigint; payees: number; expiresAt: bigint };
+
+/** Each agent's mandate as the chain holds it (cap, per-payment cap, spent, allowed payees, expiry). */
+async function readMandates(mission: string, agents: readonly string[]): Promise<Record<string, MandateView>> {
+  const rpc = createSolanaRpc(PUBLIC_RPC);
+  const out: Record<string, MandateView> = {};
+  await Promise.all(agents.map(async (agent) => {
+    try {
+      const md = await fetchMaybeMandate(rpc, (await findMandatePda({ mission: mission as Address, agent: agent as Address }))[0]);
+      if (md.exists) out[agent] = { cap: md.data.cap, perTxCap: md.data.perTxCap, spent: md.data.spent, payees: md.data.payees.length, expiresAt: md.data.expiresAt };
+    } catch { /* shown without its mandate */ }
+  }));
+  return out;
+}
+
+const usd = (v: bigint | string | undefined) => `${(Number(v ?? 0) / 1e6).toFixed(2)}`;
+type StageState = "queued" | "waiting" | "running" | "done" | "declined";
+
+/** Where each stage stands, from the mission's events. */
+export function stageStates(events: readonly Event[], stages: readonly number[]): StageState[] {
+  const has = (t: string, st: number) => events.some((e) => e.type === t && e.stage === st);
+  const delivered = events.some((e) => e.type === "delivered");
+  return stages.map((st) => {
+    if (has("declined", st)) return "declined";
+    if (has("approved", st)) return delivered || events.some((e) => e.type === "plan" && (e.stage ?? -1) > st) ? "done" : "running";
+    return has("plan", st) ? "waiting" : "queued";
+  });
+}
+
+const planRoles = (plan: string): string[] => {
+  try { const r = (JSON.parse(plan) as { roles?: unknown }).roles; return Array.isArray(r) ? r.filter((x): x is string => typeof x === "string") : []; } catch { return []; }
+};
+const planName = (plan: string, stage: number) => {
+  try { const n = (JSON.parse(plan) as { name?: unknown }).name; return typeof n === "string" ? n : `Stage ${stage + 1}`; } catch { return `Stage ${stage + 1}`; }
+};
+const planCap = (plan: string) => {
+  try { return usd(String((JSON.parse(plan) as { cap?: unknown }).cap ?? 0)); } catch { return "?"; }
+};
+const TAG: Record<string, string> = { plan: "Plan", approved: "Approved", result: "Result", refused: "Refused", "worker-exit": "Done", delivered: "Delivered", declined: "Declined", failed: "Stopped" };
+const eventTone = (e: Event) => (e.type === "spend" ? (e.ok ? "ok" : "crit") : e.type === "refused" || e.type === "failed" || e.type === "declined" ? "crit" : e.type === "plan" ? "warn" : e.type === "delivered" || e.type === "approved" ? "accent" : "idle");
+
 /** The approvals inbox: the missions this browser hired, each with what is waiting for the buyer. */
 function Inbox() {
   const [saved, setSaved] = useState<SavedMission[]>([]);
@@ -96,6 +137,7 @@ export function MissionView() {
   const [s, setS] = useState<Status | null>(null);
   const [deal, setDeal] = useState<FeeDealState | null>(null);
   const [chain, setChain] = useState<ChainState | null>(null);
+  const [mandates, setMandates] = useState<Record<string, MandateView>>({});
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -103,7 +145,10 @@ export function MissionView() {
     const r = await fetch(`/api/missions/${m}`, { cache: "no-store" });
     const st = (await r.json()) as Status;
     setS(st);
-    if (st.ok) setChain(await readChainState(rpcReads(createSolanaRpc(PUBLIC_RPC)), m as Address, st.roles.map((x) => x.agent)));
+    if (st.ok) {
+      setChain(await readChainState(rpcReads(createSolanaRpc(PUBLIC_RPC)), m as Address, st.roles.map((x) => x.agent)));
+      setMandates(await readMandates(m, st.roles.map((x) => x.agent)));
+    }
     if (ADDRESS.test(fee)) setDeal(await readFeeDeal(fee));
   }, [m, fee]);
   useEffect(() => {
@@ -133,30 +178,103 @@ export function MissionView() {
   const plan = waiting === null ? undefined : s.plans.find((p) => p.stage === waiting);
   const product = s.events.find((e) => e.type === "delivered")?.deliverableHash;
   const closed = chain?.closed === true;
+  const stages = [...s.plans].sort((a, b) => a.stage - b.stage);
+  const states = stageStates(s.events, stages.map((p) => p.stage));
+  const runningRoles = new Set(stages.filter((_, i) => states[i] === "running").flatMap((p) => planRoles(p.plan)));
+  const finalText = [...s.events].reverse().find((e) => e.type === "result" && e.role === "writer")?.output
+    ?? [...s.events].reverse().find((e) => e.type === "result")?.output;
+  const revokeIx = (agent: string) => act(async (buyer) => [getRevokeMandateInstruction({
+    buyer, mission: s.mission as Address, mandate: (await findMandatePda({ mission: s.mission as Address, agent: agent as Address }))[0],
+  })]);
   return (
-    <section data-testid="mission-view">
-      <p>Mission <a href={explorer(s.mission)}><code>{s.mission}</code></a>: <strong>{missionState(s.state, chain)}</strong>
-        {closed && " (you closed it; what was left went back to your wallet)"}</p>
+    <section data-testid="mission-view" className="mission">
+      <header className="mission-head">
+        <span className={`live-dot ${closed ? "is-closed" : ""}`} aria-hidden />
+        <span className="eyebrow-mono">Mission</span>
+        <a href={explorer(s.mission)}><code>{s.mission.slice(0, 6)}…{s.mission.slice(-4)}</code></a>
+        <strong className="mission-state">{missionState(s.state, chain)}</strong>
+        {closed && <span> (you closed it; what was left went back to your wallet)</span>}
+      </header>
+
+      <ol className="stage-track" aria-label="Stages">
+        {stages.map((p, i) => (
+          <li key={p.stage} className={`stage is-${states[i]}`} style={{ animationDelay: `${i * 0.12}s` }}>
+            <span className="stage-node">{states[i] === "done" ? "✓" : i + 1}</span>
+            <span className="stage-name">{planName(p.plan, p.stage)}</span>
+            <span className="stage-meta">{planRoles(p.plan).join(", ")} · cap {planCap(p.plan)} USDC</span>
+            <span className="stage-status">{states[i] === "waiting" ? "waiting for you" : states[i]}</span>
+          </li>
+        ))}
+        <li className={`stage is-${product ? "done" : "queued"}`} style={{ animationDelay: `${stages.length * 0.12}s` }}>
+          <span className="stage-node">{product ? "✓" : "◆"}</span>
+          <span className="stage-name">Final product</span>
+          <span className="stage-meta">hash checked against the fee deal</span>
+          <span className="stage-status">{product ? "delivered" : "not yet"}</span>
+        </li>
+      </ol>
+
       {plan && (
-        <div data-testid="approval">
-          <h2>Waiting for your approval</h2>
-          <p>Stage {plan.stage + 1}: {describePlan(plan.plan)}. Plan hash <code>{plan.planHash.slice(0, 16)}…</code>
-            {planHashOk(plan) ? " (matches the plan shown)" : <strong> does NOT match the plan shown: do not approve</strong>}</p>
+        <div data-testid="approval" className="approval-card">
+          <span className="eyebrow-mono">Waiting for your approval</span>
+          <h2>Stage {plan.stage + 1}: {planName(plan.plan, plan.stage)}</h2>
+          <p>{describePlan(plan.plan)}. Plan hash <code>{plan.planHash.slice(0, 16)}…</code>
+            {planHashOk(plan) ? <span className="hash-ok"> ✓ matches the plan shown</span> : <strong> does NOT match the plan shown: do not approve</strong>}</p>
+          <p className="fine">Your signature is bound to this exact plan hash; a different plan cannot reuse it.</p>
           <button type="button" disabled={!planHashOk(plan)} onClick={() => void act((buyer) => one(approveStageIx(buyer, s.mission as Address, s.plans, plan.stage, s.digest)))}>
             Approve stage {plan.stage + 1}&apos;s plan (wallet)</button>
         </div>
       )}
+
       <h2>Agents</h2>
-      <ul>{s.roles.map((r) => (
-        <li key={r.agent}>{r.role} <a href={explorer(r.agent)}><code>{r.agent.slice(0, 6)}…</code></a>{" "}
-          {chain?.revoked[r.agent] ? <strong data-testid="revoked">revoked</strong> : !closed && (
-            <button type="button" onClick={() => void act(async (buyer) => [getRevokeMandateInstruction({
-              buyer, mission: s.mission as Address, mandate: (await findMandatePda({ mission: s.mission as Address, agent: r.agent as Address }))[0],
-            })])}>Revoke (wallet)</button>
-          )}</li>
-      ))}</ul>
+      <ul className="agent-grid">{s.roles.map((r, i) => {
+        const md = mandates[r.agent];
+        const revoked = chain?.revoked[r.agent] === true;
+        const pct = md && md.cap > 0n ? Math.min(100, Number((md.spent * 1000n) / md.cap) / 10) : 0;
+        const spends = s.events.filter((e) => e.type === "spend" && e.role === r.role);
+        const refused = s.events.filter((e) => (e.type === "spend" && e.role === r.role && !e.ok) || (e.type === "refused" && e.role === r.role));
+        const status = revoked ? "revoked" : closed ? "closed" : runningRoles.has(r.role) ? "working" : s.events.some((e) => e.type === "worker-exit" && e.role === r.role) ? "finished" : "standing by";
+        return (
+          <li key={r.agent} className={`agent-card is-${status.replace(" ", "-")}`} style={{ animationDelay: `${i * 0.1}s` }}>
+            <div className="agent-top">
+              <span className="agent-avatar" aria-hidden>{r.role.slice(0, 1).toUpperCase()}</span>
+              <div>
+                <strong className="agent-role">{r.role}</strong>
+                <a href={explorer(r.agent)}><code>{r.agent.slice(0, 6)}…</code></a>
+              </div>
+              <span className="agent-status">{status === "working" ? <>working<span className="dots"><i /><i /><i /></span></> : status}</span>
+            </div>
+            <div className="agent-sandbox"><span>isolated sandbox</span><span>scoped capabilities · no secrets</span></div>
+            {md ? (
+              <>
+                <div className="meter" aria-label={`spent ${usd(md.spent)} of ${usd(md.cap)} USDC`}>
+                  <span style={{ width: `${pct}%` }} />
+                </div>
+                <dl className="mandate">
+                  <dt>Spent / cap</dt><dd>{usd(md.spent)} / {usd(md.cap)} USDC</dd>
+                  <dt>Per payment</dt><dd>{usd(md.perTxCap)} USDC</dd>
+                  <dt>Allowed payees</dt><dd>{md.payees === 0 ? "none" : md.payees}</dd>
+                  <dt>Expires</dt><dd>{new Date(Number(md.expiresAt) * 1000).toISOString().slice(0, 16).replace("T", " ")} UTC</dd>
+                </dl>
+              </>
+            ) : <p className="fine">Mandate loading from chain…</p>}
+            {spends.length > 0 && <p className="fine">{spends.length} payment attempt{spends.length > 1 ? "s" : ""}, {refused.length} refused by the chain</p>}
+            {refused.length > 0 && <p className="stamp">Refused: {refused.at(-1)?.reason}</p>}
+            {revoked ? <strong data-testid="revoked" className="revoked-stamp">revoked</strong> : !closed && (
+              <button type="button" className="btn-revoke" onClick={() => void revokeIx(r.agent)}>Revoke (wallet)</button>
+            )}
+          </li>
+        );
+      })}</ul>
+
+      {finalText && (
+        <div className="final-product">
+          <span className="eyebrow-mono">Final product{product ? <> · hash <code>{product.slice(0, 16)}…</code></> : null}</span>
+          <pre>{finalText}</pre>
+        </div>
+      )}
+
       {closed ? <p data-testid="closed">This mission is closed.</p> : (
-        <button type="button" onClick={() => void act(async (buyer) => [await getCloseMissionInstructionAsync({
+        <button type="button" className="btn-ghost-inline" onClick={() => void act(async (buyer) => [await getCloseMissionInstructionAsync({
           actor: buyer, mission: s.mission as Address, buyer: s.buyer as Address, policy: await policyAddress(s.buyer as Address), mint: PUBLIC_MINT as Address,
           buyerToken: (await findAssociatedTokenPda({ owner: s.buyer as Address, mint: PUBLIC_MINT as Address, tokenProgram: TOKEN_PROGRAM_ADDRESS }))[0],
         })])}>Close the mission and take back what is left (wallet)</button>
@@ -176,7 +294,12 @@ export function MissionView() {
         </div>
       )}
       <h2>Progress</h2>
-      <ol data-testid="mission-events">{s.events.map((e, i) => <li key={i}>{describeEvent(e)}</li>)}</ol>
+      <ol data-testid="mission-events" className="feed">{s.events.map((e, i) => (
+        <li key={i} className={`tone-${eventTone(e)}`}>
+          <span className="feed-tag">{e.type === "spend" ? (e.ok ? "Settled" : "Refused") : TAG[e.type] ?? e.type}</span>
+          <span>{describeEvent(e)}</span>
+        </li>
+      ))}</ol>
       {msg && <p role="alert">{msg}</p>}
     </section>
   );
