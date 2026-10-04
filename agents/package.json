@@ -12,6 +12,8 @@
     "spike:x402": "node --import tsx scripts/x402-spike.ts"
   },
   "dependencies": {
+    "@deal/core": "file:../core",
+    "@noble/curves": "^2.4.0",
     "@solana-program/token": "^0.17.0",
     "@solana/kit": "^8.4.0",
     "@solana/kit-plugin-rpc": "^0.19.0",
