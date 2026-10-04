@@ -22,6 +22,7 @@ import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { base58Decode } from "@deal/core";
 import type { Ok, Refused } from "../broker/broker.ts";
+import { sealKeyToX25519, verifyKeyRequest, type KeyRequest } from "./keyrequest.ts";
 
 const VERSION = 1;
 const IV = 12;
@@ -122,7 +123,25 @@ export type ReadDeal = (deal: string) => Promise<DealFacts | null>;
 /** The money is in escrow and the deal has not been unwound: Funded and every later state that pays the seller. */
 export const KEY_RELEASE_STATUSES: readonly string[] = ["Funded", "Delivered", "Challenged", "Released", "Claimed", "VerifiedPass"];
 
-export type KeyRelease = { listing: string; deal: string; buyer: string };
+/**
+ * A key release. With `recipient` (a browser buyer, #125) the key is sealed to the browser's one-time x25519 key
+ * instead of the wallet; custody itself checks the wallet's signature over that request (keyrequest.ts), so no
+ * caller can obtain a key sealed to a key the buyer did not authorize.
+ */
+export type KeyRelease = {
+  listing: string;
+  deal: string;
+  buyer: string;
+  recipient?: { request: KeyRequest; signature: Uint8Array };
+};
+
+/** Who received each deal's key: the deal's buyer WALLET (never an ephemeral key). The verifier reads this. */
+export type ReleaseLog = { record(deal: string, buyerWallet: string): void; releasedTo(deal: string): string | null };
+
+export function memoryReleaseLog(): ReleaseLog {
+  const m = new Map<string, string>();
+  return { record: (d, w) => void m.set(d, w), releasedTo: (d) => m.get(d) ?? null };
+}
 
 export type Custody = {
   /** Encrypts a listing's data; the key stays here, the ciphertext and hash are returned for storage. */
@@ -132,6 +151,8 @@ export type Custody = {
    * and was opened from this listing. Nothing in the request is trusted on its own word.
    */
   releaseKey(r: KeyRelease): Promise<Ok<{ sealedKey: Uint8Array }> | Refused>;
+  /** The wallet this deal's key was released to, or null (FactSources.keyReleasedTo for the verifier, #108). */
+  releasedTo(deal: string): string | null;
 };
 
 /** Where per-listing keys live. Default: memory. `sealedKeyStore` persists them encrypted under a master key. */
@@ -167,9 +188,12 @@ export function sealedKeyStore(masterKey: Uint8Array, backing: { read(): string 
   };
 }
 
-export function createCustody(o: { readDeal: ReadDeal; keys?: KeyStore }): Custody {
+export function createCustody(o: { readDeal: ReadDeal; keys?: KeyStore; releases?: ReleaseLog; now?: () => number }): Custody {
   const keys = o.keys ?? memoryKeyStore();
+  const releases = o.releases ?? memoryReleaseLog();
+  const now = o.now ?? (() => Math.floor(Date.now() / 1000));
   return {
+    releasedTo: (deal) => releases.releasedTo(deal),
     store(listing, data) {
       const s = seal(data);
       keys.set(listing, { key: s.key, contentHash: s.contentHash });
@@ -186,11 +210,27 @@ export function createCustody(o: { readDeal: ReadDeal; keys?: KeyStore }): Custo
       }
       if (facts.buyer !== r.buyer) return refuse("WRONG_BUYER", "the key is sealed only to the deal's own buyer");
       if (facts.listing !== r.listing) return refuse("WRONG_LISTING", "this deal was not opened from this listing");
-      try {
-        return { ok: true, sealedKey: sealKeyTo(r.buyer, k.key, k.contentHash) };
-      } catch {
-        return refuse("BAD_BUYER", "the buyer is not a valid wallet key");
+      let sealedKey: Uint8Array;
+      if (r.recipient) {
+        // The request must name THIS deal and be signed by the deal's buyer (checked against the chain above).
+        if (r.recipient.request.deal !== r.deal) return refuse("OTHER_DEAL", "the key request names a different deal");
+        const v = verifyKeyRequest(r.recipient.request, r.recipient.signature, r.buyer, now());
+        if (!v.ok) return v;
+        try {
+          sealedKey = sealKeyToX25519(v.recipientX25519, k.key, k.contentHash, r.buyer);
+        } catch {
+          return refuse("BAD_BUYER", "the buyer is not a valid wallet key");
+        }
+      } else {
+        try {
+          sealedKey = sealKeyTo(r.buyer, k.key, k.contentHash);
+        } catch {
+          return refuse("BAD_BUYER", "the buyer is not a valid wallet key");
+        }
       }
+      // The record names the buyer's wallet, whatever key the seal went to.
+      releases.record(r.deal, r.buyer);
+      return { ok: true, sealedKey };
     },
   };
 }
