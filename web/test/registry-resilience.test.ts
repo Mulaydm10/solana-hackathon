@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FIXTURES, fixtureRegistry, type Registry } from "../lib/registry.ts";
-import { RegistryUnavailable, resilientRegistry } from "../lib/site-registry.ts";
+import { RegistryUnavailable, registryNote, resilientRegistry } from "../lib/site-registry.ts";
 
 const noSleep = { sleep: async () => {} };
 
@@ -60,4 +60,17 @@ test("/api/catalogue answers 503 REGISTRY_UNAVAILABLE (JSON, retry-after) when t
   assert.equal(r.status, 503);
   assert.equal(r.headers.get("retry-after"), "5");
   assert.equal(((await r.json()) as { reason: string }).reason, "REGISTRY_UNAVAILABLE");
+});
+
+test("#132: only demo mode calls the listings demo data", () => {
+  const before = process.env.DEAL_REGISTRY;
+  try {
+    process.env.DEAL_REGISTRY = "chain";
+    assert.doesNotMatch(registryNote(), /demo/);
+    delete process.env.DEAL_REGISTRY;
+    assert.match(registryNote(), /demo data until the registry is on chain/);
+  } finally {
+    if (before === undefined) delete process.env.DEAL_REGISTRY;
+    else process.env.DEAL_REGISTRY = before;
+  }
 });

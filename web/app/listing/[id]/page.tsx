@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { base58Encode, describeListing, describeRep, repScore, suggestPrice } from "@deal/core";
 import { parseEnv } from "../../../lib/env";
-import { siteRegistry } from "../../../lib/site-registry";
+import { registryMode, siteRegistry } from "../../../lib/site-registry";
 import { explorer, usdc } from "../../format";
 import { BuyPanel } from "./buy-panel";
 
@@ -59,7 +59,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
 
       <h2>On chain</h2>
       <ul>
-        <li><a href={explorer(l.address)}>Listing account</a> (demo data: these links work once the registry is on chain)</li>
+        <li><a href={explorer(l.address)}>Listing account</a>{registryMode() === "demo" ? " (demo data: these links work once the registry is on chain)" : null}</li>
         <li><a href={explorer(l.seller)}>Seller</a></li>
         <li>Content hash <code>{l.contentHash.slice(0, 16)}…</code>{l.kind === "Data" ? " (a delivery must match it exactly)" : ""}</li>
         <li>{l.sales} completed sales</li>

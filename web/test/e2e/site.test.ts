@@ -71,6 +71,8 @@ test("every navigation page renders with the shell (nav and wallet slot)", async
     assert.equal(p.status, 200, n.href);
     for (const m of NAV) assert.ok(p.html.includes(`>${m.label.replace("&", "&amp;")}</a>`), `${n.href} lacks nav link ${m.label}`);
     assert.match(p.html, /Solana devnet only/);
+    assert.match(p.html, /<title>Fiducia<\/title>/);
+    assert.match(p.html, /<strong>Fiducia<\/strong>/);
     assert.ok(p.html.includes("max-width: 100%") && p.html.includes("overflow-wrap: anywhere"), `${n.href} lacks the no-overflow rules`);
   }
 });
