@@ -1,10 +1,25 @@
-export default function Hire() {
+// Hire a team (#73): pick a team blueprint, state the goal and the budget, review the terms the code rendered,
+// then sign in your own wallet: fund the mission and the team's fee deal, give each agent its mandate, approve the first stage.
+import { registry } from "../../lib/registry";
+import { TEAM_BLUEPRINTS } from "../../lib/teams";
+import { HireForm, type TeamOption } from "./hire-form";
+
+export const dynamic = "force-dynamic";
+
+export default async function Hire() {
+  const teams: TeamOption[] = (await registry().list())
+    .filter((l) => l.kind === "Team" && TEAM_BLUEPRINTS[l.address])
+    .map((l) => ({
+      listing: l.address, name: l.meta.name, description: l.meta.description, roles: TEAM_BLUEPRINTS[l.address]!.roles.map((r) => r.name),
+      seller: l.seller, price: l.price.toString(), contentHash: l.contentHash,
+    }));
   return (
     <main>
       <h1>Hire a team</h1>
-      <p>State a goal, pick a matching team blueprint, review the mission terms, and approve each stage's plan before any
-        agent can spend. Revoke any agent with one transaction.</p>
-      <p data-testid="coming"><em>Opens in #73.</em></p>
+      <p>State a goal and a budget. Each agent gets its own wallet and an on-chain mandate (caps, payees, stages). No
+        agent can spend until you approve each stage's plan in your wallet, and you can revoke any agent in one
+        transaction.</p>
+      <HireForm teams={teams} />
     </main>
   );
 }

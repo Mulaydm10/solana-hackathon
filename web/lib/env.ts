@@ -21,6 +21,10 @@ const Schema = z.object({
       }
     }, "must be a JSON array of 64 bytes")
     .optional(),
+  /** The mission service (agents runtime on a long-running host) that runs hired teams (#73). */
+  MISSION_SERVICE_URL: z.string().url().optional(),
+  /** Bearer token for the mission service; server routes only. */
+  MISSION_SERVICE_TOKEN: z.string().min(32).optional(),
 });
 
 export type ServerEnv = z.infer<typeof Schema> & { rpcUrl: string };
@@ -39,13 +43,17 @@ export function parseEnv(raw: Record<string, string | undefined>): EnvResult {
   return { ok: true, env: { ...r.data, rpcUrl: r.data.DEAL_RPC_URL ?? DEFAULT_RPC[r.data.DEAL_CLUSTER] } };
 }
 
-export type Capability = "drafting" | "verifier";
-const NEEDS: Record<Capability, keyof ServerEnv> = { drafting: "ANTHROPIC_API_KEY", verifier: "DEAL_VERIFIER_KEY" };
+export type Capability = "drafting" | "verifier" | "missions";
+const NEEDS: Record<Capability, (keyof ServerEnv)[]> = {
+  drafting: ["ANTHROPIC_API_KEY"],
+  verifier: ["DEAL_VERIFIER_KEY"],
+  missions: ["MISSION_SERVICE_URL", "MISSION_SERVICE_TOKEN"],
+};
 
 /** For routes that cannot run without a secret: a typed refusal instead of a half-configured run. */
 export function requireEnv(r: EnvResult, cap: Capability): { ok: true; env: ServerEnv } | { ok: false; status: number; body: { ok: false; reason: string; message: string } } {
   if (!r.ok) return { ok: false, status: 500, body: { ok: false, reason: r.reason, message: r.message } };
-  if (!r.env[NEEDS[cap]]) return { ok: false, status: 503, body: { ok: false, reason: "NOT_CONFIGURED", message: `${cap} is not configured on this deployment` } };
+  if (NEEDS[cap].some((k) => !r.env[k])) return { ok: false, status: 503, body: { ok: false, reason: "NOT_CONFIGURED", message: `${cap} is not configured on this deployment` } };
   return { ok: true, env: r.env };
 }
 
@@ -55,6 +63,10 @@ export function health(r: EnvResult) {
   return {
     ok: true as const,
     cluster: r.env.DEAL_CLUSTER,
-    capabilities: { drafting: Boolean(r.env.ANTHROPIC_API_KEY), verifier: Boolean(r.env.DEAL_VERIFIER_KEY) },
+    capabilities: {
+      drafting: Boolean(r.env.ANTHROPIC_API_KEY),
+      verifier: Boolean(r.env.DEAL_VERIFIER_KEY),
+      missions: Boolean(r.env.MISSION_SERVICE_URL && r.env.MISSION_SERVICE_TOKEN),
+    },
   };
 }
