@@ -26,12 +26,12 @@ const blueprint: Blueprint = {
 };
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 
-function setup(o: { providers?: Provider[] } = {}) {
+function setup(o: { providers?: Provider[]; marketHosts?: string[] } = {}) {
   const master = randomBytes(32);
   const vault = createVault(master, [sealCredential(master, "market", SECRET), sealCredential(master, "booking", SECRET), sealCredential(master, "leaky", SECRET)]);
   const calls: { action: string; credential: string }[] = [];
   const providers: Provider[] = o.providers ?? [
-    { id: "market", hosts: ["127.0.0.1"], call: async (action, resource, args, credential) => { calls.push({ action, credential }); return { action, resource, args }; } },
+    { id: "market", hosts: o.marketHosts ?? ["127.0.0.1:443"], call: async (action, resource, args, credential) => { calls.push({ action, credential }); return { action, resource, args }; } },
     { id: "booking", hosts: ["booking.example"], elevated: ["pay"], call: async (action) => ({ done: action }) },
     { id: "leaky", hosts: [], call: async (_a, _r, _x, credential) => ({ echo: `key=${credential}` }) },
   ];
@@ -94,6 +94,26 @@ test("call: the provider gets the credential, the agent never does; actions are 
   assert.deepEqual(((await broker.call("ab".repeat(32), "read")) as { reason: string }).reason, "BAD_TOKEN");
 });
 
+test("call: the credential is caught in base64, hex and URL-encoded forms too, in answers and errors", async () => {
+  const forms = [Buffer.from(SECRET).toString("base64"), Buffer.from(SECRET).toString("base64url"), Buffer.from(SECRET).toString("hex"),
+    Buffer.from(SECRET).toString("hex").toUpperCase(), encodeURIComponent(SECRET), `Basic ${Buffer.from(`user:${SECRET}`).toString("base64")}`];
+  for (const [i, form] of forms.entries()) {
+    const bp: Blueprint = { ...blueprint, roles: [{ ...blueprint.roles[0]!, capabilities: ["p:read"] }, blueprint.roles[1]!] };
+    const master = randomBytes(32);
+    const broker = createBroker({
+      vault: createVault(master, [sealCredential(master, "p", SECRET)]),
+      providers: [{ id: "p", hosts: [], call: async (a) => { if (a === "read" && i % 2) throw new Error(`upstream said ${form}`); return { header: form }; } }],
+      mandates: async () => ({ live: true, stageOpen: true, roleHash: hex(roleHash(bp.roles[0]!)) }),
+    });
+    broker.registerMission(MISSION, { buyer: base58Encode(randomBytes(32)), blueprint: bp, agents: { [AGENT]: "researcher" } });
+    const g = (await broker.grant({ provider: "p", resource: "x", actions: ["read"], mission: MISSION, agent: AGENT })) as { token: string };
+    const r = await broker.call(g.token, "read");
+    if (form.startsWith("Basic ")) continue; // a credential inside a larger encoded blob is the reader's job (#71)
+    assert.ok(!JSON.stringify(r).includes(form), `form ${i} leaked`);
+    assert.ok(!r.ok);
+  }
+});
+
 test("call: an answer that contains the credential is withheld", async () => {
   const leakyBp: Blueprint = { ...blueprint, roles: [{ ...blueprint.roles[0]!, capabilities: ["leaky:read"] }, blueprint.roles[1]!] };
   const master = randomBytes(32);
@@ -122,16 +142,27 @@ test("revoke on chain stops a running agent at its next call; tokens expire", as
   assert.deepEqual(((await broker.call(h.token, "read")) as { reason: string }).reason, "EXPIRED");
 });
 
-test("elevated actions need the buyer's signature over the exact request", async () => {
-  const { broker, buyerSecret } = setup();
+test("elevated actions need the buyer's signature over the exact request, once, before it expires", async () => {
+  const { broker, buyerSecret, tick } = setup();
   const req = { provider: "booking", resource: "hotel/42", actions: ["pay"], mission: MISSION, agent: OTHER };
-  assert.deepEqual(((await broker.grant(req)) as { reason: string }).reason, "ELEVATED_NEEDS_APPROVAL");
-  const sigOther = Buffer.from(ed25519.sign(approvalBytes({ ...req, resource: "hotel/43" }), buyerSecret)).toString("hex");
-  assert.deepEqual(((await broker.grant({ ...req, approval: sigOther })) as { reason: string }).reason, "ELEVATED_NEEDS_APPROVAL");
-  const notBuyer = Buffer.from(ed25519.sign(approvalBytes(req), randomBytes(32))).toString("hex");
-  assert.deepEqual(((await broker.grant({ ...req, approval: notBuyer })) as { reason: string }).reason, "ELEVATED_NEEDS_APPROVAL");
-  const sig = Buffer.from(ed25519.sign(approvalBytes(req), buyerSecret)).toString("hex");
-  assert.ok((await broker.grant({ ...req, approval: sig })).ok);
+  const reason = async (approval?: { sig: string; notAfter: number; nonce: string }) =>
+    ((await broker.grant({ ...req, approval })) as { reason?: string }).reason;
+  const approve = (r: typeof req, notAfter: number, nonce = randomBytes(16).toString("hex"), key = buyerSecret) =>
+    ({ sig: Buffer.from(ed25519.sign(approvalBytes(r, notAfter, nonce), key)).toString("hex"), notAfter, nonce });
+  assert.equal(await reason(), "ELEVATED_NEEDS_APPROVAL");
+  assert.equal(await reason(approve({ ...req, resource: "hotel/43" }, 1_100)), "ELEVATED_NEEDS_APPROVAL"); // other request
+  assert.equal(await reason(approve(req, 1_100, undefined, randomBytes(32))), "ELEVATED_NEEDS_APPROVAL"); // not the buyer
+  assert.equal(await reason(approve(req, 5_000)), "APPROVAL_TOO_LONG");
+  const one = approve(req, 1_100);
+  assert.ok((await broker.grant({ ...req, approval: one })).ok);
+  assert.equal(await reason(one), "APPROVAL_USED"); // one human click = one grant
+  const late = approve(req, 1_050);
+  tick(100);
+  assert.equal(await reason(late), "APPROVAL_EXPIRED");
+  // A signature cannot be stretched: changing notAfter or nonce breaks it.
+  const fresh = approve(req, 1_500);
+  assert.equal(await reason({ ...fresh, notAfter: 1_600 }), "ELEVATED_NEEDS_APPROVAL");
+  assert.ok((await broker.grant({ ...req, approval: fresh })).ok);
   // Quote is not elevated: no signature needed.
   assert.ok((await broker.grant({ ...req, actions: ["quote"] })).ok);
 });
@@ -168,13 +199,15 @@ function connectVia(proxyPort: number, target: string, token?: string): Promise<
   });
 }
 
-test("egress: only hosts of a live capability's provider, only with its token; the token is stripped", async () => {
-  const { broker, state } = setup();
+test("egress: only host:port of a live capability's provider, only with its token; the token is stripped", async () => {
   let seenAuth: string | undefined = "unset";
   const upstream = createServer((req, res) => { seenAuth = req.headers["proxy-authorization"]; res.end("hello from upstream"); });
   const up = await listen(upstream);
+  const other = createServer((_req, res) => res.end("a different local service"));
+  const otherPort = await listen(other);
+  const { broker, state } = setup({ marketHosts: [`127.0.0.1:${up}`] });
   const decisions: { allowed: boolean; host: string }[] = [];
-  const proxy = createEgressProxy((t, h) => broker.egressAllowed(t, h), (d) => decisions.push(d));
+  const proxy = createEgressProxy((t, h, p) => broker.egressAllowed(t, h, p), (d) => decisions.push(d));
   const pp = await listen(proxy);
   try {
     const g = (await grantMarket(broker)) as { token: string };
@@ -184,25 +217,28 @@ test("egress: only hosts of a live capability's provider, only with its token; t
     assert.equal(seenAuth, undefined);
     assert.equal((await viaProxy(pp, `http://127.0.0.1:${up}/x`)).status, 403); // no token
     assert.equal((await viaProxy(pp, `http://localhost:${up}/x`, g.token)).status, 403); // host not in provider list
+    assert.equal((await viaProxy(pp, `http://127.0.0.1:${otherPort}/x`, g.token)).status, 403); // same host, other port
     state.set(AGENT, { ...state.get(AGENT)!, live: false });
     assert.equal((await viaProxy(pp, `http://127.0.0.1:${up}/x`, g.token)).status, 403); // revoked
     assert.ok(decisions.some((d) => !d.allowed) && decisions.some((d) => d.allowed));
   } finally {
     proxy.close();
     upstream.close();
+    other.close();
   }
 });
 
-test("egress: CONNECT tunnels follow the same rule", async () => {
-  const { broker } = setup();
+test("egress: CONNECT tunnels follow the same rule, port included", async () => {
   const echo = createTcpServer((s) => s.on("data", (d) => { if (d.toString().includes("PING")) s.write("PONG"); }));
   const ep = await listen(echo);
-  const proxy = createEgressProxy((t, h) => broker.egressAllowed(t, h));
+  const { broker } = setup({ marketHosts: [`127.0.0.1:${ep}`] });
+  const proxy = createEgressProxy((t, h, p) => broker.egressAllowed(t, h, p));
   const pp = await listen(proxy);
   try {
     const g = (await grantMarket(broker)) as { token: string };
     assert.match(await connectVia(pp, `127.0.0.1:${ep}`, g.token), /PONG/);
     assert.match(await connectVia(pp, `127.0.0.1:${ep}`), /403/);
+    assert.match(await connectVia(pp, `127.0.0.1:${ep + 1}`, g.token), /403/);
   } finally {
     proxy.close();
     echo.close();
