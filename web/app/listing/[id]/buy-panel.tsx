@@ -1,5 +1,6 @@
 "use client";
-// Buy from a listing (#111): set up a budget once if this wallet has none, then open the escrow deal in the wallet.
+// Buy from a listing (#111): set up a budget once if this wallet has none, review the deal draft (#139), then open
+// the escrow deal in the wallet.
 // Everything signed is built here from the program's builders; the site never holds a key.
 import { useEffect, useState } from "react";
 import { createNoopSigner, createSolanaRpc, type Address } from "@solana/kit";
@@ -7,7 +8,7 @@ import { fetchMaybeBuyerPolicy, policyAddress } from "@deal/chain";
 import { useWallet } from "../../wallet";
 import { sendWithWallet } from "../../../lib/wallet-tx";
 import { PUBLIC_MINT, PUBLIC_RPC } from "../../../lib/public-config";
-import { buyIx, policyIx, type ListingForSale } from "../../../lib/buy-flow";
+import { buyIx, dealDraft, policyIx, type ListingForSale } from "../../../lib/buy-flow";
 
 export type BuyPanelProps = { listing: Omit<ListingForSale, "price"> & { price: string }; verifier: string; attested: boolean };
 
@@ -21,6 +22,7 @@ export function BuyPanel({ listing, verifier, attested }: BuyPanelProps) {
   const [onlyThisSeller, setOnlyThisSeller] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<Extract<Awaited<ReturnType<typeof buyIx>>, { ok: true }> | null>(null);
   const l: ListingForSale = { ...listing, price: BigInt(listing.price) };
 
   useEffect(() => {
@@ -52,10 +54,18 @@ export function BuyPanel({ listing, verifier, attested }: BuyPanelProps) {
     setMsg("Budget set up on chain. Every purchase is checked against it by the program.");
   }
 
-  async function buy() {
+  // The draft is built once and is exactly what gets signed, so the terms shown are the terms committed to.
+  async function review() {
     setMsg(null);
     const r = await buyIx(buyer, l, { mint: PUBLIC_MINT, verifier, now: Math.floor(Date.now() / 1000) });
     if (!r.ok) return setMsg(r.message);
+    setDraft(r);
+  }
+
+  async function sign() {
+    if (!draft) return;
+    const r = draft;
+    setMsg(null);
     setBusy(true);
     const s = await sendWithWallet(connected!.wallet, connected!.account, PUBLIC_RPC, [r.ix]);
     if (!s.ok) {
@@ -66,6 +76,8 @@ export function BuyPanel({ listing, verifier, attested }: BuyPanelProps) {
     await fetch(`/api/deals/${r.deal}/terms`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ terms: r.terms }) }).catch(() => {});
     window.location.href = `/deal/${r.deal}`;
   }
+
+  const shown = draft ? dealDraft(draft.draft) : null;
 
   return (
     <section data-testid="buy-panel">
@@ -78,10 +90,23 @@ export function BuyPanel({ listing, verifier, attested }: BuyPanelProps) {
           <label><input type="checkbox" checked={onlyThisSeller} onChange={(e) => setOnlyThisSeller(e.target.checked)} /> Only allow this seller</label>{" "}
           <button type="button" disabled={busy} onClick={setUpBudget}>Sign budget in wallet</button>
         </div>
+      ) : shown ? (
+        <div data-testid="deal-draft">
+          <p><strong>Deal draft.</strong> Check the terms; your wallet signs exactly these.</p>
+          <ul>
+            <li>Price: <strong data-testid="draft-price">{shown.price}</strong>, held in escrow</li>
+            <li>Seller: <code data-testid="draft-seller">{shown.seller}</code></li>
+            <li>Delivery deadline: <span data-testid="draft-deadline">{shown.deadline}</span> (refunded in full if nothing is delivered by then)</li>
+            <li>Review window: <span data-testid="draft-review">{shown.reviewWindow}</span></li>
+          </ul>
+          <p>{shown.summary}</p>
+          <button type="button" data-testid="sign-button" disabled={busy} onClick={sign}>Sign in wallet</button>{" "}
+          <button type="button" disabled={busy} onClick={() => setDraft(null)}>Cancel</button>
+        </div>
       ) : (
         <p>
           The price goes into escrow. The seller is paid only after delivering{listing.kind === "Data" ? " exactly the assessed file" : ""}; you can release, or challenge before the review window ends.{" "}
-          <button type="button" data-testid="buy-button" disabled={busy || hasPolicy === null} onClick={buy}>Buy in wallet</button>
+          <button type="button" data-testid="buy-button" disabled={busy || hasPolicy === null} onClick={review}>Buy in wallet</button>
         </p>
       )}
       {msg ? <p role="status">{msg}</p> : null}

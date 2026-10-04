@@ -35,6 +35,28 @@ export function toBase64(bytes: Uint8Array): string {
   return btoa(s);
 }
 
+/** The data upload limit (lib/sell.ts MAX_DATA_BYTES), checked in the browser before uploading. */
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+export const tooLarge = (bytes: number) =>
+  `This file is ${(bytes / 1024 / 1024).toFixed(1)} MB; data listings take at most ${MAX_UPLOAD_BYTES / 1024 / 1024} MB. Choose a smaller file.`;
+
+/**
+ * A /api/sell/* reply as an object, also when it is not JSON (#137): a proxy or the platform may answer with
+ * plain text, e.g. HTTP 413 "Request Entity Too Large", which must read as a refusal, not a JSON parse error.
+ */
+export async function readReply(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text().catch(() => "");
+  try {
+    const v = JSON.parse(text) as unknown;
+    if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
+  } catch {
+    // not JSON: fall through
+  }
+  if (res.status === 413) return { ok: false, reason: "TOO_LARGE", message: `the upload is too large for the server; data listings take at most ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` };
+  return { ok: false, reason: `HTTP_${res.status}`, message: `the server answered HTTP ${res.status}${res.ok ? " without a JSON reply" : ""}; try again` };
+}
+
 type Finding = { type: string; count: number };
 type Report = {
   scope?: string; format?: string; sizeBytes?: number; integrity?: { parses?: boolean };

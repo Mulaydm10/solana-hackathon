@@ -10,6 +10,11 @@ import type { ServerEnv } from "./env";
 import type { FaucetSend } from "./faucet";
 import { USDC_DEVNET } from "./registry";
 
+/** Kit's sendTransaction resolves to a plan result; the transaction signature is in its context (#129). */
+export function sentSignature(result: { context: { signature: string } }): string {
+  return String(result.context.signature);
+}
+
 export async function faucetSender(env: ServerEnv): Promise<FaucetSend> {
   const faucet = await createKeyPairSignerFromBytes(Uint8Array.from(JSON.parse(env.DEAL_FAUCET_KEY!) as number[]));
   const client = createClient().use(signerPlugin(faucet)).use(solanaRpc({ rpcUrl: env.rpcUrl }));
@@ -24,7 +29,7 @@ export async function faucetSender(env: ServerEnv): Promise<FaucetSend> {
         await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: faucet, owner, mint }),
         getTransferCheckedInstruction({ source, mint, destination: await ata(owner), authority: faucet, amount, decimals }),
       ]);
-      return { ok: true, signature: String((sig as { signature?: string }).signature ?? sig) };
+      return { ok: true, signature: sentSignature(sig) };
     } catch (e) {
       return { ok: false, reason: "SEND_FAILED", message: e instanceof Error ? e.message.slice(0, 200) : "send failed" };
     }
