@@ -155,6 +155,10 @@ export type CreateMissionInstructionData = {
   minResolveSecs: bigint;
   /** Agents' deals accept invoices at most this far from the order. */
   maxToleranceBps: number;
+  /** Agents' deals ask the buyer side for a challenge bond of at most this much (bps of the order). */
+  maxBondBps: number;
+  /** Agents' deals require the seller to stake at least this much (bps of the order). */
+  minStakeBps: number;
 };
 
 export type CreateMissionInstructionDataArgs = {
@@ -176,6 +180,10 @@ export type CreateMissionInstructionDataArgs = {
   minResolveSecs: number | bigint;
   /** Agents' deals accept invoices at most this far from the order. */
   maxToleranceBps: number;
+  /** Agents' deals ask the buyer side for a challenge bond of at most this much (bps of the order). */
+  maxBondBps: number;
+  /** Agents' deals require the seller to stake at least this much (bps of the order). */
+  minStakeBps: number;
 };
 
 export function getCreateMissionInstructionDataEncoder(): Encoder<CreateMissionInstructionDataArgs> {
@@ -193,6 +201,8 @@ export function getCreateMissionInstructionDataEncoder(): Encoder<CreateMissionI
       ["minReviewSecs", getI64Encoder()],
       ["minResolveSecs", getI64Encoder()],
       ["maxToleranceBps", getU16Encoder()],
+      ["maxBondBps", getU16Encoder()],
+      ["minStakeBps", getU16Encoder()],
     ]),
     (value) => ({ ...value, discriminator: CREATE_MISSION_DISCRIMINATOR }),
   );
@@ -212,6 +222,8 @@ export function getCreateMissionInstructionDataDecoder(): Decoder<CreateMissionI
     ["minReviewSecs", getI64Decoder()],
     ["minResolveSecs", getI64Decoder()],
     ["maxToleranceBps", getU16Decoder()],
+    ["maxBondBps", getU16Decoder()],
+    ["minStakeBps", getU16Decoder()],
   ]);
 }
 
@@ -267,6 +279,8 @@ export type CreateMissionAsyncInput<
   minReviewSecs: CreateMissionInstructionDataArgs["minReviewSecs"];
   minResolveSecs: CreateMissionInstructionDataArgs["minResolveSecs"];
   maxToleranceBps: CreateMissionInstructionDataArgs["maxToleranceBps"];
+  maxBondBps: CreateMissionInstructionDataArgs["maxBondBps"];
+  minStakeBps: CreateMissionInstructionDataArgs["minStakeBps"];
 };
 
 export async function getCreateMissionInstructionAsync<
@@ -612,6 +626,8 @@ export type CreateMissionInput<
   minReviewSecs: CreateMissionInstructionDataArgs["minReviewSecs"];
   minResolveSecs: CreateMissionInstructionDataArgs["minResolveSecs"];
   maxToleranceBps: CreateMissionInstructionDataArgs["maxToleranceBps"];
+  maxBondBps: CreateMissionInstructionDataArgs["maxBondBps"];
+  minStakeBps: CreateMissionInstructionDataArgs["minStakeBps"];
 };
 
 export function getCreateMissionInstruction<

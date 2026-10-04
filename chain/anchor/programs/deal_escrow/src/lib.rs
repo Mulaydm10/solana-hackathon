@@ -468,6 +468,7 @@ pub mod deal_escrow {
         require!((0..=MAX_WINDOW_SECS).contains(&p.min_review_secs), DealError::BadMission);
         require!((MIN_RESOLVE_SECS..=MAX_WINDOW_SECS).contains(&p.min_resolve_secs), DealError::BadMission);
         require!(p.max_tolerance_bps <= MAX_TOLERANCE_BPS, DealError::BadMission);
+        require!(p.max_bond_bps <= MAX_BOND_BPS && p.min_stake_bps as u128 <= BPS, DealError::BadMission);
         let policy = &mut ctx.accounts.policy;
         require_keys_eq!(policy.mint, ctx.accounts.mint.key(), DealError::PolicyMintMismatch);
         if now >= policy.period_start.saturating_add(policy.period_secs) {
@@ -520,6 +521,8 @@ pub mod deal_escrow {
             min_review_secs: p.min_review_secs,
             min_resolve_secs: p.min_resolve_secs,
             max_tolerance_bps: p.max_tolerance_bps,
+            max_bond_bps: p.max_bond_bps,
+            min_stake_bps: p.min_stake_bps,
             auth_bump: ctx.bumps.mission_auth,
             bump: ctx.bumps.mission,
         });
@@ -644,6 +647,10 @@ pub mod deal_escrow {
             require!(p.review_secs >= m.min_review_secs, DealError::DealTermsNotAllowed);
             require!(p.resolve_secs >= m.min_resolve_secs, DealError::DealTermsNotAllowed);
             require!(p.tolerance_bps <= m.max_tolerance_bps, DealError::DealTermsNotAllowed);
+            // A huge bond would make challenging this deal expensive for the mission; no stake drops the
+            // seller's skin in the game. Both are the buyer's call, not the agent's.
+            require!(p.bond_bps <= m.max_bond_bps, DealError::DealTermsNotAllowed);
+            require!(p.stake_required >= bps_of(p.amount, m.min_stake_bps)?, DealError::DealTermsNotAllowed);
         }
         check_spend(&mut ctx.accounts.mission, &mut ctx.accounts.mandate, p.amount, now)?;
         let a = &ctx.accounts;
@@ -683,16 +690,49 @@ pub mod deal_escrow {
         let deal_key = a.deal.key();
         let md_seeds: &[&[u8]] = &[MISSION_DEAL_SEED, deal_key.as_ref(), &[ctx.bumps.mission_deal]];
         let space = 8 + MissionDeal::INIT_SPACE;
-        anchor_lang::system_program::create_account(
-            CpiContext::new_with_signer(
-                a.system_program.key(),
-                anchor_lang::system_program::CreateAccount { from: a.mission_auth.to_account_info(), to: a.mission_deal.to_account_info() },
-                &[auth_seeds, md_seeds],
-            ),
-            Rent::get()?.minimum_balance(space),
-            space as u64,
-            &crate::ID,
-        )?;
+        let rent = Rent::get()?.minimum_balance(space);
+        let have = a.mission_deal.lamports();
+        if have == 0 {
+            anchor_lang::system_program::create_account(
+                CpiContext::new_with_signer(
+                    a.system_program.key(),
+                    anchor_lang::system_program::CreateAccount { from: a.mission_auth.to_account_info(), to: a.mission_deal.to_account_info() },
+                    &[auth_seeds, md_seeds],
+                ),
+                rent,
+                space as u64,
+                &crate::ID,
+            )?;
+        } else {
+            // Someone pre-funded the address (it is predictable): top up, allocate and assign instead of
+            // create_account, which would fail on an account that already holds lamports (as Anchor's init does).
+            if have < rent {
+                anchor_lang::system_program::transfer(
+                    CpiContext::new_with_signer(
+                        a.system_program.key(),
+                        anchor_lang::system_program::Transfer { from: a.mission_auth.to_account_info(), to: a.mission_deal.to_account_info() },
+                        &[auth_seeds],
+                    ),
+                    rent - have,
+                )?;
+            }
+            anchor_lang::system_program::allocate(
+                CpiContext::new_with_signer(
+                    a.system_program.key(),
+                    anchor_lang::system_program::Allocate { account_to_allocate: a.mission_deal.to_account_info() },
+                    &[md_seeds],
+                ),
+                space as u64,
+            )?;
+            anchor_lang::system_program::assign(
+                CpiContext::new_with_signer(
+                    a.system_program.key(),
+                    anchor_lang::system_program::Assign { account_to_assign: a.mission_deal.to_account_info() },
+                    &[md_seeds],
+                ),
+                &crate::ID,
+            )?;
+        }
         let record = MissionDeal { mission: mission_key, deal: deal_key, agent: a.agent.key(), bump: ctx.bumps.mission_deal };
         record.try_serialize(&mut &mut a.mission_deal.try_borrow_mut_data()?[..])?;
         emit!(SpendEvent { mission: mission_key, agent: a.agent.key(), payee: seller, amount: p.amount, receipt_hash });
@@ -1272,6 +1312,10 @@ pub struct MissionParams {
     pub min_resolve_secs: i64,
     /// Agents' deals accept invoices at most this far from the order.
     pub max_tolerance_bps: u16,
+    /// Agents' deals ask the buyer side for a challenge bond of at most this much (bps of the order).
+    pub max_bond_bps: u16,
+    /// Agents' deals require the seller to stake at least this much (bps of the order).
+    pub min_stake_bps: u16,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
@@ -1322,6 +1366,8 @@ pub struct Mission {
     pub min_review_secs: i64,
     pub min_resolve_secs: i64,
     pub max_tolerance_bps: u16,
+    pub max_bond_bps: u16,
+    pub min_stake_bps: u16,
     pub auth_bump: u8,
     pub bump: u8,
 }

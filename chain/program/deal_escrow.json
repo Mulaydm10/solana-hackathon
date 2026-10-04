@@ -5061,6 +5061,14 @@
             "type": "u16"
           },
           {
+            "name": "max_bond_bps",
+            "type": "u16"
+          },
+          {
+            "name": "min_stake_bps",
+            "type": "u16"
+          },
+          {
             "name": "auth_bump",
             "type": "u8"
           },
@@ -5168,6 +5176,20 @@
             "name": "max_tolerance_bps",
             "docs": [
               "Agents' deals accept invoices at most this far from the order."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "max_bond_bps",
+            "docs": [
+              "Agents' deals ask the buyer side for a challenge bond of at most this much (bps of the order)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "min_stake_bps",
+            "docs": [
+              "Agents' deals require the seller to stake at least this much (bps of the order)."
             ],
             "type": "u16"
           }
