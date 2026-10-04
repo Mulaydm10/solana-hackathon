@@ -16,12 +16,14 @@ that will later use Claude has a deterministic implementation behind the same in
 | `agents/src/vm/` | #69 | Mulaydm10 | Per-agent runner (container or `--permission` process) |
 | `agents/src/team/` | #70 | Mulaydm10 | Orchestrator, stage loop, mock providers |
 | `agents/src/reader/` | #71 | vedant059 | Quarantined reader interface + deterministic reader |
-| `agents/tests/injection/` | #71 | vedant059 | Injection corpus, run by the lane's verify |
+| `tests/agents/injection/` | #71 | vedant059 | Injection corpus, run by the lane's verify (root `tests/<lane>/` convention, like core) |
 | `agents/src/index.ts` | first PR | whoever lands first | Re-exports; later PRs add one line each |
 
-The first `agents` claim PR to merge adds `agents/package.json` (script `test` = `tsc --noEmit && node --import tsx
---test test/*.test.ts tests/**/*.test.ts` or equivalent plain form), `tsconfig.json` and `src/index.ts`. The other
-agent rebases onto it.
+The first `agents` claim PR to merge adds `agents/package.json`, `tsconfig.json` and `src/index.ts`. Its `test` script
+runs `tsc --noEmit`, then `node --import tsx --test` with **quoted** globs (for example `"test/**/*.test.ts"
+"../tests/agents/**/*.test.ts"`), so Node expands them at any depth instead of `sh`. Unit tests live in
+`agents/test/`; cross-cutting suites (the injection corpus) in the repo-root `tests/agents/`. The other agent rebases
+onto that first PR.
 
 ## Interfaces (stable; change only through a design PR to this file)
 
@@ -38,7 +40,7 @@ assess(c: Classification, data: Uint8Array | null): Promise<Ok<{ report: Assessm
 // custody/ (#67)
 seal(data: Uint8Array): { ciphertext: Uint8Array; key: Uint8Array; contentHash: Uint8Array };
 sealKeyTo(buyerWallet: Address, key: Uint8Array): Uint8Array;          // ed25519 -> x25519
-openFor(buyerSecret: Uint8Array, sealedKey: Uint8Array, ciphertext: Uint8Array): Uint8Array; // throws on tamper
+openFor(buyerSecret: Uint8Array, sealedKey: Uint8Array, ciphertext: Uint8Array): Ok<{ data: Uint8Array }> | Refused; // reason "TAMPERED" on a bad key or ciphertext, never throws
 
 // broker/ (#68)
 type Capability = { provider: string; resource: string; actions: string[]; expiresAt: number; mission: Address; agent: Address };
