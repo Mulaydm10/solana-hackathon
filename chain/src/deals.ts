@@ -9,6 +9,9 @@ import {
   fetchMaybeDeal,
   fetchMaybeBuyerPolicy,
   fetchMaybeSellerRep,
+  fetchMaybeDealLink,
+  fetchMaybeListing,
+  findLinkPda,
   fetchMaybeRepPair,
   getAcceptInstructionAsync,
   getCancelInstructionAsync,
@@ -19,7 +22,7 @@ import {
   getRefundInstructionAsync,
   getReleaseInstructionAsync,
   getResolveInstructionAsync,
-  getSubmitDeliveryInstruction,
+  getSubmitDeliveryInstructionAsync,
   getTimeoutRefundInstructionAsync,
   getUpdatePolicyInstructionAsync,
   type PolicyParamsArgs,
@@ -128,6 +131,8 @@ export type OpenParams = {
   termsHash: Uint8Array;
   /** Required when the amount is above the buyer policy's approval threshold. */
   approver?: TransactionSigner;
+  /** Open from this listing (must be active, attested, same seller, mint and price). */
+  listing?: Address;
 };
 
 const hex = (b: ArrayLike<number>) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
@@ -285,8 +290,12 @@ const statusIs = (ctx: DealContext, deal: Address, ...names: string[]) => async 
 async function settleAccounts(ctx: DealContext, actor: TransactionSigner, deal: Address) {
   const d = await rawDeal(ctx, deal);
   if (!d) return null;
+  // A deal opened from a listing passes that listing (if it still exists) so its sales count.
+  const link = await readWithRetry(ctx, async () => fetchMaybeDealLink(ctx.client.rpc, (await findLinkPda({ deal }))[0]));
+  const listing = link.exists && (await readWithRetry(ctx, () => fetchMaybeListing(ctx.client.rpc, link.data.listing))).exists
+    ? link.data.listing : undefined;
   return {
-    actor, deal, policy: await policyAddress(d.buyer), mint: ctx.mint,
+    actor, deal, policy: await policyAddress(d.buyer), mint: ctx.mint, listing,
     buyerToken: await ata(ctx, d.buyer), sellerToken: await ata(ctx, d.seller),
     sellerRep: await sellerRepAddress(d.seller, d.mint), repPair: await repPairAddress(d.seller, d.buyer, d.mint),
   };
@@ -319,6 +328,7 @@ export const deals = {
         dealId: p.dealId, amount: p.amount, deadline: BigInt(p.deadline), reviewSecs: BigInt(p.reviewSecs),
         resolveSecs: BigInt(p.resolveSecs ?? 600), toleranceBps: p.toleranceBps ?? 0, stakeRequired: p.stakeRequired ?? 0n,
         bondBps: p.bondBps ?? 0, verifier: p.verifier ?? NO_KEY, termsHash: p.termsHash,
+        listing: p.listing, link: p.listing ? (await findLinkPda({ deal }))[0] : undefined,
       }),
     ]);
     return r.ok ? { ...r, deal } : r;
@@ -334,7 +344,7 @@ export const deals = {
   /** Seller records the delivery hash and the invoice (must be within the order ± tolerance). */
   async deliver(ctx: DealContext, seller: TransactionSigner, deal: Address, deliveryHash: Uint8Array, invoiceAmount: bigint): Promise<Sent> {
     return safeSend(ctx, deal, statusIs(ctx, deal, "Delivered", "Challenged", "Released", "Claimed", "VerifiedPass", "VerifiedFail", "NoVerdict"), async () => [
-      getSubmitDeliveryInstruction({ seller, deal, deliveryHash, invoiceAmount }),
+      await getSubmitDeliveryInstructionAsync({ seller, deal, deliveryHash, invoiceAmount }),
     ]);
   },
 

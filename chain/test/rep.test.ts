@@ -166,7 +166,7 @@ test("reputation is kept per mint: deals in a self-minted token never touch the 
     findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS,
   } = await import("@solana-program/token");
   const {
-    getAcceptInstructionAsync, getSubmitDeliveryInstruction, getReleaseInstructionAsync, policyAddress,
+    getAcceptInstructionAsync, getSubmitDeliveryInstructionAsync, getReleaseInstructionAsync, policyAddress,
     sellerRepAddress, repPairAddress, fetchMaybeSellerRep,
   } = await import("../src/index.ts");
 
@@ -187,7 +187,7 @@ test("reputation is kept per mint: deals in a self-minted token never touch the 
   ]);
   const deal = await dealAddress(b2.address, 1n);
   await t.send([await getAcceptInstructionAsync({ seller: t.seller, deal, mint: junk.address, sellerToken: await ataOf(t.seller.address) })]);
-  await t.send([getSubmitDeliveryInstruction({ seller: t.seller, deal, deliveryHash: hash(4), invoiceAmount: 10n ** 12n })]);
+  await t.send([await getSubmitDeliveryInstructionAsync({ seller: t.seller, deal, deliveryHash: hash(4), invoiceAmount: 10n ** 12n })]);
   // Crediting the junk-mint deal to the USDC record is refused by the seeds (Anchor ConstraintSeeds).
   const wrong = await t.send([
     await getReleaseInstructionAsync({

@@ -7,6 +7,8 @@
  */
 
 export * from "./deal";
+export * from "./link";
+export * from "./listing";
 export * from "./policy";
 export * from "./repPair";
 export * from "./sellerRep";

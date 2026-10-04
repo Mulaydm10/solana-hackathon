@@ -192,3 +192,26 @@ test("safeSend: an unknown error -> chain checked; landed = ok, otherwise report
   assert.deepEqual([r.ok, !r.ok && r.reason], [false, "CHAIN_ERROR"]);
   assert.equal(notF.sends(), 1);
 });
+
+test("library: open from a listing, deliver the listed content, the sale is counted", async () => {
+  const { t, ctx, open } = await lib();
+  const { generateKeyPairSigner } = await import("@solana/kit");
+  const { ListingKind, fetchListing, findListingPda, getAttestListingInstruction, getCreateListingInstructionAsync } = await import("../src/index.ts");
+  const assessor = await generateKeyPairSigner();
+  await t.send([
+    await getCreateListingInstructionAsync({
+      seller: t.seller, mint: t.mint.address, listingId: 1n, kind: ListingKind.Data, price: 5n * USDC,
+      contentHash: hash(20), metaHash: hash(21), termsTemplateHash: hash(22), assessor: assessor.address,
+    }),
+  ]);
+  const [listing] = await findListingPda({ seller: t.seller.address, listingId: 1n });
+  await t.send([getAttestListingInstruction({ assessor, listing, contentHash: hash(20), reportHash: hash(30) })]);
+  const o = await open({ listing });
+  assert.ok(o.ok, JSON.stringify(o));
+  const deal = (o as { deal: Address }).deal;
+  await deals.accept(ctx, t.seller, deal);
+  assert.deepEqual(await deals.deliver(ctx, t.seller, deal, hash(21), 5n * USDC).then((r) => !r.ok && r.reason), "NotListedContent");
+  assert.equal((await deals.deliver(ctx, t.seller, deal, hash(20), 5n * USDC)).ok, true);
+  assert.equal((await deals.release(ctx, t.buyer, deal, hash(20))).ok, true);
+  assert.equal((await fetchListing(t.client.rpc, listing)).data.sales, 1n);
+});

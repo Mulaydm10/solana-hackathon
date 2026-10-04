@@ -42,6 +42,7 @@ import {
   type ResolvedInstructionAccount,
   type ResolvedInstructionAccountMeta,
 } from "@solana/program-client-core";
+import { findLinkPda } from "../pdas";
 import { DEAL_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
 export const TIMEOUT_REFUND_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -65,6 +66,8 @@ export type TimeoutRefundInstruction<
   TAccountSellerToken extends string | AccountMeta<string> = string,
   TAccountSellerRep extends string | AccountMeta<string> = string,
   TAccountRepPair extends string | AccountMeta<string> = string,
+  TAccountLink extends string | AccountMeta<string> = string,
+  TAccountListing extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TAccountSystemProgram extends string | AccountMeta<string> =
@@ -102,6 +105,12 @@ export type TimeoutRefundInstruction<
       TAccountRepPair extends string
         ? WritableAccount<TAccountRepPair>
         : TAccountRepPair,
+      TAccountLink extends string
+        ? ReadonlyAccount<TAccountLink>
+        : TAccountLink,
+      TAccountListing extends string
+        ? WritableAccount<TAccountListing>
+        : TAccountListing,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -151,6 +160,8 @@ export type TimeoutRefundAsyncInput<
   TAccountSellerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput = InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
+  TAccountLink extends InstructionAccountInput = InstructionAccountInput,
+  TAccountListing extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput =
@@ -166,6 +177,9 @@ export type TimeoutRefundAsyncInput<
   sellerToken: TAccountSellerToken;
   sellerRep: TAccountSellerRep;
   repPair: TAccountRepPair;
+  link?: TAccountLink;
+  /** The deal's listing, if it has one and it still exists (its sales are counted). */
+  listing?: TAccountListing;
   tokenProgram?: TAccountTokenProgram;
   systemProgram?: TAccountSystemProgram;
 };
@@ -180,6 +194,8 @@ export async function getTimeoutRefundInstructionAsync<
   TAccountSellerToken extends InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput,
+  TAccountLink extends InstructionAccountInput,
+  TAccountListing extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
@@ -194,6 +210,8 @@ export async function getTimeoutRefundInstructionAsync<
     TAccountSellerToken,
     TAccountSellerRep,
     TAccountRepPair,
+    TAccountLink,
+    TAccountListing,
     TAccountTokenProgram,
     TAccountSystemProgram
   >,
@@ -238,6 +256,14 @@ export async function getTimeoutRefundInstructionAsync<
       InstructionAccountInputAddress<TAccountRepPair>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountLink,
+      InstructionAccountInputAddress<TAccountLink>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountListing,
+      InstructionAccountInputAddress<TAccountListing>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >,
@@ -277,6 +303,12 @@ export async function getTimeoutRefundInstructionAsync<
     },
     repPair: {
       value: input.repPair ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    link: { value: input.link ?? null, isSigner: false, isWritable: false },
+    listing: {
+      value: input.listing ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -321,6 +353,17 @@ export async function getTimeoutRefundInstructionAsync<
       ],
     });
   }
+  if (!accounts.link.value) {
+    accounts.link.value = await findLinkPda(
+      {
+        deal: getAddressFromResolvedInstructionAccount(
+          "deal",
+          accounts.deal.value,
+        ),
+      },
+      { programAddress },
+    );
+  }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =
       "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
@@ -337,6 +380,8 @@ export async function getTimeoutRefundInstructionAsync<
       getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("sellerRep", accounts.sellerRep),
       getAccountMeta("repPair", accounts.repPair),
+      getAccountMeta("link", accounts.link),
+      getAccountMeta("listing", accounts.listing),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
@@ -381,6 +426,14 @@ export async function getTimeoutRefundInstructionAsync<
       InstructionAccountInputAddress<TAccountRepPair>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountLink,
+      InstructionAccountInputAddress<TAccountLink>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountListing,
+      InstructionAccountInputAddress<TAccountListing>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >,
@@ -401,6 +454,8 @@ export type TimeoutRefundInput<
   TAccountSellerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput = InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
+  TAccountLink extends InstructionAccountInput = InstructionAccountInput,
+  TAccountListing extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput =
@@ -416,6 +471,9 @@ export type TimeoutRefundInput<
   sellerToken: TAccountSellerToken;
   sellerRep: TAccountSellerRep;
   repPair: TAccountRepPair;
+  link: TAccountLink;
+  /** The deal's listing, if it has one and it still exists (its sales are counted). */
+  listing?: TAccountListing;
   tokenProgram?: TAccountTokenProgram;
   systemProgram?: TAccountSystemProgram;
 };
@@ -430,6 +488,8 @@ export function getTimeoutRefundInstruction<
   TAccountSellerToken extends InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput,
+  TAccountLink extends InstructionAccountInput,
+  TAccountListing extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
@@ -444,6 +504,8 @@ export function getTimeoutRefundInstruction<
     TAccountSellerToken,
     TAccountSellerRep,
     TAccountRepPair,
+    TAccountLink,
+    TAccountListing,
     TAccountTokenProgram,
     TAccountSystemProgram
   >,
@@ -487,6 +549,14 @@ export function getTimeoutRefundInstruction<
     InstructionAccountInputAddress<TAccountRepPair>
   >,
   ResolvedInstructionAccountMeta<
+    TAccountLink,
+    InstructionAccountInputAddress<TAccountLink>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountListing,
+    InstructionAccountInputAddress<TAccountListing>
+  >,
+  ResolvedInstructionAccountMeta<
     TAccountTokenProgram,
     InstructionAccountInputAddress<TAccountTokenProgram>
   >,
@@ -528,6 +598,12 @@ export function getTimeoutRefundInstruction<
       isSigner: false,
       isWritable: true,
     },
+    link: { value: input.link ?? null, isSigner: false, isWritable: false },
+    listing: {
+      value: input.listing ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
     tokenProgram: {
       value: input.tokenProgram ?? null,
       isSigner: false,
@@ -565,6 +641,8 @@ export function getTimeoutRefundInstruction<
       getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("sellerRep", accounts.sellerRep),
       getAccountMeta("repPair", accounts.repPair),
+      getAccountMeta("link", accounts.link),
+      getAccountMeta("listing", accounts.listing),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
@@ -609,6 +687,14 @@ export function getTimeoutRefundInstruction<
       InstructionAccountInputAddress<TAccountRepPair>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountLink,
+      InstructionAccountInputAddress<TAccountLink>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountListing,
+      InstructionAccountInputAddress<TAccountListing>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >,
@@ -635,8 +721,11 @@ export type ParsedTimeoutRefundInstruction<
     sellerToken: TAccountMetas[6];
     sellerRep: TAccountMetas[7];
     repPair: TAccountMetas[8];
-    tokenProgram: TAccountMetas[9];
-    systemProgram: TAccountMetas[10];
+    link: TAccountMetas[9];
+    /** The deal's listing, if it has one and it still exists (its sales are counted). */
+    listing?: TAccountMetas[10] | undefined;
+    tokenProgram: TAccountMetas[11];
+    systemProgram: TAccountMetas[12];
   };
   data: TimeoutRefundInstructionData;
 };
@@ -649,12 +738,12 @@ export function parseTimeoutRefundInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedTimeoutRefundInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 11) {
+  if (instruction.accounts.length < 13) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 11,
+        expectedAccountMetas: 13,
       },
     );
   }
@@ -663,6 +752,12 @@ export function parseTimeoutRefundInstruction<
     const accountMeta = (instruction.accounts as TAccountMetas)[accountIndex]!;
     accountIndex += 1;
     return accountMeta;
+  };
+  const getNextOptionalAccount = () => {
+    const accountMeta = getNextAccount();
+    return accountMeta.address === DEAL_ESCROW_PROGRAM_ADDRESS
+      ? undefined
+      : accountMeta;
   };
   return {
     programAddress: instruction.programAddress,
@@ -676,6 +771,8 @@ export function parseTimeoutRefundInstruction<
       sellerToken: getNextAccount(),
       sellerRep: getNextAccount(),
       repPair: getNextAccount(),
+      link: getNextAccount(),
+      listing: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),
     },

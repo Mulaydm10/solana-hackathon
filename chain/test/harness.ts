@@ -18,6 +18,9 @@ import {
   dealAddress,
   fetchDeal,
   fetchMaybeDeal,
+  fetchMaybeDealLink,
+  fetchMaybeListing,
+  findLinkPda,
   fetchMaybeRepPair,
   fetchMaybeSellerRep,
   getAcceptInstructionAsync,
@@ -29,7 +32,7 @@ import {
   getRefundInstructionAsync,
   getReleaseInstructionAsync,
   getResolveInstructionAsync,
-  getSubmitDeliveryInstruction,
+  getSubmitDeliveryInstructionAsync,
   getTimeoutRefundInstructionAsync,
   getUpdatePolicyInstructionAsync,
   policyAddress,
@@ -162,16 +165,19 @@ export async function setup(opts: { policy?: (s: Address, a: Address) => PolicyP
   }
   const settleAccounts = async (actor: TransactionSigner, deal: Address) => {
     const d = (await fetchDeal(client.rpc, deal)).data;
+    // A deal opened from a listing passes that listing (if it still exists) so its sales count.
+    const link = await fetchMaybeDealLink(client.rpc, (await findLinkPda({ deal }))[0]);
+    const listing = link.exists && (await fetchMaybeListing(client.rpc, link.data.listing)).exists ? link.data.listing : undefined;
     return {
       actor, deal, policy: await policyAddress(d.buyer), mint: mint.address, buyerToken: await ata(d.buyer), sellerToken: await ata(d.seller),
-      sellerRep: await sellerRepAddress(d.seller, d.mint), repPair: await repPairAddress(d.seller, d.buyer, d.mint),
+      sellerRep: await sellerRepAddress(d.seller, d.mint), repPair: await repPairAddress(d.seller, d.buyer, d.mint), listing,
     };
   };
   const ops = {
     accept: async (deal: Address, by: TransactionSigner = seller) =>
       send([await getAcceptInstructionAsync({ seller: by, deal, mint: mint.address, sellerToken: await ata(by.address) })]),
     deliver: async (deal: Address, invoice = 5n * USDC, by: TransactionSigner = seller, h = hash(9)) =>
-      send([getSubmitDeliveryInstruction({ seller: by, deal, deliveryHash: h, invoiceAmount: invoice })]),
+      send([await getSubmitDeliveryInstructionAsync({ seller: by, deal, deliveryHash: h, invoiceAmount: invoice })]),
     release: async (deal: Address, by: TransactionSigner = buyer, h = hash(9)) =>
       send([await getReleaseInstructionAsync({ ...(await settleAccounts(by, deal)), expectedDeliveryHash: h })]),
     claim: async (deal: Address, by: TransactionSigner = seller) =>
