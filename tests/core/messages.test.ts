@@ -62,7 +62,7 @@ test("free text never becomes a command: unknown types, unknown fields and bad b
   assert.equal(open(signed({ body: { ...task.body, to: "Planner; rm -rf" } })), "BAD_BODY");
   assert.equal(open(signed({ type: "need-approval", body: { taskId: "t1", reason: "RAISE_MY_CAP" } })), "BAD_BODY");
   assert.equal(open(signed({ type: "need-approval", body: { taskId: "t1", reason: "OVER_CAP", amount: "1e9" } })), "BAD_BODY");
-  assert.equal(open(signed({ body: { ...task.body, summary: "hidden ‮ reversed" } })), "BAD_BODY");
+  assert.equal(open(signed({ body: { ...task.body, summary: "hidden \u202e reversed" } })), "BAD_BODY");
   assert.equal(open(signed({ stage: 8 })), "BAD_SHAPE");
 });
 
@@ -96,7 +96,7 @@ function prng(seed: number) {
 test("fuzz: random text and random mutations of a valid message are never accepted (3000 cases)", () => {
   const rnd = prng(59);
   const valid = JSON.stringify(signMessage(task, SEED1));
-  const alphabet = 'abcXYZ019{}[]":,\\ \n‮transfer pay ignore';
+  const alphabet = 'abcXYZ019{}[]":,\\ \n\u202etransfer pay ignore';
   for (let i = 0; i < 3_000; i++) {
     let s: string;
     if (i % 3 === 0) {

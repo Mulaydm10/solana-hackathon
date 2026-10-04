@@ -40,8 +40,8 @@ test("unknown kind and unknown fields are refused (nothing unbound rides along)"
   assert.equal(reason([data]), "NOT_AN_OBJECT");
 });
 test("text that renders differently from its bytes is refused", () => {
-  assert.equal(reason({ ...data, name: "Prices ‮gnp.exe" }), "BAD_NAME");
-  assert.equal(reason({ ...data, name: "zero​width" }), "BAD_NAME");
+  assert.equal(reason({ ...data, name: "Prices \u202egnp.exe" }), "BAD_NAME");
+  assert.equal(reason({ ...data, name: "zero\u200bwidth" }), "BAD_NAME");
   assert.equal(reason({ ...data, name: "two\nlines" }), "BAD_NAME");
   assert.equal(reason({ ...data, name: "   " }), "BAD_NAME");
   assert.equal(reason({ ...data, description: "line one\nline two" }), "ok");

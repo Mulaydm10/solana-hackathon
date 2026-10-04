@@ -46,8 +46,8 @@ export const HEX32 = /^[0-9a-f]{64}$/;
 export function isPlainText(s: unknown, max: number, multiline = false): s is string {
   if (typeof s !== "string" || s.trim().length === 0 || s.length > max) return false;
   const banned = multiline
-    ? /[\u0000-\u0008\u000b-\u001f\u007f-\u009f​-‏‪-‮⁠-⁤⁦-⁩﻿]/
-    : /[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁤⁦-⁩﻿]/;
+    ? /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/
+    : /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/;
   return !banned.test(s);
 }
 
