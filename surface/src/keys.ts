@@ -2,9 +2,11 @@
 // (gitignored). They hold test tokens with no value. Never point this at mainnet.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createKeyPairSignerFromBytes, getAddressEncoder, createKeyPairSignerFromPrivateKeyBytes, type KeyPairSigner } from "@solana/kit";
 
-export const KEYS_DIR = new URL("../.keys/", import.meta.url).pathname;
+// fileURLToPath, not URL.pathname: pathname is "/D:/..." on Windows (#77). Keeps the trailing separator.
+export const KEYS_DIR = fileURLToPath(new URL("../.keys/", import.meta.url));
 export const CONFIG_PATH = KEYS_DIR + "config.json";
 
 export type DeskConfig = {

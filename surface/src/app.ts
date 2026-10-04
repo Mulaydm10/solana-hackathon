@@ -1,5 +1,6 @@
 // HTTP API + static demo page for Ask -> Find -> Draft terms -> Lock -> Deliver -> Settle.
 // Refusals (core reasons, program errors) are normal JSON results with a reason code. See contracts/surface.md.
+import { fileURLToPath } from "node:url";
 import express, { type Request, type Response } from "express";
 import type { Address } from "@solana/kit";
 import { canonicalJson, describeTerms, termsHash, validateTerms, type DealTerms } from "@deal/core";
@@ -49,7 +50,7 @@ export function createApp(deps: AppDeps) {
   app.use(securityHeaders);
   app.use(express.json({ limit: "64kb" }));
   app.use("/api", guardWrites(deps.guard));
-  app.use(express.static(new URL("../public", import.meta.url).pathname));
+  app.use(express.static(fileURLToPath(new URL("../public", import.meta.url))));
 
   const explorer = (sig: string) => `https://explorer.solana.com/tx/${sig}?cluster=${cluster}`;
   const refuse = (res: Response, reason: string, message: string) => res.json({ ok: false, reason, message });
