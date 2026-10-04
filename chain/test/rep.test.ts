@@ -117,7 +117,7 @@ test("repeat deals with one buyer do not add distinct buyers; a second buyer doe
     await getCreateDealInstructionAsync({
       buyer: b2, seller: t.seller.address, mint: t.mint.address, buyerToken: await t.ata(b2.address), dealId: 1n,
       amount: 1n * USDC, deadline: t.now() + HOUR, reviewSecs: 600n, resolveSecs: 600n, toleranceBps: 500,
-      stakeRequired: 0n, bondBps: 0, verifier: t.verifier.address, termsHash: hash(3),
+      stakeRequired: 0n, bondBps: 0, verifier: t.verifier.address, termsHash: hash(3), listingContentHash: new Uint8Array(32),
     }),
   ]);
   const d2 = await dealAddress(b2.address, 1n);
@@ -182,7 +182,7 @@ test("reputation is kept per mint: deals in a self-minted token never touch the 
     await getCreateDealInstructionAsync({
       buyer: b2, seller: t.seller.address, mint: junk.address, buyerToken: await ataOf(b2.address), dealId: 1n,
       amount: 10n ** 12n, deadline: t.now() + HOUR, reviewSecs: 600n, resolveSecs: 600n, toleranceBps: 500,
-      stakeRequired: 0n, bondBps: 0, verifier: t.verifier.address, termsHash: hash(3),
+      stakeRequired: 0n, bondBps: 0, verifier: t.verifier.address, termsHash: hash(3), listingContentHash: new Uint8Array(32),
     }),
   ]);
   const deal = await dealAddress(b2.address, 1n);

@@ -18,6 +18,7 @@ import {
   getSubmitDeliveryInstructionAsync,
   getUpdateListingInstruction,
   PROGRAM_ERRORS,
+  registryAddress,
 } from "../src/index.ts";
 import { HOUR, USDC, hash, programErrorCode, setup } from "./harness.ts";
 
@@ -28,6 +29,8 @@ async function market() {
   const t = await setup();
   const assessor = await generateKeyPairSigner();
   t.client.svm.airdrop(assessor.address, 1_000_000_000n as never);
+  await t.registerAssessors(assessor.address);
+  const registry = await registryAddress();
   let nextListing = 1n;
   let nextDeal = 100n;
   const list = async (o: { kind?: ListingKind; price?: bigint; content?: Uint8Array; assessorAddr?: Address; seller?: typeof t.seller } = {}) => {
@@ -43,7 +46,7 @@ async function market() {
     return (await findListingPda({ seller: seller.address, listingId }))[0];
   };
   const attest = async (listing: Address, content = hash(20), by = assessor) =>
-    t.send([getAttestListingInstruction({ assessor: by, listing, contentHash: content, reportHash: hash(30) })]);
+    t.send([getAttestListingInstruction({ assessor: by, listing, contentHash: content, reportHash: hash(30), registry })]);
   const update = async (listing: Address, u: { price?: bigint; active?: boolean; contentHash?: Uint8Array; metaHash?: Uint8Array }, by = t.seller) =>
     t.send([
       getUpdateListingInstruction({
@@ -51,7 +54,7 @@ async function market() {
       }),
     ]);
   /** Buyer opens a deal from a listing (or passes only a link, to test the refusal). */
-  const openFrom = async (listing: Address | undefined, o: { amount?: bigint; linkOnly?: boolean } = {}) => {
+  const openFrom = async (listing: Address | undefined, o: { amount?: bigint; linkOnly?: boolean; saw?: Uint8Array; noRegistry?: boolean } = {}) => {
     const dealId = nextDeal++;
     const deal = await dealAddress(t.buyer.address, dealId);
     const [link] = await findLinkPda({ deal });
@@ -60,12 +63,12 @@ async function market() {
         buyer: t.buyer, seller: t.seller.address, mint: t.mint.address, buyerToken: await t.ata(t.buyer.address), dealId,
         amount: o.amount ?? 5n * USDC, deadline: t.now() + HOUR, reviewSecs: 600n, resolveSecs: 600n, toleranceBps: 500,
         stakeRequired: 0n, bondBps: 0, verifier: t.verifier.address, termsHash: hash(7),
-        listing: o.linkOnly ? undefined : listing, link,
+        listing: o.linkOnly ? undefined : listing, link, registry: o.noRegistry ? undefined : registry, listingContentHash: o.saw ?? hash(20),
       }),
     ]);
     return deal;
   };
-  return { t, assessor, list, attest, update, openFrom };
+  return { t, assessor, registry, list, attest, update, openFrom };
 }
 
 test("create_listing: independent assessor, non-zero content and price; starts unattested", async () => {
@@ -199,3 +202,70 @@ test("plain deals (no listing) are unaffected", async () => {
   await t.release(deal, t.buyer, hash(77));
   assert.equal((await t.deal(deal)).status, 4); // Released
 });
+
+test("assessor registry: only the upgrade authority sets it; only registered assessors can be named or attest", async () => {
+  const { t, list, attest } = await market();
+  const outsider = await generateKeyPairSigner();
+  // A seller naming a second key it holds is refused: that key is not registered.
+  assert.equal(await errOf(list({ assessorAddr: outsider.address })), code("AssessorNotRegistered"));
+  // Only the upgrade authority can change the list.
+  const { getSetAssessorsInstructionAsync } = await import("../src/index.ts");
+  const { getAddressEncoder, getProgramDerivedAddress } = await import("@solana/kit");
+  const [programData] = await getProgramDerivedAddress({
+    programAddress: "BPFLoaderUpgradeab1e11111111111111111111111" as Address,
+    seeds: [getAddressEncoder().encode((await import("../src/index.ts")).DEAL_ESCROW_PROGRAM_ADDRESS)],
+  });
+  t.client.svm.airdrop(t.stranger.address, 1_000_000_000n as never);
+  assert.equal(
+    await errOf(t.send([await getSetAssessorsInstructionAsync({ authority: t.stranger, programData, assessors: [t.stranger.address] })])),
+    code("Unauthorized"),
+  );
+  // A delisted assessor can no longer attest.
+  const l = await list();
+  await t.registerAssessors(outsider.address);
+  assert.equal(await errOf(attest(l)), code("AssessorNotRegistered"));
+});
+
+test("a deal binds the content the buyer saw and still-registered assessors only", async () => {
+  const { t, assessor, list, attest, update, openFrom } = await market();
+  const l = await list();
+  await attest(l);
+  // The seller swapped the content (and had it re-attested) after the buyer looked: refused.
+  await update(l, { contentHash: hash(23) });
+  await attest(l, hash(23));
+  assert.equal(await errOf(openFrom(l)), code("ListingMismatch")); // buyer saw hash(20)
+  const d = await openFrom(l, { saw: hash(23) });
+  assert.ok(d);
+  // Without the registry account, or once the assessor is delisted, attestations are not trusted.
+  assert.equal(await errOf(openFrom(l, { saw: hash(23), noRegistry: true })), code("AssessorNotRegistered"));
+  await t.registerAssessors((await generateKeyPairSigner()).address);
+  assert.equal(await errOf(openFrom(l, { saw: hash(23) })), code("AssessorNotRegistered"));
+  void assessor;
+});
+
+test("a closed and recreated listing does not collect the old deals' sales", async () => {
+  const { t, list, attest, openFrom } = await market();
+  const l = await list();
+  await attest(l);
+  const deal = await openFrom(l);
+  await t.accept(deal);
+  await t.deliver(deal, 5n * USDC, t.seller, hash(20));
+  const { getCloseListingInstruction: close, getCreateListingInstructionAsync: create } = await import("../src/index.ts");
+  await t.send([close({ seller: t.seller, listing: l })]);
+  t.warp(5n); // a later created_at
+  await t.send([
+    await create({
+      seller: t.seller, mint: t.mint.address, listingId: 1n, kind: ListingKind.Data, price: 5n * USDC,
+      contentHash: hash(29), metaHash: hash(21), termsTemplateHash: hash(22), assessor: (await fetchListingAssessor(t, l)) ?? t.verifier.address,
+    }),
+  ]);
+  await t.release(deal, t.buyer, hash(20));
+  assert.equal((await fetchListing(t.client.rpc, l)).data.sales, 0n);
+});
+
+async function fetchListingAssessor(t: Awaited<ReturnType<typeof setup>>, _l: Address): Promise<Address | null> {
+  // The recreated listing needs a registered assessor; reuse the one the registry holds.
+  const { fetchMaybeAssessorRegistry } = await import("../src/index.ts");
+  const r = await fetchMaybeAssessorRegistry(t.client.rpc, await registryAddress());
+  return r.exists ? r.data.assessors[0]! : null;
+}

@@ -19,6 +19,8 @@ import {
   getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
+  getI64Decoder,
+  getI64Encoder,
   getStructDecoder,
   getStructEncoder,
   getU8Decoder,
@@ -51,6 +53,8 @@ export type DealLink = {
   listing: Address;
   /** For Data listings, the content hash the delivery must equal; zero = no check. */
   expectedDeliveryHash: ReadonlyUint8Array;
+  /** Which incarnation of the listing PDA (a closed and recreated listing has a new created_at). */
+  listingCreatedAt: bigint;
   bump: number;
 };
 
@@ -59,6 +63,8 @@ export type DealLinkArgs = {
   listing: Address;
   /** For Data listings, the content hash the delivery must equal; zero = no check. */
   expectedDeliveryHash: ReadonlyUint8Array;
+  /** Which incarnation of the listing PDA (a closed and recreated listing has a new created_at). */
+  listingCreatedAt: number | bigint;
   bump: number;
 };
 
@@ -70,6 +76,7 @@ export function getDealLinkEncoder(): FixedSizeEncoder<DealLinkArgs> {
       ["deal", getAddressEncoder()],
       ["listing", getAddressEncoder()],
       ["expectedDeliveryHash", fixEncoderSize(getBytesEncoder(), 32)],
+      ["listingCreatedAt", getI64Encoder()],
       ["bump", getU8Encoder()],
     ]),
     (value) => ({ ...value, discriminator: DEAL_LINK_DISCRIMINATOR }),
@@ -83,6 +90,7 @@ export function getDealLinkDecoder(): FixedSizeDecoder<DealLink> {
     ["deal", getAddressDecoder()],
     ["listing", getAddressDecoder()],
     ["expectedDeliveryHash", fixDecoderSize(getBytesDecoder(), 32)],
+    ["listingCreatedAt", getI64Decoder()],
     ["bump", getU8Decoder()],
   ]);
 }
@@ -146,5 +154,5 @@ export async function fetchAllMaybeDealLink(
 }
 
 export function getDealLinkSize(): number {
-  return 105;
+  return 113;
 }

@@ -9,7 +9,7 @@
 import { createServer, request as httpRequest, type IncomingMessage, type Server } from "node:http";
 import { connect } from "node:net";
 
-export type EgressCheck = (token: string, host: string) => Promise<boolean>;
+export type EgressCheck = (token: string, host: string, port: number) => Promise<boolean>;
 
 export type EgressLog = { allowed: boolean; host: string; port: number; method: string };
 
@@ -31,7 +31,7 @@ export function createEgressProxy(allowed: EgressCheck, onDecision?: (d: EgressL
       return;
     }
     const port = Number(url.port || (url.protocol === "https:" ? 443 : 80));
-    const ok = url.protocol === "http:" && (await allowed(tokenOf(req), url.hostname.toLowerCase()).catch(() => false));
+    const ok = url.protocol === "http:" && (await allowed(tokenOf(req), url.hostname.toLowerCase(), port).catch(() => false));
     onDecision?.({ allowed: ok, host: url.hostname, port, method: req.method ?? "" });
     if (!ok) {
       res.writeHead(403).end("egress refused");
@@ -51,7 +51,7 @@ export function createEgressProxy(allowed: EgressCheck, onDecision?: (d: EgressL
   server.on("connect", async (req, socket, head) => {
     const [host = "", portText = "443"] = (req.url ?? "").split(":");
     const port = Number(portText);
-    const ok = Number.isInteger(port) && port > 0 && (await allowed(tokenOf(req), host.toLowerCase()).catch(() => false));
+    const ok = Number.isInteger(port) && port > 0 && (await allowed(tokenOf(req), host.toLowerCase(), port).catch(() => false));
     onDecision?.({ allowed: ok, host, port, method: "CONNECT" });
     if (!ok) {
       socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
