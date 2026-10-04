@@ -82,8 +82,8 @@ export const FIXTURES: RegistryListing[] = [
   },
   {
     address: "9sA4TripPlannerTeamListingAddr4444444444444", seller: "SeLLerTravel11111111111111111111111111111111", kind: "Team", mint: USDC_DEVNET,
-    price: 45_000_000n, contentHash: "ce9c0fe9a60e107db3637be344afef13d474ee848c85b0f272813038b05e39db", active: true, sales: 12, createdAt: NOW - 20 * 86_400,
-    meta: { kind: "Team", name: "Trip planner", description: "A researcher and a writer plan a trip and hold bookings.", category: "travel", tags: ["trips"], blueprintHash: "ce9c0fe9a60e107db3637be344afef13d474ee848c85b0f272813038b05e39db", roles: ["researcher", "writer"], deliverable: "A day-by-day trip plan", maxDurationSecs: 604_800 },
+    price: 45_000_000n, contentHash: "d0789d9f8e3dbb5c92e5f0a70b6230866f1fef26104554800dcaa7b89dafafeb", active: true, sales: 12, createdAt: NOW - 20 * 86_400,
+    meta: { kind: "Team", name: "Trip planner", description: "A researcher and a writer plan a trip and hold bookings.", category: "travel", tags: ["trips"], blueprintHash: "d0789d9f8e3dbb5c92e5f0a70b6230866f1fef26104554800dcaa7b89dafafeb", roles: ["researcher", "writer"], deliverable: "A day-by-day trip plan", maxDurationSecs: 604_800 },
     report: { grade: "B", reportHash: "d4".repeat(32), assessor: "AssessorOne111111111111111111111111111111111", assessedAt: NOW - 19 * 86_400, containsPersonalData: false },
     rep: rep(12, 11),
   },
