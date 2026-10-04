@@ -14,3 +14,6 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+
+# surface demo keys (devnet only)
+surface/.keys/
