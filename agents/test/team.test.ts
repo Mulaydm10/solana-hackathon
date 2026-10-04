@@ -242,3 +242,57 @@ test("a stage approved for a different plan never runs", async () => {
   assert.equal((events[1] as { reason: string }).reason, "PLAN_MISMATCH");
 });
 
+
+test("mission service over HTTP: token required, prepare -> buyer signs -> start -> delivered", async () => {
+  const { createMissionService } = await import("../src/index.ts");
+  const c = await chain();
+  const { broker: b, live } = broker(c);
+  const token = "t".repeat(48);
+  const svc = createMissionService({
+    ctx: c.ctx, broker: b, capabilities: ["market:read"], live, dealRules: { verifier: c.verifier }, token, pollMs: 5,
+    workers: { researcher: worker("worker-researcher.mjs"), writer: worker("worker-writer.mjs") },
+    workerEnv: { researcher: { PAYEE: c.seller.address, AMOUNT: String(1n * USDC) } }, runner: { pollMs: 200 },
+  });
+  await new Promise<void>((r) => svc.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${(svc.address() as { port: number }).port}`;
+  const call = (path: string, body?: unknown, auth = token) =>
+    fetch(base + path, { method: body === undefined ? "GET" : "POST", headers: { authorization: `Bearer ${auth}`, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  try {
+    assert.equal((await call("/missions/x", undefined, "wrong")).status, 401);
+    assert.equal((await call("/missions/prepare", { goal: "x" })).status, 400);
+    const bp = blueprint(c.seller.address);
+    const wire = JSON.parse(JSON.stringify(bp, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
+    const prep = await (await call("/missions/prepare", { blueprint: wire, goal: "Brief", budget: String(10n * USDC), missionId: "8", buyer: c.buyer.address, expiresAt: String(c.now() + 3_600n) })).json();
+    assert.equal(prep.ok, true);
+    assert.equal(prep.roles.length, 2);
+    assert.ok(!JSON.stringify(prep).includes("privateKey") && !JSON.stringify(prep).includes("secret"));
+    // The buyer signs (in the site: Phantom), from what the service returned.
+    const { prepareMission: _p } = await import("../src/index.ts"); void _p;
+    const hexTo = (h: string) => Uint8Array.from(Buffer.from(h, "hex"));
+    const cp = prep.createParams;
+    assert.ok((await missions.create(c.ctx, c.buyer, { ...cp, missionId: BigInt(cp.missionId), budget: BigInt(cp.budget), termsHash: hexTo(cp.termsHash), stageCaps: cp.stageCaps.map(BigInt), expiresAt: BigInt(cp.expiresAt), verifier: cp.verifier })).ok);
+    for (const r of prep.roles) {
+      const m = r.mandate;
+      assert.ok((await missions.addMandate(c.ctx, c.buyer, prep.mission, { ...m, roleHash: hexTo(m.roleHash), cap: BigInt(m.cap), perTxCap: BigInt(m.perTxCap), expiresAt: BigInt(m.expiresAt) })).ok);
+    }
+    assert.equal((await call(`/missions/${prep.mission}/start`, {})).status, 202);
+    assert.equal((await call(`/missions/${prep.mission}/start`, {})).status, 409);
+    for (const [i, plan] of prep.plans.entries()) {
+      await missions.approveStage(c.ctx, c.buyer, prep.mission, i, hexTo(plan.planHash), hexTo(prep.digest));
+      // wait until the service has run this stage before approving the next
+      for (let k = 0; k < 200; k++) {
+        const s = await (await call(`/missions/${prep.mission}`)).json();
+        if (s.events.some((e: { type: string; stage?: number }) => (e.type === "approved" && e.stage === i))) break;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+    }
+    let state = "running";
+    for (let k = 0; k < 400 && state === "running"; k++) {
+      state = (await (await call(`/missions/${prep.mission}`)).json()).state;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    assert.equal(state, "done");
+  } finally {
+    svc.close();
+  }
+});
