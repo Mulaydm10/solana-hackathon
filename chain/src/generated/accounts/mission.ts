@@ -89,6 +89,8 @@ export type Mission = {
   minReviewSecs: bigint;
   minResolveSecs: bigint;
   maxToleranceBps: number;
+  maxBondBps: number;
+  minStakeBps: number;
   authBump: number;
   bump: number;
 };
@@ -118,6 +120,8 @@ export type MissionArgs = {
   minReviewSecs: number | bigint;
   minResolveSecs: number | bigint;
   maxToleranceBps: number;
+  maxBondBps: number;
+  minStakeBps: number;
   authBump: number;
   bump: number;
 };
@@ -147,6 +151,8 @@ export function getMissionEncoder(): Encoder<MissionArgs> {
       ["minReviewSecs", getI64Encoder()],
       ["minResolveSecs", getI64Encoder()],
       ["maxToleranceBps", getU16Encoder()],
+      ["maxBondBps", getU16Encoder()],
+      ["minStakeBps", getU16Encoder()],
       ["authBump", getU8Encoder()],
       ["bump", getU8Encoder()],
     ]),
@@ -178,6 +184,8 @@ export function getMissionDecoder(): Decoder<Mission> {
     ["minReviewSecs", getI64Decoder()],
     ["minResolveSecs", getI64Decoder()],
     ["maxToleranceBps", getU16Decoder()],
+    ["maxBondBps", getU16Decoder()],
+    ["minStakeBps", getU16Decoder()],
     ["authBump", getU8Decoder()],
     ["bump", getU8Decoder()],
   ]);

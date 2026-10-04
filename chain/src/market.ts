@@ -165,10 +165,12 @@ export type MissionInput = {
   approver?: TransactionSigner;
   /** The verifier every agent deal must name (not the buyer). */
   verifier: Address;
-  /** Floors for agents' deals; defaults 600 s, 600 s, 5%. */
+  /** Floors for agents' deals; defaults 600 s, 600 s, 5% tolerance, 10% max bond, 0% min stake. */
   minReviewSecs?: bigint;
   minResolveSecs?: bigint;
   maxToleranceBps?: number;
+  maxBondBps?: number;
+  minStakeBps?: number;
 };
 
 export type MissionAccounts = { mission: Address; auth: Address; authPolicy: Address; vault: Address };
@@ -306,6 +308,33 @@ async function actorMandate(ctx: DealContext, mission: Address, actor: Address):
   return m.data ? m.address : undefined;
 }
 
+/** Runs `fn` after every earlier call with the same key has finished (an in-process mutex per key). */
+const queues = new Map<string, Promise<unknown>>();
+function serialized<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = queues.get(key) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.catch(() => {});
+  queues.set(key, tail);
+  void tail.then(() => { if (queues.get(key) === tail) queues.delete(key); });
+  return run;
+}
+
+async function spendOnce(
+  ctx: DealContext, agent: TransactionSigner, mission: Address, payee: Address, amount: bigint, receiptHash: Uint8Array, listing?: Address,
+): Promise<Sent> {
+  const before = (await rawMandate(ctx, mission, agent.address)).data;
+  if (!before) return refuse("MANDATE_NOT_FOUND", "This agent has no mandate on that mission.");
+  return safeSend(ctx, mission, async () => {
+    const now = (await rawMandate(ctx, mission, agent.address)).data;
+    return now !== null && now.spent >= before.spent + amount;
+  }, async () => [
+    await getAgentSpendInstructionAsync({
+      agent, mission, mint: ctx.mint, payeeToken: await ata(ctx, payee), listing, amount, receiptHash,
+      registry: listing ? await registryAddress() : undefined,
+    }),
+  ]);
+}
+
 const statusOf = async (ctx: DealContext, deal: Address) => {
   const d = await readWithRetry(ctx, () => fetchMaybeDeal(ctx.client.rpc, deal));
   return d.exists ? STATUS_NAMES[d.data.status] ?? "" : null;
@@ -321,6 +350,7 @@ export const missions = {
         budget: p.budget, termsHash: p.termsHash, teamListing: p.teamListing ?? NO_KEY, stageCaps: p.stageCaps,
         expiresAt: BigInt(p.expiresAt), rentLamports: p.rentLamports ?? 0n, verifier: p.verifier,
         minReviewSecs: p.minReviewSecs ?? 600n, minResolveSecs: p.minResolveSecs ?? 600n, maxToleranceBps: p.maxToleranceBps ?? 500,
+        maxBondBps: p.maxBondBps ?? 1000, minStakeBps: p.minStakeBps ?? 0,
       }),
     ]);
     return r.ok ? { ...r, ...acc } : r;
@@ -357,24 +387,29 @@ export const missions = {
   async spend(
     ctx: DealContext, agent: TransactionSigner, mission: Address, payee: Address, amount: bigint, receiptHash: Uint8Array, listing?: Address,
   ): Promise<Sent> {
-    const before = (await rawMandate(ctx, mission, agent.address)).data;
-    if (!before) return refuse("MANDATE_NOT_FOUND", "This agent has no mandate on that mission.");
-    return safeSend(ctx, mission, async () => {
-      const now = (await rawMandate(ctx, mission, agent.address)).data;
-      return now !== null && now.spent >= before.spent + amount;
-    }, async () => [
-      await getAgentSpendInstructionAsync({
-        agent, mission, mint: ctx.mint, payeeToken: await ata(ctx, payee), listing, amount, receiptHash,
-        registry: listing ? await registryAddress() : undefined,
-      }),
-    ]);
+    // One spend at a time per mandate in this process, so `landed` (spent grew by `amount` since our read)
+    // can never be satisfied by a different concurrent payment.
+    return serialized(`${mission}:${agent.address}`, () => spendOnce(ctx, agent, mission, payee, amount, receiptHash, listing));
   },
 
   /** An agent buys under escrow: a normal deal with the mission's authority as the buyer. */
   async openDeal(
-    ctx: DealContext, agent: TransactionSigner, mission: Address, p: Omit<OpenParams, "approver">, receiptHash: Uint8Array,
+    ctx: DealContext, agent: TransactionSigner, mission: Address, p: Omit<OpenParams, "approver" | "reviewSecs"> & { reviewSecs?: bigint | number },
+    receiptHash: Uint8Array,
   ): Promise<Sent<{ deal: Address }>> {
     const [auth] = await findMissionAuthPda({ mission });
+    // Unset terms default to the mission's own rules, so the easy call is the allowed one.
+    const m = await rawMission(ctx, mission);
+    if (!m) return MISSION_NOT_FOUND;
+    p = {
+      ...p,
+      verifier: p.verifier ?? m.verifier,
+      reviewSecs: p.reviewSecs ?? m.minReviewSecs,
+      resolveSecs: p.resolveSecs ?? m.minResolveSecs,
+      toleranceBps: p.toleranceBps ?? m.maxToleranceBps,
+      bondBps: p.bondBps ?? m.maxBondBps,
+      stakeRequired: p.stakeRequired ?? (p.amount * BigInt(m.minStakeBps) + 9_999n) / 10_000n,
+    };
     const deal = await dealAddress(auth, p.dealId);
     const r = await safeSend(ctx, deal, async () => (await statusOf(ctx, deal)) !== null, async () => [
       await getAgentOpenDealInstructionAsync({
@@ -383,7 +418,7 @@ export const missions = {
         sellerRep: await sellerRepAddress(p.seller, ctx.mint), repPair: await repPairAddress(p.seller, auth, ctx.mint),
         listing: p.listing, link: p.listing ? (await findLinkPda({ deal }))[0] : undefined,
         registry: p.listing ? await registryAddress() : undefined, listingContentHash: p.listingContentHash ?? new Uint8Array(32),
-        dealId: p.dealId, amount: p.amount, deadline: BigInt(p.deadline), reviewSecs: BigInt(p.reviewSecs),
+        dealId: p.dealId, amount: p.amount, deadline: BigInt(p.deadline), reviewSecs: BigInt(p.reviewSecs!),
         resolveSecs: BigInt(p.resolveSecs ?? 600), toleranceBps: p.toleranceBps ?? 0, stakeRequired: p.stakeRequired ?? 0n,
         bondBps: p.bondBps ?? 0, verifier: p.verifier ?? NO_KEY, termsHash: p.termsHash, receiptHash,
       }),
