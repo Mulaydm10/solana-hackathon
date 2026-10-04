@@ -1,6 +1,8 @@
 // The shape every tool follows. Adding a capability = one file in src/tools/ that default-exports
 // defineTool({...}) plus one line in src/tools/index.ts (a test fails if that line is forgotten).
 import type { z } from "zod";
+import type { TransactionSigner } from "@solana/kit";
+import type { DealContext } from "@deal/chain";
 import type { Config } from "./config.ts";
 
 /** Tools never throw for expected outcomes: a refusal is a normal result carrying a reason code. */
@@ -8,7 +10,18 @@ export type ToolResult =
   | { ok: true; data: Record<string, unknown> }
   | { ok: false; reason: string; message: string };
 
-export type ToolContext = { config: Config };
+/** The chain as a tool sees it: the deal library's context and the agent's own signer (null = read-only). */
+export type ChainAccess = { ctx: DealContext; signer: TransactionSigner | null };
+
+export type ToolContext = {
+  config: Config;
+  /** Opened on first use by the server; tests inject a LiteSVM one. Absent = offline. */
+  chain?: () => Promise<ChainAccess>;
+  /** HTTP to the marketplace site (injectable for tests). */
+  fetch?: typeof fetch;
+};
+
+export const ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export type ToolDef<S extends z.ZodRawShape> = {
   /** snake_case, unique. */

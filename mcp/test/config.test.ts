@@ -1,10 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadConfig } from "../src/config.ts";
+import { DEVNET_USDC, loadConfig } from "../src/config.ts";
 
 test("defaults to devnet with the public RPC and no signer", () => {
   const r = loadConfig({});
-  assert.deepEqual(r, { ok: true, config: { cluster: "devnet", rpcUrl: "https://api.devnet.solana.com", keypairPath: null } });
+  assert.deepEqual(r, {
+    ok: true,
+    config: { cluster: "devnet", rpcUrl: "https://api.devnet.solana.com", keypairPath: null, mint: DEVNET_USDC, verifier: null, siteUrl: null },
+  });
 });
 
 test("localnet and a custom RPC are accepted", () => {
