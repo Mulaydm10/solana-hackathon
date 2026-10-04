@@ -16,11 +16,17 @@ import {
 } from "@solana/kit";
 
 export enum DealStatus {
+  Open,
   Funded,
   Delivered,
+  Challenged,
   Released,
-  Refunded,
   Claimed,
+  Refunded,
+  Cancelled,
+  VerifiedPass,
+  VerifiedFail,
+  NoVerdict,
 }
 
 export type DealStatusArgs = DealStatus;

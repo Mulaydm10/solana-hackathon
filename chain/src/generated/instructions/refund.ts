@@ -20,6 +20,7 @@ import {
   SolanaError,
   transformEncoder,
   type AccountMeta,
+  type AccountSignerMeta,
   type Address,
   type FixedSizeCodec,
   type FixedSizeDecoder,
@@ -28,6 +29,7 @@ import {
   type InstructionWithAccounts,
   type InstructionWithData,
   type ReadonlyAccount,
+  type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type WritableAccount,
 } from "@solana/kit";
@@ -36,6 +38,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type InstructionAccountInput,
   type InstructionAccountInputAddress,
+  type InstructionSignerInput,
   type ResolvedInstructionAccount,
   type ResolvedInstructionAccountMeta,
 } from "@solana/program-client-core";
@@ -51,10 +54,13 @@ export function getRefundDiscriminatorBytes(): ReadonlyUint8Array {
 
 export type RefundInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
+  TAccountActor extends string | AccountMeta<string> = string,
   TAccountDeal extends string | AccountMeta<string> = string,
+  TAccountPolicy extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountBuyerToken extends string | AccountMeta<string> = string,
+  TAccountSellerToken extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -62,9 +68,16 @@ export type RefundInstruction<
   InstructionWithData<ReadonlyUint8Array> &
   InstructionWithAccounts<
     [
+      TAccountActor extends string
+        ? ReadonlySignerAccount<TAccountActor> &
+            AccountSignerMeta<TAccountActor>
+        : TAccountActor,
       TAccountDeal extends string
         ? WritableAccount<TAccountDeal>
         : TAccountDeal,
+      TAccountPolicy extends string
+        ? WritableAccount<TAccountPolicy>
+        : TAccountPolicy,
       TAccountMint extends string
         ? ReadonlyAccount<TAccountMint>
         : TAccountMint,
@@ -74,6 +87,9 @@ export type RefundInstruction<
       TAccountBuyerToken extends string
         ? WritableAccount<TAccountBuyerToken>
         : TAccountBuyerToken,
+      TAccountSellerToken extends string
+        ? WritableAccount<TAccountSellerToken>
+        : TAccountSellerToken,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -109,33 +125,45 @@ export function getRefundInstructionDataCodec(): FixedSizeCodec<
 }
 
 export type RefundAsyncInput<
+  TAccountActor extends InstructionSignerInput = InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
+  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
+  TAccountSellerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
 > = {
+  actor: TAccountActor;
   deal: TAccountDeal;
+  policy: TAccountPolicy;
   mint: TAccountMint;
   vault?: TAccountVault;
   buyerToken: TAccountBuyerToken;
+  sellerToken: TAccountSellerToken;
   tokenProgram?: TAccountTokenProgram;
 };
 
 export async function getRefundInstructionAsync<
+  TAccountActor extends InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput,
+  TAccountPolicy extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput,
+  TAccountSellerToken extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
   input: RefundAsyncInput<
+    TAccountActor,
     TAccountDeal,
+    TAccountPolicy,
     TAccountMint,
     TAccountVault,
     TAccountBuyerToken,
+    TAccountSellerToken,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -143,8 +171,16 @@ export async function getRefundInstructionAsync<
   RefundInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
+      TAccountActor,
+      InstructionAccountInputAddress<TAccountActor>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPolicy,
+      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -157,6 +193,10 @@ export async function getRefundInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountBuyerToken,
       InstructionAccountInputAddress<TAccountBuyerToken>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountSellerToken,
+      InstructionAccountInputAddress<TAccountSellerToken>
     >,
     ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
@@ -172,11 +212,18 @@ export async function getRefundInstructionAsync<
 
   // Original accounts.
   const originalAccounts = {
+    actor: { value: input.actor ?? null, isSigner: true, isWritable: false },
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
+    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
     buyerToken: {
       value: input.buyerToken ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    sellerToken: {
+      value: input.sellerToken ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -219,10 +266,13 @@ export async function getRefundInstructionAsync<
 
   return Object.freeze({
     accounts: [
+      getAccountMeta("actor", accounts.actor),
       getAccountMeta("deal", accounts.deal),
+      getAccountMeta("policy", accounts.policy),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("buyerToken", accounts.buyerToken),
+      getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getRefundInstructionDataEncoder().encode({}),
@@ -230,8 +280,16 @@ export async function getRefundInstructionAsync<
   } as RefundInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
+      TAccountActor,
+      InstructionAccountInputAddress<TAccountActor>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPolicy,
+      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -246,6 +304,10 @@ export async function getRefundInstructionAsync<
       InstructionAccountInputAddress<TAccountBuyerToken>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountSellerToken,
+      InstructionAccountInputAddress<TAccountSellerToken>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >
@@ -253,41 +315,61 @@ export async function getRefundInstructionAsync<
 }
 
 export type RefundInput<
+  TAccountActor extends InstructionSignerInput = InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
+  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
+  TAccountSellerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
 > = {
+  actor: TAccountActor;
   deal: TAccountDeal;
+  policy: TAccountPolicy;
   mint: TAccountMint;
   vault: TAccountVault;
   buyerToken: TAccountBuyerToken;
+  sellerToken: TAccountSellerToken;
   tokenProgram?: TAccountTokenProgram;
 };
 
 export function getRefundInstruction<
+  TAccountActor extends InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput,
+  TAccountPolicy extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput,
+  TAccountSellerToken extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
   input: RefundInput<
+    TAccountActor,
     TAccountDeal,
+    TAccountPolicy,
     TAccountMint,
     TAccountVault,
     TAccountBuyerToken,
+    TAccountSellerToken,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): RefundInstruction<
   TProgramAddress,
   ResolvedInstructionAccountMeta<
+    TAccountActor,
+    InstructionAccountInputAddress<TAccountActor>
+  >,
+  ResolvedInstructionAccountMeta<
     TAccountDeal,
     InstructionAccountInputAddress<TAccountDeal>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountPolicy,
+    InstructionAccountInputAddress<TAccountPolicy>
   >,
   ResolvedInstructionAccountMeta<
     TAccountMint,
@@ -302,6 +384,10 @@ export function getRefundInstruction<
     InstructionAccountInputAddress<TAccountBuyerToken>
   >,
   ResolvedInstructionAccountMeta<
+    TAccountSellerToken,
+    InstructionAccountInputAddress<TAccountSellerToken>
+  >,
+  ResolvedInstructionAccountMeta<
     TAccountTokenProgram,
     InstructionAccountInputAddress<TAccountTokenProgram>
   >
@@ -314,11 +400,18 @@ export function getRefundInstruction<
 
   // Original accounts.
   const originalAccounts = {
+    actor: { value: input.actor ?? null, isSigner: true, isWritable: false },
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
+    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
     buyerToken: {
       value: input.buyerToken ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    sellerToken: {
+      value: input.sellerToken ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -341,10 +434,13 @@ export function getRefundInstruction<
 
   return Object.freeze({
     accounts: [
+      getAccountMeta("actor", accounts.actor),
       getAccountMeta("deal", accounts.deal),
+      getAccountMeta("policy", accounts.policy),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("buyerToken", accounts.buyerToken),
+      getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getRefundInstructionDataEncoder().encode({}),
@@ -352,8 +448,16 @@ export function getRefundInstruction<
   } as RefundInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
+      TAccountActor,
+      InstructionAccountInputAddress<TAccountActor>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPolicy,
+      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -368,6 +472,10 @@ export function getRefundInstruction<
       InstructionAccountInputAddress<TAccountBuyerToken>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountSellerToken,
+      InstructionAccountInputAddress<TAccountSellerToken>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >
@@ -380,11 +488,14 @@ export type ParsedRefundInstruction<
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    deal: TAccountMetas[0];
-    mint: TAccountMetas[1];
-    vault: TAccountMetas[2];
-    buyerToken: TAccountMetas[3];
-    tokenProgram: TAccountMetas[4];
+    actor: TAccountMetas[0];
+    deal: TAccountMetas[1];
+    policy: TAccountMetas[2];
+    mint: TAccountMetas[3];
+    vault: TAccountMetas[4];
+    buyerToken: TAccountMetas[5];
+    sellerToken: TAccountMetas[6];
+    tokenProgram: TAccountMetas[7];
   };
   data: RefundInstructionData;
 };
@@ -397,12 +508,12 @@ export function parseRefundInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedRefundInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 5) {
+  if (instruction.accounts.length < 8) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 5,
+        expectedAccountMetas: 8,
       },
     );
   }
@@ -415,10 +526,13 @@ export function parseRefundInstruction<
   return {
     programAddress: instruction.programAddress,
     accounts: {
+      actor: getNextAccount(),
       deal: getNextAccount(),
+      policy: getNextAccount(),
       mint: getNextAccount(),
       vault: getNextAccount(),
       buyerToken: getNextAccount(),
+      sellerToken: getNextAccount(),
       tokenProgram: getNextAccount(),
     },
     data: getRefundInstructionDataDecoder().decode(instruction.data),

@@ -10,6 +10,7 @@ import {
   combineCodec,
   fixDecoderSize,
   fixEncoderSize,
+  getAddressDecoder,
   getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
@@ -18,6 +19,8 @@ import {
   getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
+  getU16Decoder,
+  getU16Encoder,
   getU64Decoder,
   getU64Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -33,6 +36,7 @@ import {
   type InstructionWithAccounts,
   type InstructionWithData,
   type ReadonlyAccount,
+  type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type WritableAccount,
   type WritableSignerAccount,
@@ -47,7 +51,7 @@ import {
   type ResolvedInstructionAccount,
   type ResolvedInstructionAccountMeta,
 } from "@solana/program-client-core";
-import { findDealPda } from "../pdas";
+import { findDealPda, findPolicyPda } from "../pdas";
 import { DEAL_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
 export const CREATE_DEAL_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -62,6 +66,8 @@ export type CreateDealInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
   TAccountBuyer extends string | AccountMeta<string> = string,
   TAccountSeller extends string | AccountMeta<string> = string,
+  TAccountApprover extends string | AccountMeta<string> = string,
+  TAccountPolicy extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountBuyerToken extends string | AccountMeta<string> = string,
   TAccountDeal extends string | AccountMeta<string> = string,
@@ -84,6 +90,13 @@ export type CreateDealInstruction<
       TAccountSeller extends string
         ? ReadonlyAccount<TAccountSeller>
         : TAccountSeller,
+      TAccountApprover extends string
+        ? ReadonlySignerAccount<TAccountApprover> &
+            AccountSignerMeta<TAccountApprover>
+        : TAccountApprover,
+      TAccountPolicy extends string
+        ? WritableAccount<TAccountPolicy>
+        : TAccountPolicy,
       TAccountMint extends string
         ? ReadonlyAccount<TAccountMint>
         : TAccountMint,
@@ -115,6 +128,11 @@ export type CreateDealInstructionData = {
   amount: bigint;
   deadline: bigint;
   reviewSecs: bigint;
+  resolveSecs: bigint;
+  toleranceBps: number;
+  stakeRequired: bigint;
+  bondBps: number;
+  verifier: Address;
   termsHash: ReadonlyUint8Array;
 };
 
@@ -123,6 +141,11 @@ export type CreateDealInstructionDataArgs = {
   amount: number | bigint;
   deadline: number | bigint;
   reviewSecs: number | bigint;
+  resolveSecs: number | bigint;
+  toleranceBps: number;
+  stakeRequired: number | bigint;
+  bondBps: number;
+  verifier: Address;
   termsHash: ReadonlyUint8Array;
 };
 
@@ -134,6 +157,11 @@ export function getCreateDealInstructionDataEncoder(): FixedSizeEncoder<CreateDe
       ["amount", getU64Encoder()],
       ["deadline", getI64Encoder()],
       ["reviewSecs", getI64Encoder()],
+      ["resolveSecs", getI64Encoder()],
+      ["toleranceBps", getU16Encoder()],
+      ["stakeRequired", getU64Encoder()],
+      ["bondBps", getU16Encoder()],
+      ["verifier", getAddressEncoder()],
       ["termsHash", fixEncoderSize(getBytesEncoder(), 32)],
     ]),
     (value) => ({ ...value, discriminator: CREATE_DEAL_DISCRIMINATOR }),
@@ -147,6 +175,11 @@ export function getCreateDealInstructionDataDecoder(): FixedSizeDecoder<CreateDe
     ["amount", getU64Decoder()],
     ["deadline", getI64Decoder()],
     ["reviewSecs", getI64Decoder()],
+    ["resolveSecs", getI64Decoder()],
+    ["toleranceBps", getU16Decoder()],
+    ["stakeRequired", getU64Decoder()],
+    ["bondBps", getU16Decoder()],
+    ["verifier", getAddressDecoder()],
     ["termsHash", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
@@ -164,6 +197,8 @@ export function getCreateDealInstructionDataCodec(): FixedSizeCodec<
 export type CreateDealAsyncInput<
   TAccountBuyer extends InstructionSignerInput = InstructionSignerInput,
   TAccountSeller extends InstructionAccountInput = InstructionAccountInput,
+  TAccountApprover extends InstructionSignerInput = InstructionSignerInput,
+  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
@@ -176,7 +211,11 @@ export type CreateDealAsyncInput<
     InstructionAccountInput,
 > = {
   buyer: TAccountBuyer;
+  /** tokens into its own token account. */
   seller: TAccountSeller;
+  /** Required only when the amount is above the policy's approval threshold. */
+  approver?: TAccountApprover;
+  policy?: TAccountPolicy;
   mint: TAccountMint;
   buyerToken: TAccountBuyerToken;
   deal?: TAccountDeal;
@@ -188,12 +227,19 @@ export type CreateDealAsyncInput<
   amount: CreateDealInstructionDataArgs["amount"];
   deadline: CreateDealInstructionDataArgs["deadline"];
   reviewSecs: CreateDealInstructionDataArgs["reviewSecs"];
+  resolveSecs: CreateDealInstructionDataArgs["resolveSecs"];
+  toleranceBps: CreateDealInstructionDataArgs["toleranceBps"];
+  stakeRequired: CreateDealInstructionDataArgs["stakeRequired"];
+  bondBps: CreateDealInstructionDataArgs["bondBps"];
+  verifier: CreateDealInstructionDataArgs["verifier"];
   termsHash: CreateDealInstructionDataArgs["termsHash"];
 };
 
 export async function getCreateDealInstructionAsync<
   TAccountBuyer extends InstructionSignerInput,
   TAccountSeller extends InstructionAccountInput,
+  TAccountApprover extends InstructionSignerInput,
+  TAccountPolicy extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput,
@@ -206,6 +252,8 @@ export async function getCreateDealInstructionAsync<
   input: CreateDealAsyncInput<
     TAccountBuyer,
     TAccountSeller,
+    TAccountApprover,
+    TAccountPolicy,
     TAccountMint,
     TAccountBuyerToken,
     TAccountDeal,
@@ -225,6 +273,14 @@ export async function getCreateDealInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountSeller,
       InstructionAccountInputAddress<TAccountSeller>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountApprover,
+      InstructionAccountInputAddress<TAccountApprover>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPolicy,
+      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -266,6 +322,12 @@ export async function getCreateDealInstructionAsync<
   const originalAccounts = {
     buyer: { value: input.buyer ?? null, isSigner: true, isWritable: true },
     seller: { value: input.seller ?? null, isSigner: false, isWritable: false },
+    approver: {
+      value: input.approver ?? null,
+      isSigner: true,
+      isWritable: false,
+    },
+    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
     buyerToken: {
       value: input.buyerToken ?? null,
@@ -299,6 +361,17 @@ export async function getCreateDealInstructionAsync<
   const args = { ...input };
 
   // Resolve default values.
+  if (!accounts.policy.value) {
+    accounts.policy.value = await findPolicyPda(
+      {
+        buyer: getAddressFromResolvedInstructionAccount(
+          "buyer",
+          accounts.buyer.value,
+        ),
+      },
+      { programAddress },
+    );
+  }
   if (!accounts.deal.value) {
     accounts.deal.value = await findDealPda(
       {
@@ -348,6 +421,8 @@ export async function getCreateDealInstructionAsync<
     accounts: [
       getAccountMeta("buyer", accounts.buyer),
       getAccountMeta("seller", accounts.seller),
+      getAccountMeta("approver", accounts.approver),
+      getAccountMeta("policy", accounts.policy),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("buyerToken", accounts.buyerToken),
       getAccountMeta("deal", accounts.deal),
@@ -369,6 +444,14 @@ export async function getCreateDealInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountSeller,
       InstructionAccountInputAddress<TAccountSeller>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountApprover,
+      InstructionAccountInputAddress<TAccountApprover>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPolicy,
+      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -404,6 +487,8 @@ export async function getCreateDealInstructionAsync<
 export type CreateDealInput<
   TAccountBuyer extends InstructionSignerInput = InstructionSignerInput,
   TAccountSeller extends InstructionAccountInput = InstructionAccountInput,
+  TAccountApprover extends InstructionSignerInput = InstructionSignerInput,
+  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
@@ -416,7 +501,11 @@ export type CreateDealInput<
     InstructionAccountInput,
 > = {
   buyer: TAccountBuyer;
+  /** tokens into its own token account. */
   seller: TAccountSeller;
+  /** Required only when the amount is above the policy's approval threshold. */
+  approver?: TAccountApprover;
+  policy: TAccountPolicy;
   mint: TAccountMint;
   buyerToken: TAccountBuyerToken;
   deal: TAccountDeal;
@@ -428,12 +517,19 @@ export type CreateDealInput<
   amount: CreateDealInstructionDataArgs["amount"];
   deadline: CreateDealInstructionDataArgs["deadline"];
   reviewSecs: CreateDealInstructionDataArgs["reviewSecs"];
+  resolveSecs: CreateDealInstructionDataArgs["resolveSecs"];
+  toleranceBps: CreateDealInstructionDataArgs["toleranceBps"];
+  stakeRequired: CreateDealInstructionDataArgs["stakeRequired"];
+  bondBps: CreateDealInstructionDataArgs["bondBps"];
+  verifier: CreateDealInstructionDataArgs["verifier"];
   termsHash: CreateDealInstructionDataArgs["termsHash"];
 };
 
 export function getCreateDealInstruction<
   TAccountBuyer extends InstructionSignerInput,
   TAccountSeller extends InstructionAccountInput,
+  TAccountApprover extends InstructionSignerInput,
+  TAccountPolicy extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput,
@@ -446,6 +542,8 @@ export function getCreateDealInstruction<
   input: CreateDealInput<
     TAccountBuyer,
     TAccountSeller,
+    TAccountApprover,
+    TAccountPolicy,
     TAccountMint,
     TAccountBuyerToken,
     TAccountDeal,
@@ -464,6 +562,14 @@ export function getCreateDealInstruction<
   ResolvedInstructionAccountMeta<
     TAccountSeller,
     InstructionAccountInputAddress<TAccountSeller>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountApprover,
+    InstructionAccountInputAddress<TAccountApprover>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountPolicy,
+    InstructionAccountInputAddress<TAccountPolicy>
   >,
   ResolvedInstructionAccountMeta<
     TAccountMint,
@@ -504,6 +610,12 @@ export function getCreateDealInstruction<
   const originalAccounts = {
     buyer: { value: input.buyer ?? null, isSigner: true, isWritable: true },
     seller: { value: input.seller ?? null, isSigner: false, isWritable: false },
+    approver: {
+      value: input.approver ?? null,
+      isSigner: true,
+      isWritable: false,
+    },
+    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
     buyerToken: {
       value: input.buyerToken ?? null,
@@ -554,6 +666,8 @@ export function getCreateDealInstruction<
     accounts: [
       getAccountMeta("buyer", accounts.buyer),
       getAccountMeta("seller", accounts.seller),
+      getAccountMeta("approver", accounts.approver),
+      getAccountMeta("policy", accounts.policy),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("buyerToken", accounts.buyerToken),
       getAccountMeta("deal", accounts.deal),
@@ -575,6 +689,14 @@ export function getCreateDealInstruction<
     ResolvedInstructionAccountMeta<
       TAccountSeller,
       InstructionAccountInputAddress<TAccountSeller>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountApprover,
+      InstructionAccountInputAddress<TAccountApprover>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPolicy,
+      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -614,14 +736,18 @@ export type ParsedCreateDealInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     buyer: TAccountMetas[0];
+    /** tokens into its own token account. */
     seller: TAccountMetas[1];
-    mint: TAccountMetas[2];
-    buyerToken: TAccountMetas[3];
-    deal: TAccountMetas[4];
-    vault: TAccountMetas[5];
-    tokenProgram: TAccountMetas[6];
-    associatedTokenProgram: TAccountMetas[7];
-    systemProgram: TAccountMetas[8];
+    /** Required only when the amount is above the policy's approval threshold. */
+    approver?: TAccountMetas[2] | undefined;
+    policy: TAccountMetas[3];
+    mint: TAccountMetas[4];
+    buyerToken: TAccountMetas[5];
+    deal: TAccountMetas[6];
+    vault: TAccountMetas[7];
+    tokenProgram: TAccountMetas[8];
+    associatedTokenProgram: TAccountMetas[9];
+    systemProgram: TAccountMetas[10];
   };
   data: CreateDealInstructionData;
 };
@@ -634,12 +760,12 @@ export function parseCreateDealInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedCreateDealInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 9) {
+  if (instruction.accounts.length < 11) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 9,
+        expectedAccountMetas: 11,
       },
     );
   }
@@ -649,11 +775,19 @@ export function parseCreateDealInstruction<
     accountIndex += 1;
     return accountMeta;
   };
+  const getNextOptionalAccount = () => {
+    const accountMeta = getNextAccount();
+    return accountMeta.address === DEAL_ESCROW_PROGRAM_ADDRESS
+      ? undefined
+      : accountMeta;
+  };
   return {
     programAddress: instruction.programAddress,
     accounts: {
       buyer: getNextAccount(),
       seller: getNextAccount(),
+      approver: getNextOptionalAccount(),
+      policy: getNextAccount(),
       mint: getNextAccount(),
       buyerToken: getNextAccount(),
       deal: getNextAccount(),

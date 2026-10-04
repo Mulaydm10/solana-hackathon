@@ -1,194 +1,238 @@
-// Runs the compiled deal_escrow program in LiteSVM (in-process; no validator, no network, no Rust).
+// deal_escrow v2, every path, against the compiled program in LiteSVM. Each refusal asserts the
+// exact program error, and each settlement asserts who ended up with which tokens.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createClient, generateKeyPairSigner, lamports, type Address, type TransactionSigner } from "@solana/kit";
-import { litesvm } from "@solana/kit-plugin-litesvm";
-import { airdropSigner, generatedSigner } from "@solana/kit-plugin-signer";
-import {
-  fetchToken,
-  findAssociatedTokenPda,
-  getCreateAssociatedTokenIdempotentInstructionAsync,
-  getCreateMintInstructionPlan,
-  getMintToATAInstructionPlanAsync,
-  TOKEN_PROGRAM_ADDRESS,
-} from "@solana-program/token";
-import {
-  DEAL_ESCROW_PROGRAM_ADDRESS,
-  DealStatus,
-  PROGRAM_SO,
-  dealAddress,
-  fetchDeal,
-  getClaimInstructionAsync,
-  getCreateDealInstructionAsync,
-  getRefundInstructionAsync,
-  getReleaseInstructionAsync,
-  getSubmitDeliveryInstruction,
-} from "../src/index.ts";
+import { DealStatus, getClaimInstructionAsync } from "../src/index.ts";
+import { DEFAULT_POLICY, HOUR, NONE, USDC, hash, rejects, setup } from "./harness.ts";
 
-const USDC = 1_000_000n; // 6 decimals
-const PRICE = 2n * USDC;
-const HOUR = 3600n;
-
-async function setup() {
-  const client = await createClient()
-    .use(generatedSigner())
-    .use(litesvm())
-    .use(airdropSigner(lamports(10_000_000_000n)));
-  client.svm.addProgramFromFile(DEAL_ESCROW_PROGRAM_ADDRESS, PROGRAM_SO);
-
-  const buyer = client.payer;
-  const seller = await generateKeyPairSigner();
-  const stranger = await generateKeyPairSigner();
-  const mint = await generateKeyPairSigner();
-  client.svm.airdrop(seller.address, lamports(1_000_000_000n));
-  client.svm.airdrop(stranger.address, lamports(1_000_000_000n));
-
-  await client.sendTransaction(
-    await getCreateMintInstructionPlan(client, { payer: buyer, newMint: mint, decimals: 6, mintAuthority: buyer.address }),
-  );
-  await client.sendTransaction(
-    await getMintToATAInstructionPlanAsync({
-      payer: buyer, owner: buyer.address, mint: mint.address, mintAuthority: buyer, amount: 100n * USDC, decimals: 6,
-    }),
-  );
-  await client.sendTransaction([
-    await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: buyer, owner: seller.address, mint: mint.address }),
-  ]);
-  const ata = async (owner: Address) =>
-    (await findAssociatedTokenPda({ owner, mint: mint.address, tokenProgram: TOKEN_PROGRAM_ADDRESS }))[0];
-  const balance = async (owner: Address) => (await fetchToken(client.rpc, await ata(owner))).data.amount;
-  const now = () => client.svm.getClock().unixTimestamp;
-  const warp = (secs: bigint) => {
-    const clock = client.svm.getClock();
-    clock.unixTimestamp = clock.unixTimestamp + secs;
-    client.svm.setClock(clock);
-    client.svm.expireBlockhash();
-  };
-
-  let nextId = 1n;
-  async function lock(opts: { amount?: bigint; deadline?: bigint; reviewSecs?: bigint } = {}) {
-    const dealId = nextId++;
-    await client.sendTransaction([
-      await getCreateDealInstructionAsync({
-        buyer, seller: seller.address, mint: mint.address, buyerToken: await ata(buyer.address),
-        dealId, amount: opts.amount ?? PRICE, deadline: opts.deadline ?? now() + HOUR,
-        reviewSecs: opts.reviewSecs ?? 600n, termsHash: new Uint8Array(32).fill(7),
-      }),
-    ]);
-    return dealAddress(buyer.address, dealId);
-  }
-  const deliver = async (deal: Address, by: TransactionSigner = seller) =>
-    client.sendTransaction([getSubmitDeliveryInstruction({ seller: by, deal, deliveryHash: new Uint8Array(32).fill(9) })]);
-  const release = async (deal: Address, by: TransactionSigner = buyer) =>
-    client.sendTransaction([
-      await getReleaseInstructionAsync({ buyer: by, deal, mint: mint.address, sellerToken: await ata(seller.address) }),
-    ]);
-  const refund = async (deal: Address) =>
-    client.sendTransaction([
-      await getRefundInstructionAsync({ deal, mint: mint.address, buyerToken: await ata(buyer.address) }),
-    ]);
-  const claim = async (deal: Address, by: TransactionSigner = seller) =>
-    client.sendTransaction([
-      await getClaimInstructionAsync({ seller: by, deal, mint: mint.address, sellerToken: await ata(seller.address) }),
-    ]);
-  const status = async (deal: Address) => (await fetchDeal(client.rpc, deal)).data.status;
-
-  return { client, buyer, seller, stranger, balance, now, warp, lock, deliver, release, refund, claim, status };
-}
-
-/** Custom program error code carried anywhere in a Kit error's cause chain. */
-function programErrorCode(e: unknown): number | undefined {
-  for (let cur = e as { context?: { code?: unknown }; cause?: unknown } | undefined; cur; cur = cur.cause as typeof cur) {
-    if (typeof cur.context?.code === "number") return cur.context.code;
-  }
-  return undefined;
-}
-const ERROR_CODES = {
-  ZeroAmount: 6000, DeadlineInPast: 6001, BadReviewWindow: 6002, SelfDeal: 6003, WrongStatus: 6004,
-  DeadlinePassed: 6005, DeadlineNotReached: 6006, ReviewWindowOpen: 6007, Unauthorized: 6008,
-} as const;
-
-/** Assert the transaction fails; with `name`, that it fails with exactly that program error. */
-async function rejects(p: Promise<unknown>, name?: keyof typeof ERROR_CODES) {
-  await assert.rejects(p, (e: unknown) => {
-    if (name) assert.equal(programErrorCode(e), ERROR_CODES[name], `expected ${name}`);
-    return true;
-  });
-}
-
-test("lock moves the price into escrow and records the deal", async () => {
+test("happy path: open, accept with stake, deliver, release pays the invoice and returns the stake", async () => {
   const t = await setup();
-  const deal = await t.lock();
-  assert.equal(await t.balance(t.buyer.address), 98n * USDC);
-  const d = (await fetchDeal(t.client.rpc, deal)).data;
-  assert.equal(d.status, DealStatus.Funded);
-  assert.equal(d.amount, PRICE);
-  assert.equal(d.seller, t.seller.address);
-  assert.deepEqual([...d.termsHash], new Array(32).fill(7));
-});
-
-test("deliver then release pays the seller", async () => {
-  const t = await setup();
-  const deal = await t.lock();
+  const [b0, s0] = [await t.balance(t.buyer.address), await t.balance(t.seller.address)];
+  const deal = await t.open();
+  assert.equal((await t.deal(deal)).status, DealStatus.Open);
+  await t.accept(deal);
+  assert.equal(await t.vaultBalance(deal), 6n * USDC); // order 5 + stake 1
   await t.deliver(deal);
-  assert.equal(await t.status(deal), DealStatus.Delivered);
   await t.release(deal);
-  assert.equal(await t.status(deal), DealStatus.Released);
-  assert.equal(await t.balance(t.seller.address), PRICE);
-  t.client.svm.expireBlockhash();
+  assert.equal((await t.deal(deal)).status, DealStatus.Released);
+  assert.equal(await t.balance(t.buyer.address), b0 - 5n * USDC);
+  assert.equal(await t.balance(t.seller.address), s0 + 5n * USDC);
+  assert.equal(await t.vaultBalance(deal), 0n);
   await rejects(t.release(deal), "WrongStatus");
 });
 
-test("refund is refused before the deadline and works after it", async () => {
+test("invoice match: under-invoice within tolerance pays the invoice and refunds the rest", async () => {
   const t = await setup();
-  const deal = await t.lock();
+  const b0 = await t.balance(t.buyer.address);
+  const deal = await t.open({ amount: 10n * USDC, toleranceBps: 500 });
+  await t.accept(deal);
+  await t.deliver(deal, 9_600_000n); // 4% under
+  await t.release(deal);
+  assert.equal(await t.balance(t.buyer.address), b0 - 9_600_000n);
+});
+
+test("invoice match: over-invoice within tolerance is capped at the order amount", async () => {
+  const t = await setup();
+  const s0 = await t.balance(t.seller.address);
+  const deal = await t.open({ amount: 10n * USDC, toleranceBps: 500 });
+  await t.accept(deal);
+  await t.deliver(deal, 10_400_000n);
+  await t.release(deal);
+  assert.equal(await t.balance(t.seller.address), s0 + 10n * USDC);
+});
+
+test("invoice outside tolerance, zero invoice and empty delivery are refused", async () => {
+  const t = await setup();
+  const deal = await t.open({ amount: 10n * USDC, toleranceBps: 500 });
+  await t.accept(deal);
+  await rejects(t.deliver(deal, 9_000_000n), "InvoiceMismatch");
+  await rejects(t.deliver(deal, 0n), "InvoiceMismatch");
+  await rejects(t.deliver(deal, 10n * USDC, t.seller, hash(0)), "EmptyDelivery");
+});
+
+test("release must name the delivered hash", async () => {
+  const t = await setup();
+  const deal = await t.open();
+  await t.accept(deal);
+  await t.deliver(deal);
+  await rejects(t.release(deal, t.buyer, hash(8)), "DeliveryMismatch");
+});
+
+test("policy: allowlist, max price, period budget (fail closed)", async () => {
+  const t = await setup();
+  await rejects(t.open({ seller: t.stranger.address }), "SellerNotAllowed");
+  await rejects(t.open({ amount: 21n * USDC, approver: t.approver }), "OverMaxPrice");
+  for (let i = 0; i < 5; i++) await t.open({ amount: 10n * USDC }); // 50 of 50
+  await rejects(t.open({ amount: 1n * USDC }), "OverPeriodBudget");
+  t.warp(86_400n);
+  await t.open({ amount: 1n * USDC }); // new period
+});
+
+test("policy: above the approval threshold needs the approver's signature", async () => {
+  const t = await setup();
+  await rejects(t.open({ amount: 15n * USDC }), "ApprovalRequired");
+  await rejects(t.open({ amount: 15n * USDC, approver: t.stranger }), "ApprovalRequired");
+  await t.open({ amount: 15n * USDC, approver: t.approver });
+});
+
+test("policy: no approver configured means large amounts are refused", async () => {
+  const t = await setup({ policy: (s) => DEFAULT_POLICY(s, NONE) });
+  await rejects(t.open({ amount: 15n * USDC, approver: t.approver }), "ApprovalRequired");
+});
+
+test("policy: only the buyer can change it", async () => {
+  const t = await setup();
+  await rejects(t.updatePolicy({ ...DEFAULT_POLICY(t.stranger.address, t.stranger.address), allowAnySeller: true }, t.stranger));
+});
+
+test("cancel before accept refunds fully and credits the budget; not after accept", async () => {
+  const t = await setup();
+  const b0 = await t.balance(t.buyer.address);
+  const deal = await t.open({ amount: 10n * USDC });
+  await rejects(t.cancel(deal, t.stranger), "Unauthorized");
+  await t.cancel(deal);
+  assert.equal((await t.deal(deal)).status, DealStatus.Cancelled);
+  assert.equal(await t.balance(t.buyer.address), b0);
+  for (let i = 0; i < 5; i++) await t.open({ amount: 10n * USDC }); // the full 50 is available again
+  await rejects(t.open({ amount: 1n * USDC }), "OverPeriodBudget");
+  const accepted = await t.open({ amount: 0n }).catch(() => null);
+  assert.equal(accepted, null);
+  const t2 = await setup();
+  const d2 = await t2.open();
+  await t2.accept(d2);
+  await rejects(t2.cancel(d2), "WrongStatus");
+});
+
+test("only the named seller can accept or deliver", async () => {
+  const t = await setup();
+  const deal = await t.open();
+  await rejects(t.accept(deal, t.stranger), "Unauthorized");
+  await t.accept(deal);
+  await rejects(t.deliver(deal, 5n * USDC, t.stranger), "Unauthorized");
+});
+
+test("missed deadline after accept: anyone refunds, the stake is slashed to the buyer", async () => {
+  const t = await setup();
+  const [b0, s0] = [await t.balance(t.buyer.address), await t.balance(t.seller.address)];
+  const deal = await t.open();
+  await t.accept(deal);
   await rejects(t.refund(deal), "DeadlineNotReached");
   t.warp(HOUR + 1n);
-  await t.refund(deal);
-  assert.equal(await t.status(deal), DealStatus.Refunded);
-  assert.equal(await t.balance(t.buyer.address), 100n * USDC);
-  assert.equal(await t.balance(t.seller.address), 0n);
-});
-
-test("late delivery is refused", async () => {
-  const t = await setup();
-  const deal = await t.lock();
-  t.warp(HOUR + 1n);
   await rejects(t.deliver(deal), "DeadlinePassed");
+  await t.refund(deal);
+  assert.equal(await t.balance(t.buyer.address), b0 + 1n * USDC);
+  assert.equal(await t.balance(t.seller.address), s0 - 1n * USDC);
 });
 
-test("delivered deal cannot be refunded", async () => {
+test("never accepted: refund after the deadline returns the order only", async () => {
   const t = await setup();
-  const deal = await t.lock();
-  await t.deliver(deal);
+  const b0 = await t.balance(t.buyer.address);
+  const deal = await t.open();
   t.warp(HOUR + 1n);
-  await rejects(t.refund(deal), "WrongStatus");
+  await rejects(t.accept(deal), "DeadlinePassed");
+  await t.refund(deal);
+  assert.equal(await t.balance(t.buyer.address), b0);
 });
 
-test("seller claims only after the buyer's review window", async () => {
+test("buyer silence: anyone triggers the claim after the review window, funds go to the seller", async () => {
   const t = await setup();
-  const deal = await t.lock({ reviewSecs: 600n });
+  const s0 = await t.balance(t.seller.address);
+  const deal = await t.open({ reviewSecs: 600n });
+  await t.accept(deal);
   await t.deliver(deal);
   await rejects(t.claim(deal), "ReviewWindowOpen");
-  t.warp(601n);
-  await t.claim(deal);
-  assert.equal(await t.status(deal), DealStatus.Claimed);
-  assert.equal(await t.balance(t.seller.address), PRICE);
+  t.warp(600n);
+  await t.claim(deal, t.stranger);
+  assert.equal(await t.balance(t.seller.address), s0 + 5n * USDC);
 });
 
-test("only the parties can act", async () => {
+test("challenge needs a verifier and must be inside the review window", async () => {
   const t = await setup();
-  const deal = await t.lock();
-  await rejects(t.deliver(deal, t.stranger), "Unauthorized");
+  const noVerifier = await t.open({ verifier: NONE });
+  await t.accept(noVerifier);
+  await t.deliver(noVerifier);
+  await rejects(t.challenge(noVerifier), "NoVerifier");
+  const late = await t.open();
+  await t.accept(late);
+  await t.deliver(late);
+  t.warp(600n);
+  await rejects(t.challenge(late), "ReviewWindowClosed");
+});
+
+test("verifier must be independent of buyer and seller", async () => {
+  const t = await setup();
+  await rejects(t.open({ verifier: t.seller.address }), "VerifierNotIndependent");
+  await rejects(t.open({ verifier: t.buyer.address }), "VerifierNotIndependent");
+});
+
+test("challenge upheld: buyer gets order + bond back and the seller's stake", async () => {
+  const t = await setup();
+  const [b0, s0] = [await t.balance(t.buyer.address), await t.balance(t.seller.address)];
+  const deal = await t.open({ bondBps: 1000 });
+  await t.accept(deal);
   await t.deliver(deal);
-  await rejects(t.release(deal, t.stranger), "Unauthorized");
-  t.warp(601n);
-  await rejects(t.claim(deal, t.stranger), "Unauthorized");
+  await t.challenge(deal);
+  assert.equal(await t.vaultBalance(deal), 6_500_000n); // 5 + stake 1 + bond 0.5
+  await rejects(t.resolve(deal, false, t.stranger), "NotVerifier");
+  await rejects(t.resolve(deal, false, t.seller), "NotVerifier");
+  await t.resolve(deal, false);
+  assert.equal((await t.deal(deal)).status, DealStatus.VerifiedFail);
+  assert.equal(await t.balance(t.buyer.address), b0 + 1n * USDC);
+  assert.equal(await t.balance(t.seller.address), s0 - 1n * USDC);
 });
 
-test("bad terms are refused at lock", async () => {
+test("challenge rejected: seller gets the invoice, the stake and the buyer's bond", async () => {
   const t = await setup();
-  await rejects(t.lock({ amount: 0n }), "ZeroAmount");
-  await rejects(t.lock({ deadline: t.now() }), "DeadlineInPast");
-  await rejects(t.lock({ reviewSecs: -1n }), "BadReviewWindow");
+  const [b0, s0] = [await t.balance(t.buyer.address), await t.balance(t.seller.address)];
+  const deal = await t.open({ bondBps: 1000 });
+  await t.accept(deal);
+  await t.deliver(deal);
+  await t.challenge(deal);
+  await t.resolve(deal, true);
+  assert.equal((await t.deal(deal)).status, DealStatus.VerifiedPass);
+  assert.equal(await t.balance(t.buyer.address), b0 - 5_500_000n);
+  assert.equal(await t.balance(t.seller.address), s0 + 5_500_000n);
+});
+
+test("no verdict in time: anyone refunds order + bond, the seller keeps the stake; late verdict refused", async () => {
+  const t = await setup();
+  const [b0, s0] = [await t.balance(t.buyer.address), await t.balance(t.seller.address)];
+  const deal = await t.open({ resolveSecs: 600n });
+  await t.accept(deal);
+  await t.deliver(deal);
+  await t.challenge(deal);
+  await rejects(t.timeoutRefund(deal), "ResolveWindowOpen");
+  t.warp(601n);
+  await rejects(t.resolve(deal, true), "ResolveWindowClosed");
+  await t.timeoutRefund(deal);
+  assert.equal((await t.deal(deal)).status, DealStatus.NoVerdict);
+  assert.equal(await t.balance(t.buyer.address), b0);
+  assert.equal(await t.balance(t.seller.address), s0);
+});
+
+test("a caller cannot redirect a payout to their own token account", async () => {
+  const t = await setup();
+  const deal = await t.open();
+  await t.accept(deal);
+  await t.deliver(deal);
+  t.warp(600n);
+  await rejects(
+    t.send([
+      await getClaimInstructionAsync({
+        actor: t.stranger, deal, policy: t.policy, mint: t.mint.address,
+        buyerToken: await t.ata(t.buyer.address), sellerToken: await t.ata(t.stranger.address),
+      }),
+    ]),
+  );
+  assert.equal((await t.deal(deal)).status, DealStatus.Delivered);
+});
+
+test("bad terms are refused at open", async () => {
+  const t = await setup();
+  await rejects(t.open({ amount: 0n }), "ZeroAmount");
+  await rejects(t.open({ deadline: t.now() }), "DeadlineInPast");
+  await rejects(t.open({ deadline: t.now() + 31n * 86_400n }), "DeadlineTooFar");
+  await rejects(t.open({ toleranceBps: 2_001 }), "BadTolerance");
+  await rejects(t.open({ bondBps: 5_001 }), "BadBond");
+  await rejects(t.open({ resolveSecs: 10n }), "BadResolveWindow");
 });

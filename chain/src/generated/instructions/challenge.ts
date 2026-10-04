@@ -44,23 +44,21 @@ import {
 } from "@solana/program-client-core";
 import { DEAL_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
-export const RELEASE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
-  253, 249, 15, 206, 28, 127, 193, 241,
+export const CHALLENGE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
+  16, 107, 14, 39, 244, 150, 81, 187,
 ]);
 
-export function getReleaseDiscriminatorBytes(): ReadonlyUint8Array {
-  return fixEncoderSize(getBytesEncoder(), 8).encode(RELEASE_DISCRIMINATOR);
+export function getChallengeDiscriminatorBytes(): ReadonlyUint8Array {
+  return fixEncoderSize(getBytesEncoder(), 8).encode(CHALLENGE_DISCRIMINATOR);
 }
 
-export type ReleaseInstruction<
+export type ChallengeInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
-  TAccountActor extends string | AccountMeta<string> = string,
+  TAccountBuyer extends string | AccountMeta<string> = string,
   TAccountDeal extends string | AccountMeta<string> = string,
-  TAccountPolicy extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountBuyerToken extends string | AccountMeta<string> = string,
-  TAccountSellerToken extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -68,16 +66,13 @@ export type ReleaseInstruction<
   InstructionWithData<ReadonlyUint8Array> &
   InstructionWithAccounts<
     [
-      TAccountActor extends string
-        ? ReadonlySignerAccount<TAccountActor> &
-            AccountSignerMeta<TAccountActor>
-        : TAccountActor,
+      TAccountBuyer extends string
+        ? ReadonlySignerAccount<TAccountBuyer> &
+            AccountSignerMeta<TAccountBuyer>
+        : TAccountBuyer,
       TAccountDeal extends string
         ? WritableAccount<TAccountDeal>
         : TAccountDeal,
-      TAccountPolicy extends string
-        ? WritableAccount<TAccountPolicy>
-        : TAccountPolicy,
       TAccountMint extends string
         ? ReadonlyAccount<TAccountMint>
         : TAccountMint,
@@ -87,9 +82,6 @@ export type ReleaseInstruction<
       TAccountBuyerToken extends string
         ? WritableAccount<TAccountBuyerToken>
         : TAccountBuyerToken,
-      TAccountSellerToken extends string
-        ? WritableAccount<TAccountSellerToken>
-        : TAccountSellerToken,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -97,100 +89,78 @@ export type ReleaseInstruction<
     ]
   >;
 
-export type ReleaseInstructionData = {
-  discriminator: ReadonlyUint8Array;
-  expectedDeliveryHash: ReadonlyUint8Array;
-};
+export type ChallengeInstructionData = { discriminator: ReadonlyUint8Array };
 
-export type ReleaseInstructionDataArgs = {
-  expectedDeliveryHash: ReadonlyUint8Array;
-};
+export type ChallengeInstructionDataArgs = {};
 
-export function getReleaseInstructionDataEncoder(): FixedSizeEncoder<ReleaseInstructionDataArgs> {
+export function getChallengeInstructionDataEncoder(): FixedSizeEncoder<ChallengeInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([
-      ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["expectedDeliveryHash", fixEncoderSize(getBytesEncoder(), 32)],
-    ]),
-    (value) => ({ ...value, discriminator: RELEASE_DISCRIMINATOR }),
+    getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
+    (value) => ({ ...value, discriminator: CHALLENGE_DISCRIMINATOR }),
   );
 }
 
-export function getReleaseInstructionDataDecoder(): FixedSizeDecoder<ReleaseInstructionData> {
+export function getChallengeInstructionDataDecoder(): FixedSizeDecoder<ChallengeInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["expectedDeliveryHash", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 
-export function getReleaseInstructionDataCodec(): FixedSizeCodec<
-  ReleaseInstructionDataArgs,
-  ReleaseInstructionData
+export function getChallengeInstructionDataCodec(): FixedSizeCodec<
+  ChallengeInstructionDataArgs,
+  ChallengeInstructionData
 > {
   return combineCodec(
-    getReleaseInstructionDataEncoder(),
-    getReleaseInstructionDataDecoder(),
+    getChallengeInstructionDataEncoder(),
+    getChallengeInstructionDataDecoder(),
   );
 }
 
-export type ReleaseAsyncInput<
-  TAccountActor extends InstructionSignerInput = InstructionSignerInput,
+export type ChallengeAsyncInput<
+  TAccountBuyer extends InstructionSignerInput = InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
-  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
-  TAccountSellerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
 > = {
-  actor: TAccountActor;
+  buyer: TAccountBuyer;
   deal: TAccountDeal;
-  policy: TAccountPolicy;
   mint: TAccountMint;
   vault?: TAccountVault;
   buyerToken: TAccountBuyerToken;
-  sellerToken: TAccountSellerToken;
   tokenProgram?: TAccountTokenProgram;
-  expectedDeliveryHash: ReleaseInstructionDataArgs["expectedDeliveryHash"];
 };
 
-export async function getReleaseInstructionAsync<
-  TAccountActor extends InstructionSignerInput,
+export async function getChallengeInstructionAsync<
+  TAccountBuyer extends InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput,
-  TAccountPolicy extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput,
-  TAccountSellerToken extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: ReleaseAsyncInput<
-    TAccountActor,
+  input: ChallengeAsyncInput<
+    TAccountBuyer,
     TAccountDeal,
-    TAccountPolicy,
     TAccountMint,
     TAccountVault,
     TAccountBuyerToken,
-    TAccountSellerToken,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
-  ReleaseInstruction<
+  ChallengeInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountActor,
-      InstructionAccountInputAddress<TAccountActor>
+      TAccountBuyer,
+      InstructionAccountInputAddress<TAccountBuyer>
     >,
     ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountPolicy,
-      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -203,10 +173,6 @@ export async function getReleaseInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountBuyerToken,
       InstructionAccountInputAddress<TAccountBuyerToken>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountSellerToken,
-      InstructionAccountInputAddress<TAccountSellerToken>
     >,
     ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
@@ -222,18 +188,12 @@ export async function getReleaseInstructionAsync<
 
   // Original accounts.
   const originalAccounts = {
-    actor: { value: input.actor ?? null, isSigner: true, isWritable: false },
+    buyer: { value: input.buyer ?? null, isSigner: true, isWritable: false },
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
-    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
     buyerToken: {
       value: input.buyerToken ?? null,
-      isSigner: false,
-      isWritable: true,
-    },
-    sellerToken: {
-      value: input.sellerToken ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -247,9 +207,6 @@ export async function getReleaseInstructionAsync<
     keyof typeof originalAccounts,
     ResolvedInstructionAccount
   >;
-
-  // Original args.
-  const args = { ...input };
 
   // Resolve default values.
   if (!accounts.tokenProgram.value) {
@@ -279,32 +236,24 @@ export async function getReleaseInstructionAsync<
 
   return Object.freeze({
     accounts: [
-      getAccountMeta("actor", accounts.actor),
+      getAccountMeta("buyer", accounts.buyer),
       getAccountMeta("deal", accounts.deal),
-      getAccountMeta("policy", accounts.policy),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("buyerToken", accounts.buyerToken),
-      getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
-    data: getReleaseInstructionDataEncoder().encode(
-      args as ReleaseInstructionDataArgs,
-    ),
+    data: getChallengeInstructionDataEncoder().encode({}),
     programAddress,
-  } as ReleaseInstruction<
+  } as ChallengeInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountActor,
-      InstructionAccountInputAddress<TAccountActor>
+      TAccountBuyer,
+      InstructionAccountInputAddress<TAccountBuyer>
     >,
     ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountPolicy,
-      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -319,73 +268,56 @@ export async function getReleaseInstructionAsync<
       InstructionAccountInputAddress<TAccountBuyerToken>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountSellerToken,
-      InstructionAccountInputAddress<TAccountSellerToken>
-    >,
-    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >
   >);
 }
 
-export type ReleaseInput<
-  TAccountActor extends InstructionSignerInput = InstructionSignerInput,
+export type ChallengeInput<
+  TAccountBuyer extends InstructionSignerInput = InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
-  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
-  TAccountSellerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
 > = {
-  actor: TAccountActor;
+  buyer: TAccountBuyer;
   deal: TAccountDeal;
-  policy: TAccountPolicy;
   mint: TAccountMint;
   vault: TAccountVault;
   buyerToken: TAccountBuyerToken;
-  sellerToken: TAccountSellerToken;
   tokenProgram?: TAccountTokenProgram;
-  expectedDeliveryHash: ReleaseInstructionDataArgs["expectedDeliveryHash"];
 };
 
-export function getReleaseInstruction<
-  TAccountActor extends InstructionSignerInput,
+export function getChallengeInstruction<
+  TAccountBuyer extends InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput,
-  TAccountPolicy extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
   TAccountBuyerToken extends InstructionAccountInput,
-  TAccountSellerToken extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: ReleaseInput<
-    TAccountActor,
+  input: ChallengeInput<
+    TAccountBuyer,
     TAccountDeal,
-    TAccountPolicy,
     TAccountMint,
     TAccountVault,
     TAccountBuyerToken,
-    TAccountSellerToken,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
-): ReleaseInstruction<
+): ChallengeInstruction<
   TProgramAddress,
   ResolvedInstructionAccountMeta<
-    TAccountActor,
-    InstructionAccountInputAddress<TAccountActor>
+    TAccountBuyer,
+    InstructionAccountInputAddress<TAccountBuyer>
   >,
   ResolvedInstructionAccountMeta<
     TAccountDeal,
     InstructionAccountInputAddress<TAccountDeal>
-  >,
-  ResolvedInstructionAccountMeta<
-    TAccountPolicy,
-    InstructionAccountInputAddress<TAccountPolicy>
   >,
   ResolvedInstructionAccountMeta<
     TAccountMint,
@@ -400,10 +332,6 @@ export function getReleaseInstruction<
     InstructionAccountInputAddress<TAccountBuyerToken>
   >,
   ResolvedInstructionAccountMeta<
-    TAccountSellerToken,
-    InstructionAccountInputAddress<TAccountSellerToken>
-  >,
-  ResolvedInstructionAccountMeta<
     TAccountTokenProgram,
     InstructionAccountInputAddress<TAccountTokenProgram>
   >
@@ -416,18 +344,12 @@ export function getReleaseInstruction<
 
   // Original accounts.
   const originalAccounts = {
-    actor: { value: input.actor ?? null, isSigner: true, isWritable: false },
+    buyer: { value: input.buyer ?? null, isSigner: true, isWritable: false },
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
-    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
     buyerToken: {
       value: input.buyerToken ?? null,
-      isSigner: false,
-      isWritable: true,
-    },
-    sellerToken: {
-      value: input.sellerToken ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -442,9 +364,6 @@ export function getReleaseInstruction<
     ResolvedInstructionAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
@@ -453,32 +372,24 @@ export function getReleaseInstruction<
 
   return Object.freeze({
     accounts: [
-      getAccountMeta("actor", accounts.actor),
+      getAccountMeta("buyer", accounts.buyer),
       getAccountMeta("deal", accounts.deal),
-      getAccountMeta("policy", accounts.policy),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("buyerToken", accounts.buyerToken),
-      getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
-    data: getReleaseInstructionDataEncoder().encode(
-      args as ReleaseInstructionDataArgs,
-    ),
+    data: getChallengeInstructionDataEncoder().encode({}),
     programAddress,
-  } as ReleaseInstruction<
+  } as ChallengeInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountActor,
-      InstructionAccountInputAddress<TAccountActor>
+      TAccountBuyer,
+      InstructionAccountInputAddress<TAccountBuyer>
     >,
     ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountPolicy,
-      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -493,48 +404,42 @@ export function getReleaseInstruction<
       InstructionAccountInputAddress<TAccountBuyerToken>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountSellerToken,
-      InstructionAccountInputAddress<TAccountSellerToken>
-    >,
-    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >
   >);
 }
 
-export type ParsedReleaseInstruction<
+export type ParsedChallengeInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    actor: TAccountMetas[0];
+    buyer: TAccountMetas[0];
     deal: TAccountMetas[1];
-    policy: TAccountMetas[2];
-    mint: TAccountMetas[3];
-    vault: TAccountMetas[4];
-    buyerToken: TAccountMetas[5];
-    sellerToken: TAccountMetas[6];
-    tokenProgram: TAccountMetas[7];
+    mint: TAccountMetas[2];
+    vault: TAccountMetas[3];
+    buyerToken: TAccountMetas[4];
+    tokenProgram: TAccountMetas[5];
   };
-  data: ReleaseInstructionData;
+  data: ChallengeInstructionData;
 };
 
-export function parseReleaseInstruction<
+export function parseChallengeInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedReleaseInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 8) {
+): ParsedChallengeInstruction<TProgram, TAccountMetas> {
+  if (instruction.accounts.length < 6) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 8,
+        expectedAccountMetas: 6,
       },
     );
   }
@@ -547,15 +452,13 @@ export function parseReleaseInstruction<
   return {
     programAddress: instruction.programAddress,
     accounts: {
-      actor: getNextAccount(),
+      buyer: getNextAccount(),
       deal: getNextAccount(),
-      policy: getNextAccount(),
       mint: getNextAccount(),
       vault: getNextAccount(),
       buyerToken: getNextAccount(),
-      sellerToken: getNextAccount(),
       tokenProgram: getNextAccount(),
     },
-    data: getReleaseInstructionDataDecoder().decode(instruction.data),
+    data: getChallengeInstructionDataDecoder().decode(instruction.data),
   };
 }
