@@ -14,7 +14,8 @@
 //!   caller passes in (Xenia's resolveDispute let anyone slash).
 //!
 //! - Seller reputation (Assay): SellerRep and RepPair accounts, written only by `settle`, so a
-//!   reputation change always comes with a real payout. Scoring (min deals, min distinct buyers,
+//!   reputation change always comes with a real payout. Keyed by mint, so deals settled in a
+//!   token the seller minted themselves never mix with (or inflate) the USDC record. Scoring (min deals, min distinct buyers,
 //!   concentration) is a pure function in core; the program only keeps honest counts.
 //!
 //! Tokens leave the vault only in `settle`, after every check, and only to the deal's own buyer and
@@ -115,7 +116,7 @@ pub mod deal_escrow {
             require_keys_eq!(approver.key(), policy.approver, DealError::ApprovalRequired);
         }
         policy.period_spent = spent;
-        init_rep(&mut ctx.accounts.seller_rep, &mut ctx.accounts.rep_pair, seller, buyer, ctx.bumps.seller_rep, ctx.bumps.rep_pair);
+        init_rep(&mut ctx.accounts.seller_rep, &mut ctx.accounts.rep_pair, seller, buyer, ctx.accounts.mint.key(), ctx.bumps.seller_rep, ctx.bumps.rep_pair);
 
         ctx.accounts.deal.set_inner(Deal {
             buyer,
@@ -394,7 +395,7 @@ fn settle(a: &mut Settle, bumps: &SettleBumps, to_seller: u64, to_buyer: u64, st
         a.policy.period_spent = a.policy.period_spent.saturating_sub(a.deal.amount);
     }
     // Deals opened under v2 have no reputation accounts yet; `init_if_needed` made them above.
-    init_rep(&mut a.seller_rep, &mut a.rep_pair, a.deal.seller, a.deal.buyer, bumps.seller_rep, bumps.rep_pair);
+    init_rep(&mut a.seller_rep, &mut a.rep_pair, a.deal.seller, a.deal.buyer, a.deal.mint, bumps.seller_rep, bumps.rep_pair);
     record_outcome(&mut a.seller_rep, &mut a.rep_pair, &a.deal, status)?;
     a.deal.status = status;
     emit!(DealEvent { deal: a.deal.key(), status });
@@ -402,14 +403,16 @@ fn settle(a: &mut Settle, bumps: &SettleBumps, to_seller: u64, to_buyer: u64, st
 }
 
 /// Fills in a reputation account pair the first time it is seen (all-zero = just created).
-fn init_rep(rep: &mut SellerRep, pair: &mut RepPair, seller: Pubkey, buyer: Pubkey, rep_bump: u8, pair_bump: u8) {
+fn init_rep(rep: &mut SellerRep, pair: &mut RepPair, seller: Pubkey, buyer: Pubkey, mint: Pubkey, rep_bump: u8, pair_bump: u8) {
     if rep.seller == Pubkey::default() {
         rep.seller = seller;
+        rep.mint = mint;
         rep.bump = rep_bump;
     }
     if pair.seller == Pubkey::default() {
         pair.seller = seller;
         pair.buyer = buyer;
+        pair.mint = mint;
         pair.bump = pair_bump;
     }
 }
@@ -530,11 +533,13 @@ pub struct Deal {
     pub bump: u8,
 }
 
-/// A seller's track record, written only by `settle`.
+/// A seller's track record in one token, written only by `settle`.
 #[account]
 #[derive(InitSpace)]
 pub struct SellerRep {
     pub seller: Pubkey,
+    /// Amounts are only comparable within one mint; scoring reads the USDC record.
+    pub mint: Pubkey,
     pub completed: u64,
     pub failed: u64,
     pub neutral: u64,
@@ -554,6 +559,7 @@ pub struct SellerRep {
 pub struct RepPair {
     pub seller: Pubkey,
     pub buyer: Pubkey,
+    pub mint: Pubkey,
     pub completed: u64,
     pub failed: u64,
     pub volume: u64,
@@ -622,9 +628,9 @@ pub struct CreateDeal<'info> {
         bump,
     )]
     pub deal: Box<Account<'info, Deal>>,
-    #[account(init_if_needed, payer = buyer, space = 8 + SellerRep::INIT_SPACE, seeds = [REP_SEED, seller.key().as_ref()], bump)]
+    #[account(init_if_needed, payer = buyer, space = 8 + SellerRep::INIT_SPACE, seeds = [REP_SEED, seller.key().as_ref(), mint.key().as_ref()], bump)]
     pub seller_rep: Box<Account<'info, SellerRep>>,
-    #[account(init_if_needed, payer = buyer, space = 8 + RepPair::INIT_SPACE, seeds = [REP_SEED, seller.key().as_ref(), buyer.key().as_ref()], bump)]
+    #[account(init_if_needed, payer = buyer, space = 8 + RepPair::INIT_SPACE, seeds = [REP_SEED, seller.key().as_ref(), buyer.key().as_ref(), mint.key().as_ref()], bump)]
     pub rep_pair: Box<Account<'info, RepPair>>,
     #[account(
         init,
@@ -690,9 +696,9 @@ pub struct Settle<'info> {
     pub buyer_token: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, token::mint = mint, token::authority = deal.seller, token::token_program = token_program)]
     pub seller_token: Box<InterfaceAccount<'info, TokenAccount>>,
-    #[account(init_if_needed, payer = actor, space = 8 + SellerRep::INIT_SPACE, seeds = [REP_SEED, deal.seller.as_ref()], bump)]
+    #[account(init_if_needed, payer = actor, space = 8 + SellerRep::INIT_SPACE, seeds = [REP_SEED, deal.seller.as_ref(), deal.mint.as_ref()], bump)]
     pub seller_rep: Box<Account<'info, SellerRep>>,
-    #[account(init_if_needed, payer = actor, space = 8 + RepPair::INIT_SPACE, seeds = [REP_SEED, deal.seller.as_ref(), deal.buyer.as_ref()], bump)]
+    #[account(init_if_needed, payer = actor, space = 8 + RepPair::INIT_SPACE, seeds = [REP_SEED, deal.seller.as_ref(), deal.buyer.as_ref(), deal.mint.as_ref()], bump)]
     pub rep_pair: Box<Account<'info, RepPair>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,

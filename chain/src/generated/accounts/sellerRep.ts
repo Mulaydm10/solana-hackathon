@@ -52,6 +52,8 @@ export function getSellerRepDiscriminatorBytes(): ReadonlyUint8Array {
 export type SellerRep = {
   discriminator: ReadonlyUint8Array;
   seller: Address;
+  /** Amounts are only comparable within one mint; scoring reads the USDC record. */
+  mint: Address;
   completed: bigint;
   failed: bigint;
   neutral: bigint;
@@ -67,6 +69,8 @@ export type SellerRep = {
 
 export type SellerRepArgs = {
   seller: Address;
+  /** Amounts are only comparable within one mint; scoring reads the USDC record. */
+  mint: Address;
   completed: number | bigint;
   failed: number | bigint;
   neutral: number | bigint;
@@ -86,6 +90,7 @@ export function getSellerRepEncoder(): FixedSizeEncoder<SellerRepArgs> {
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["seller", getAddressEncoder()],
+      ["mint", getAddressEncoder()],
       ["completed", getU64Encoder()],
       ["failed", getU64Encoder()],
       ["neutral", getU64Encoder()],
@@ -104,6 +109,7 @@ export function getSellerRepDecoder(): FixedSizeDecoder<SellerRep> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["seller", getAddressDecoder()],
+    ["mint", getAddressDecoder()],
     ["completed", getU64Decoder()],
     ["failed", getU64Decoder()],
     ["neutral", getU64Decoder()],
@@ -174,5 +180,5 @@ export async function fetchAllMaybeSellerRep(
 }
 
 export function getSellerRepSize(): number {
-  return 97;
+  return 129;
 }

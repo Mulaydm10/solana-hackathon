@@ -17,6 +17,7 @@ import {
 export type RepPairSeeds = {
   seller: Address;
   buyer: Address;
+  mint: Address;
 };
 
 export async function findRepPairPda(
@@ -32,6 +33,7 @@ export async function findRepPairPda(
       getBytesEncoder().encode(new Uint8Array([114, 101, 112])),
       getAddressEncoder().encode(seeds.seller),
       getAddressEncoder().encode(seeds.buyer),
+      getAddressEncoder().encode(seeds.mint),
     ],
   });
 }

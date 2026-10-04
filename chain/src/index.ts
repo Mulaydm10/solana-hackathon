@@ -21,15 +21,15 @@ export async function policyAddress(buyer: Address): Promise<Address> {
   return address;
 }
 
-/** Seller reputation PDA (written only when a deal settles). */
-export async function sellerRepAddress(seller: Address): Promise<Address> {
-  const [address] = await findSellerRepPda({ seller });
+/** Seller reputation PDA in one mint (written only when a deal settles). */
+export async function sellerRepAddress(seller: Address, mint: Address): Promise<Address> {
+  const [address] = await findSellerRepPda({ seller, mint });
   return address;
 }
 
-/** Reputation PDA for one (seller, buyer) pair. */
-export async function repPairAddress(seller: Address, buyer: Address): Promise<Address> {
-  const [address] = await findRepPairPda({ seller, buyer });
+/** Reputation PDA for one (seller, buyer) pair in one mint. */
+export async function repPairAddress(seller: Address, buyer: Address, mint: Address): Promise<Address> {
+  const [address] = await findRepPairPda({ seller, buyer, mint });
   return address;
 }
 

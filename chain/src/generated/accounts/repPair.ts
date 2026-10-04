@@ -51,6 +51,7 @@ export type RepPair = {
   discriminator: ReadonlyUint8Array;
   seller: Address;
   buyer: Address;
+  mint: Address;
   completed: bigint;
   failed: bigint;
   volume: bigint;
@@ -60,6 +61,7 @@ export type RepPair = {
 export type RepPairArgs = {
   seller: Address;
   buyer: Address;
+  mint: Address;
   completed: number | bigint;
   failed: number | bigint;
   volume: number | bigint;
@@ -73,6 +75,7 @@ export function getRepPairEncoder(): FixedSizeEncoder<RepPairArgs> {
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["seller", getAddressEncoder()],
       ["buyer", getAddressEncoder()],
+      ["mint", getAddressEncoder()],
       ["completed", getU64Encoder()],
       ["failed", getU64Encoder()],
       ["volume", getU64Encoder()],
@@ -88,6 +91,7 @@ export function getRepPairDecoder(): FixedSizeDecoder<RepPair> {
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["seller", getAddressDecoder()],
     ["buyer", getAddressDecoder()],
+    ["mint", getAddressDecoder()],
     ["completed", getU64Decoder()],
     ["failed", getU64Decoder()],
     ["volume", getU64Decoder()],
@@ -154,5 +158,5 @@ export async function fetchAllMaybeRepPair(
 }
 
 export function getRepPairSize(): number {
-  return 97;
+  return 129;
 }

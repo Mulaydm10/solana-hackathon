@@ -247,6 +247,11 @@
                 "kind": "account",
                 "path": "deal.seller",
                 "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
               }
             ]
           }
@@ -272,6 +277,11 @@
               {
                 "kind": "account",
                 "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
                 "account": "Deal"
               }
             ]
@@ -529,6 +539,11 @@
                 "kind": "account",
                 "path": "deal.seller",
                 "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
               }
             ]
           }
@@ -554,6 +569,11 @@
               {
                 "kind": "account",
                 "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
                 "account": "Deal"
               }
             ]
@@ -678,6 +698,10 @@
               {
                 "kind": "account",
                 "path": "seller"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
               }
             ]
           }
@@ -702,6 +726,10 @@
               {
                 "kind": "account",
                 "path": "buyer"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
               }
             ]
           }
@@ -994,6 +1022,11 @@
                 "kind": "account",
                 "path": "deal.seller",
                 "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
               }
             ]
           }
@@ -1019,6 +1052,11 @@
               {
                 "kind": "account",
                 "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
                 "account": "Deal"
               }
             ]
@@ -1174,6 +1212,11 @@
                 "kind": "account",
                 "path": "deal.seller",
                 "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
               }
             ]
           }
@@ -1199,6 +1242,11 @@
               {
                 "kind": "account",
                 "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
                 "account": "Deal"
               }
             ]
@@ -1366,6 +1414,11 @@
                 "kind": "account",
                 "path": "deal.seller",
                 "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
               }
             ]
           }
@@ -1391,6 +1444,11 @@
               {
                 "kind": "account",
                 "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
                 "account": "Deal"
               }
             ]
@@ -1598,6 +1656,11 @@
                 "kind": "account",
                 "path": "deal.seller",
                 "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
+                "account": "Deal"
               }
             ]
           }
@@ -1623,6 +1686,11 @@
               {
                 "kind": "account",
                 "path": "deal.buyer",
+                "account": "Deal"
+              },
+              {
+                "kind": "account",
+                "path": "deal.mint",
                 "account": "Deal"
               }
             ]
@@ -2268,6 +2336,10 @@
             "type": "pubkey"
           },
           {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
             "name": "completed",
             "type": "u64"
           },
@@ -2289,13 +2361,20 @@
     {
       "name": "SellerRep",
       "docs": [
-        "A seller's track record, written only by `settle`."
+        "A seller's track record in one token, written only by `settle`."
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "docs": [
+              "Amounts are only comparable within one mint; scoring reads the USDC record."
+            ],
             "type": "pubkey"
           },
           {

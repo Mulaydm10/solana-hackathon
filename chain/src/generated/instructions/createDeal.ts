@@ -430,6 +430,10 @@ export async function getCreateDealInstructionAsync<
           "seller",
           accounts.seller.value,
         ),
+        mint: getAddressFromResolvedInstructionAccount(
+          "mint",
+          accounts.mint.value,
+        ),
       },
       { programAddress },
     );
@@ -444,6 +448,10 @@ export async function getCreateDealInstructionAsync<
         buyer: getAddressFromResolvedInstructionAccount(
           "buyer",
           accounts.buyer.value,
+        ),
+        mint: getAddressFromResolvedInstructionAccount(
+          "mint",
+          accounts.mint.value,
         ),
       },
       { programAddress },

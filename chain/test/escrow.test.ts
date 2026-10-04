@@ -221,7 +221,7 @@ test("a caller cannot redirect a payout to their own token account", async () =>
       await getClaimInstructionAsync({
         actor: t.stranger, deal, policy: t.policy, mint: t.mint.address,
         buyerToken: await t.ata(t.buyer.address), sellerToken: await t.ata(t.stranger.address),
-        sellerRep: await sellerRepAddress(t.seller.address), repPair: await repPairAddress(t.seller.address, t.buyer.address),
+        sellerRep: await sellerRepAddress(t.seller.address, t.mint.address), repPair: await repPairAddress(t.seller.address, t.buyer.address, t.mint.address),
       }),
     ]),
   );

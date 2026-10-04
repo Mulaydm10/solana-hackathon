@@ -164,7 +164,7 @@ export async function setup(opts: { policy?: (s: Address, a: Address) => PolicyP
     const d = (await fetchDeal(client.rpc, deal)).data;
     return {
       actor, deal, policy: await policyAddress(d.buyer), mint: mint.address, buyerToken: await ata(d.buyer), sellerToken: await ata(d.seller),
-      sellerRep: await sellerRepAddress(d.seller), repPair: await repPairAddress(d.seller, d.buyer),
+      sellerRep: await sellerRepAddress(d.seller, d.mint), repPair: await repPairAddress(d.seller, d.buyer, d.mint),
     };
   };
   const ops = {
@@ -192,11 +192,11 @@ export async function setup(opts: { policy?: (s: Address, a: Address) => PolicyP
   const deal = async (address: Address) => (await fetchDeal(client.rpc, address)).data;
   const maybeDeal = async (address: Address) => fetchMaybeDeal(client.rpc, address);
   const rep = async (seller: Address) => {
-    const r = await fetchMaybeSellerRep(client.rpc, await sellerRepAddress(seller));
+    const r = await fetchMaybeSellerRep(client.rpc, await sellerRepAddress(seller, mint.address));
     return r.exists ? r.data : null;
   };
   const pair = async (seller: Address, b: Address = buyer.address) => {
-    const r = await fetchMaybeRepPair(client.rpc, await repPairAddress(seller, b));
+    const r = await fetchMaybeRepPair(client.rpc, await repPairAddress(seller, b, mint.address));
     return r.exists ? r.data : null;
   };
   /** Delete an account, to recreate states from before v3 (deals opened without reputation accounts). */
