@@ -64,6 +64,7 @@
   .states th, .states td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
   .states th { font: 500 11.5px/1.2 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
   .states td:first-child { font-family: var(--mono); white-space: nowrap; }
+  .states.plain td:first-child { font-family: var(--body); font-weight: 500; white-space: normal; min-width: 150px; }
   .table-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 
   .groups { display: grid; gap: 28px; }
@@ -83,6 +84,8 @@
   .filters button { font: 500 13px/1 var(--body); padding: 8px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
   .filters button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
   footer { font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
+  .risks { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 75ch; }
+  section h3 { margin-top: 6px; }
   @media (max-width: 520px) { .wrap { padding-block: 28px 56px; } .fact .v { font-size: 18px; } }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -105,6 +108,66 @@
     <div class="fact"><span class="k">Automated tests</span><span class="v">96</span><span class="s">core 17 · chain 41 · surface 21 · web 6 · mcp 11</span></div>
     <div class="fact"><span class="k">Attack search</span><span class="v">0 violations</span><span class="s">60 random runs, all 11 outcomes reached</span></div>
   </div>
+
+  <section aria-labelledby="status">
+    <div class="eyebrow">Project status · 4 Oct 2026, 17:00 CEST</div>
+    <h2 id="status">Where the project stands</h2>
+    <p><b>The working product is live on Solana devnet and proven on chain.</b> The public website and the MCP package have their foundations built and tested, but neither is public yet.</p>
+    <div class="table-scroll">
+      <table class="states plain">
+        <thead><tr><th>Part</th><th>State</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Escrow program v2</td><td><span class="pill live">Live</span></td><td>On devnet at the same address; deployed bytes match the repo exactly</td></tr>
+          <tr><td>Demo on the Omen</td><td><span class="pill live">Live</span></td><td>Always on, reachable over Tailscale; 11/11 on-chain checks passed today</td></tr>
+          <tr><td>Demo on the Mac</td><td><span class="pill built">On demand</span></td><td><code>npm start --prefix surface</code>, localhost only</td></tr>
+          <tr><td>Shared deal library</td><td><span class="pill live">Live</span></td><td>Used by the demo server; never repeats an action after a network failure</td></tr>
+          <tr><td>Automated tests</td><td><span class="pill live">96 passing</span></td><td>Typecheck + tests + builds in CI for all five lanes</td></tr>
+          <tr><td>Public site (Vercel)</td><td><span class="pill built">Built</span></td><td>Skeleton and security in place; not deployed, by your choice</td></tr>
+          <tr><td>MCP package (npx)</td><td><span class="pill built">Built</span></td><td>Bundles and passes a real MCP handshake; deal tools not added; not published</td></tr>
+          <tr><td>AI drafting with Claude</td><td><span class="pill next">Waiting</span></td><td>Works with rules today; needs an Anthropic API key for Claude</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>How we got here</h3>
+    <div class="table-scroll">
+      <table class="states plain">
+        <thead><tr><th>Date</th><th>Milestone</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>29 Sep</td><td>Repo and team process set up</td><td>Agent-bus protocol, lanes and CI</td></tr>
+          <tr><td>1–3 Oct</td><td>Research and direction</td><td>ETHOnline study, Solana fit check, procurement-layer idea</td></tr>
+          <tr><td>4 Oct, morning</td><td>MVP v1 live on devnet</td><td>Escrow program deployed; first on-chain proof</td></tr>
+          <tr><td>4 Oct, midday</td><td>Hardening research</td><td>Code of 25+ ETHOnline projects read for proven mechanisms</td></tr>
+          <tr><td>4 Oct, afternoon</td><td>v2 program, deal library, web and MCP foundations</td><td>Policy, stake, invoice match, verifier; attack search with 0 violations</td></tr>
+          <tr><td>4 Oct, evening</td><td>v2 live on devnet</td><td>Upgrade verified byte-for-byte; 11/11 on Mac and Omen</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Next, and what each one waits on</h3>
+    <div class="table-scroll">
+      <table class="states plain">
+        <thead><tr><th>Item</th><th>Waits on</th></tr></thead>
+        <tbody>
+          <tr><td>Buyers sign with their own wallet on the site</td><td>Ready to build</td></tr>
+          <tr><td>MCP deal tools (find, open, deliver, release…)</td><td>Ready to build</td></tr>
+          <tr><td>Seller reputation from settled deals</td><td>Ready to build; needs real deal volume to mean much</td></tr>
+          <tr><td>Deploy the site to Vercel</td><td>Your go-ahead</td></tr>
+          <tr><td>Publish the MCP package</td><td>A package name and <code>npm login</code></td></tr>
+          <tr><td>Claude drafting and real deliverables</td><td>An Anthropic API key</td></tr>
+          <tr><td>Reproducible build of the program</td><td>A container runtime on the Mac (your OK to install)</td></tr>
+          <tr><td>Remove the program's upgrade key</td><td>Your explicit OK (cannot be undone)</td></tr>
+          <tr><td>Code review by a second person</td><td>Vedant</td></tr>
+          <tr><td>Pitch deck</td><td>Not started</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Open risks</h3>
+    <ul class="risks">
+      <li><b>Shared network.</b> The Mac sits on a shared campus IP, so the public devnet RPC rate-limits it; the Omen does not hit this.</li>
+      <li><b>One verifier key.</b> A single key decides challenges. That is a trust assumption; several independent verifiers are the upgrade path.</li>
+      <li><b>Keys on machines.</b> Demo, verifier and upgrade keys are files on the Mac and the Omen. Fine for devnet, not for real money.</li>
+      <li><b>Test money.</b> All "USDC" is a test token we mint; nothing has real value.</li>
+    </ul>
+  </section>
 
   <section aria-labelledby="tech">
     <div class="eyebrow">Technical diagram</div>
