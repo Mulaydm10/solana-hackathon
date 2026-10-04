@@ -1,16 +1,15 @@
 import Link from "next/link";
-import { describeRep, repScore } from "@deal/core";
 import { usdc } from "../../lib/catalogue-json";
 import { siteRegistry } from "../../lib/site-registry";
+import { sellerView } from "../../lib/dashboard";
 
 export const dynamic = "force-dynamic";
 
-const ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-
 export default async function Dashboard({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const p = await searchParams;
-  const seller = typeof p.seller === "string" && ADDRESS.test(p.seller) ? p.seller : null;
-  const mine = seller ? (await siteRegistry().list()).filter((l) => l.seller === seller) : [];
+  const view = typeof p.seller === "string" ? sellerView(await siteRegistry().list(), p.seller) : null;
+  const seller = view?.seller ?? null;
+  const mine = view?.listings ?? [];
   return (
     <main>
       <h1>Seller dashboard</h1>
@@ -19,7 +18,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <p data-testid="dashboard-empty">Enter a seller wallet (or connect yours) to see its listings and reputation.</p>
       ) : (
         <>
-          <p data-testid="dashboard-rep">Reputation: {mine[0] ? describeRep(repScore(mine[0].rep)) : "no listings yet"}.</p>
+          <p data-testid="dashboard-rep">Reputation: {view?.summary}.</p>
           <ul data-testid="dashboard-listings">
             {mine.map((l) => (
               <li key={l.address}>
