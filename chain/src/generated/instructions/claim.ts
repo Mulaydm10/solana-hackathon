@@ -54,10 +54,12 @@ export function getClaimDiscriminatorBytes(): ReadonlyUint8Array {
 
 export type ClaimInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
-  TAccountSeller extends string | AccountMeta<string> = string,
+  TAccountActor extends string | AccountMeta<string> = string,
   TAccountDeal extends string | AccountMeta<string> = string,
+  TAccountPolicy extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
+  TAccountBuyerToken extends string | AccountMeta<string> = string,
   TAccountSellerToken extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -66,19 +68,25 @@ export type ClaimInstruction<
   InstructionWithData<ReadonlyUint8Array> &
   InstructionWithAccounts<
     [
-      TAccountSeller extends string
-        ? ReadonlySignerAccount<TAccountSeller> &
-            AccountSignerMeta<TAccountSeller>
-        : TAccountSeller,
+      TAccountActor extends string
+        ? ReadonlySignerAccount<TAccountActor> &
+            AccountSignerMeta<TAccountActor>
+        : TAccountActor,
       TAccountDeal extends string
         ? WritableAccount<TAccountDeal>
         : TAccountDeal,
+      TAccountPolicy extends string
+        ? WritableAccount<TAccountPolicy>
+        : TAccountPolicy,
       TAccountMint extends string
         ? ReadonlyAccount<TAccountMint>
         : TAccountMint,
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
+      TAccountBuyerToken extends string
+        ? WritableAccount<TAccountBuyerToken>
+        : TAccountBuyerToken,
       TAccountSellerToken extends string
         ? WritableAccount<TAccountSellerToken>
         : TAccountSellerToken,
@@ -117,36 +125,44 @@ export function getClaimInstructionDataCodec(): FixedSizeCodec<
 }
 
 export type ClaimAsyncInput<
-  TAccountSeller extends InstructionSignerInput = InstructionSignerInput,
+  TAccountActor extends InstructionSignerInput = InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
+  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
+  TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountSellerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
 > = {
-  seller: TAccountSeller;
+  actor: TAccountActor;
   deal: TAccountDeal;
+  policy: TAccountPolicy;
   mint: TAccountMint;
   vault?: TAccountVault;
+  buyerToken: TAccountBuyerToken;
   sellerToken: TAccountSellerToken;
   tokenProgram?: TAccountTokenProgram;
 };
 
 export async function getClaimInstructionAsync<
-  TAccountSeller extends InstructionSignerInput,
+  TAccountActor extends InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput,
+  TAccountPolicy extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
+  TAccountBuyerToken extends InstructionAccountInput,
   TAccountSellerToken extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
   input: ClaimAsyncInput<
-    TAccountSeller,
+    TAccountActor,
     TAccountDeal,
+    TAccountPolicy,
     TAccountMint,
     TAccountVault,
+    TAccountBuyerToken,
     TAccountSellerToken,
     TAccountTokenProgram
   >,
@@ -155,12 +171,16 @@ export async function getClaimInstructionAsync<
   ClaimInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountSeller,
-      InstructionAccountInputAddress<TAccountSeller>
+      TAccountActor,
+      InstructionAccountInputAddress<TAccountActor>
     >,
     ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPolicy,
+      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -169,6 +189,10 @@ export async function getClaimInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountVault,
       InstructionAccountInputAddress<TAccountVault>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountBuyerToken,
+      InstructionAccountInputAddress<TAccountBuyerToken>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSellerToken,
@@ -188,10 +212,16 @@ export async function getClaimInstructionAsync<
 
   // Original accounts.
   const originalAccounts = {
-    seller: { value: input.seller ?? null, isSigner: true, isWritable: false },
+    actor: { value: input.actor ?? null, isSigner: true, isWritable: false },
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
+    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
+    buyerToken: {
+      value: input.buyerToken ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
     sellerToken: {
       value: input.sellerToken ?? null,
       isSigner: false,
@@ -236,10 +266,12 @@ export async function getClaimInstructionAsync<
 
   return Object.freeze({
     accounts: [
-      getAccountMeta("seller", accounts.seller),
+      getAccountMeta("actor", accounts.actor),
       getAccountMeta("deal", accounts.deal),
+      getAccountMeta("policy", accounts.policy),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("vault", accounts.vault),
+      getAccountMeta("buyerToken", accounts.buyerToken),
       getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
@@ -248,12 +280,16 @@ export async function getClaimInstructionAsync<
   } as ClaimInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountSeller,
-      InstructionAccountInputAddress<TAccountSeller>
+      TAccountActor,
+      InstructionAccountInputAddress<TAccountActor>
     >,
     ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPolicy,
+      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -262,6 +298,10 @@ export async function getClaimInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountVault,
       InstructionAccountInputAddress<TAccountVault>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountBuyerToken,
+      InstructionAccountInputAddress<TAccountBuyerToken>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSellerToken,
@@ -275,36 +315,44 @@ export async function getClaimInstructionAsync<
 }
 
 export type ClaimInput<
-  TAccountSeller extends InstructionSignerInput = InstructionSignerInput,
+  TAccountActor extends InstructionSignerInput = InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
+  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
+  TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountSellerToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
 > = {
-  seller: TAccountSeller;
+  actor: TAccountActor;
   deal: TAccountDeal;
+  policy: TAccountPolicy;
   mint: TAccountMint;
   vault: TAccountVault;
+  buyerToken: TAccountBuyerToken;
   sellerToken: TAccountSellerToken;
   tokenProgram?: TAccountTokenProgram;
 };
 
 export function getClaimInstruction<
-  TAccountSeller extends InstructionSignerInput,
+  TAccountActor extends InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput,
+  TAccountPolicy extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
+  TAccountBuyerToken extends InstructionAccountInput,
   TAccountSellerToken extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
   input: ClaimInput<
-    TAccountSeller,
+    TAccountActor,
     TAccountDeal,
+    TAccountPolicy,
     TAccountMint,
     TAccountVault,
+    TAccountBuyerToken,
     TAccountSellerToken,
     TAccountTokenProgram
   >,
@@ -312,12 +360,16 @@ export function getClaimInstruction<
 ): ClaimInstruction<
   TProgramAddress,
   ResolvedInstructionAccountMeta<
-    TAccountSeller,
-    InstructionAccountInputAddress<TAccountSeller>
+    TAccountActor,
+    InstructionAccountInputAddress<TAccountActor>
   >,
   ResolvedInstructionAccountMeta<
     TAccountDeal,
     InstructionAccountInputAddress<TAccountDeal>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountPolicy,
+    InstructionAccountInputAddress<TAccountPolicy>
   >,
   ResolvedInstructionAccountMeta<
     TAccountMint,
@@ -326,6 +378,10 @@ export function getClaimInstruction<
   ResolvedInstructionAccountMeta<
     TAccountVault,
     InstructionAccountInputAddress<TAccountVault>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountBuyerToken,
+    InstructionAccountInputAddress<TAccountBuyerToken>
   >,
   ResolvedInstructionAccountMeta<
     TAccountSellerToken,
@@ -344,10 +400,16 @@ export function getClaimInstruction<
 
   // Original accounts.
   const originalAccounts = {
-    seller: { value: input.seller ?? null, isSigner: true, isWritable: false },
+    actor: { value: input.actor ?? null, isSigner: true, isWritable: false },
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
+    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
+    buyerToken: {
+      value: input.buyerToken ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
     sellerToken: {
       value: input.sellerToken ?? null,
       isSigner: false,
@@ -372,10 +434,12 @@ export function getClaimInstruction<
 
   return Object.freeze({
     accounts: [
-      getAccountMeta("seller", accounts.seller),
+      getAccountMeta("actor", accounts.actor),
       getAccountMeta("deal", accounts.deal),
+      getAccountMeta("policy", accounts.policy),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("vault", accounts.vault),
+      getAccountMeta("buyerToken", accounts.buyerToken),
       getAccountMeta("sellerToken", accounts.sellerToken),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
@@ -384,12 +448,16 @@ export function getClaimInstruction<
   } as ClaimInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountSeller,
-      InstructionAccountInputAddress<TAccountSeller>
+      TAccountActor,
+      InstructionAccountInputAddress<TAccountActor>
     >,
     ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPolicy,
+      InstructionAccountInputAddress<TAccountPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -398,6 +466,10 @@ export function getClaimInstruction<
     ResolvedInstructionAccountMeta<
       TAccountVault,
       InstructionAccountInputAddress<TAccountVault>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountBuyerToken,
+      InstructionAccountInputAddress<TAccountBuyerToken>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSellerToken,
@@ -416,12 +488,14 @@ export type ParsedClaimInstruction<
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    seller: TAccountMetas[0];
+    actor: TAccountMetas[0];
     deal: TAccountMetas[1];
-    mint: TAccountMetas[2];
-    vault: TAccountMetas[3];
-    sellerToken: TAccountMetas[4];
-    tokenProgram: TAccountMetas[5];
+    policy: TAccountMetas[2];
+    mint: TAccountMetas[3];
+    vault: TAccountMetas[4];
+    buyerToken: TAccountMetas[5];
+    sellerToken: TAccountMetas[6];
+    tokenProgram: TAccountMetas[7];
   };
   data: ClaimInstructionData;
 };
@@ -434,12 +508,12 @@ export function parseClaimInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedClaimInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 6) {
+  if (instruction.accounts.length < 8) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 6,
+        expectedAccountMetas: 8,
       },
     );
   }
@@ -452,10 +526,12 @@ export function parseClaimInstruction<
   return {
     programAddress: instruction.programAddress,
     accounts: {
-      seller: getNextAccount(),
+      actor: getNextAccount(),
       deal: getNextAccount(),
+      policy: getNextAccount(),
       mint: getNextAccount(),
       vault: getNextAccount(),
+      buyerToken: getNextAccount(),
       sellerToken: getNextAccount(),
       tokenProgram: getNextAccount(),
     },

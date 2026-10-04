@@ -14,6 +14,8 @@ import {
   getBytesEncoder,
   getStructDecoder,
   getStructEncoder,
+  getU64Decoder,
+  getU64Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
   SolanaError,
   transformEncoder,
@@ -73,10 +75,12 @@ export type SubmitDeliveryInstruction<
 export type SubmitDeliveryInstructionData = {
   discriminator: ReadonlyUint8Array;
   deliveryHash: ReadonlyUint8Array;
+  invoiceAmount: bigint;
 };
 
 export type SubmitDeliveryInstructionDataArgs = {
   deliveryHash: ReadonlyUint8Array;
+  invoiceAmount: number | bigint;
 };
 
 export function getSubmitDeliveryInstructionDataEncoder(): FixedSizeEncoder<SubmitDeliveryInstructionDataArgs> {
@@ -84,6 +88,7 @@ export function getSubmitDeliveryInstructionDataEncoder(): FixedSizeEncoder<Subm
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["deliveryHash", fixEncoderSize(getBytesEncoder(), 32)],
+      ["invoiceAmount", getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: SUBMIT_DELIVERY_DISCRIMINATOR }),
   );
@@ -93,6 +98,7 @@ export function getSubmitDeliveryInstructionDataDecoder(): FixedSizeDecoder<Subm
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["deliveryHash", fixDecoderSize(getBytesDecoder(), 32)],
+    ["invoiceAmount", getU64Decoder()],
   ]);
 }
 
@@ -113,6 +119,7 @@ export type SubmitDeliveryInput<
   seller: TAccountSeller;
   deal: TAccountDeal;
   deliveryHash: SubmitDeliveryInstructionDataArgs["deliveryHash"];
+  invoiceAmount: SubmitDeliveryInstructionDataArgs["invoiceAmount"];
 };
 
 export function getSubmitDeliveryInstruction<

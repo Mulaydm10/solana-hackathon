@@ -33,35 +33,71 @@ import {
   type SelfFetchFunctions,
   type SelfPlanAndSendFunctions,
 } from "@solana/program-client-core";
-import { getDealCodec, type Deal, type DealArgs } from "../accounts";
 import {
+  getBuyerPolicyCodec,
+  getDealCodec,
+  type BuyerPolicy,
+  type BuyerPolicyArgs,
+  type Deal,
+  type DealArgs,
+} from "../accounts";
+import {
+  getAcceptInstructionAsync,
+  getCancelInstructionAsync,
+  getChallengeInstructionAsync,
   getClaimInstructionAsync,
   getCreateDealInstructionAsync,
+  getInitPolicyInstructionAsync,
   getRefundInstructionAsync,
   getReleaseInstructionAsync,
+  getResolveInstructionAsync,
   getSubmitDeliveryInstruction,
+  getTimeoutRefundInstructionAsync,
+  getUpdatePolicyInstructionAsync,
+  parseAcceptInstruction,
+  parseCancelInstruction,
+  parseChallengeInstruction,
   parseClaimInstruction,
   parseCreateDealInstruction,
+  parseInitPolicyInstruction,
   parseRefundInstruction,
   parseReleaseInstruction,
+  parseResolveInstruction,
   parseSubmitDeliveryInstruction,
+  parseTimeoutRefundInstruction,
+  parseUpdatePolicyInstruction,
+  type AcceptAsyncInput,
+  type CancelAsyncInput,
+  type ChallengeAsyncInput,
   type ClaimAsyncInput,
   type CreateDealAsyncInput,
+  type InitPolicyAsyncInput,
+  type ParsedAcceptInstruction,
+  type ParsedCancelInstruction,
+  type ParsedChallengeInstruction,
   type ParsedClaimInstruction,
   type ParsedCreateDealInstruction,
+  type ParsedInitPolicyInstruction,
   type ParsedRefundInstruction,
   type ParsedReleaseInstruction,
+  type ParsedResolveInstruction,
   type ParsedSubmitDeliveryInstruction,
+  type ParsedTimeoutRefundInstruction,
+  type ParsedUpdatePolicyInstruction,
   type RefundAsyncInput,
   type ReleaseAsyncInput,
+  type ResolveAsyncInput,
   type SubmitDeliveryInput,
+  type TimeoutRefundAsyncInput,
+  type UpdatePolicyAsyncInput,
 } from "../instructions";
-import { findDealPda } from "../pdas";
+import { findDealPda, findPolicyPda } from "../pdas";
 
 export const DEAL_ESCROW_PROGRAM_ADDRESS =
   "CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV" as Address<"CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV">;
 
 export enum DealEscrowAccount {
+  BuyerPolicy,
   Deal,
 }
 
@@ -69,6 +105,17 @@ export function identifyDealEscrowAccount(
   account: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): DealEscrowAccount {
   const data = "data" in account ? account.data : account;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([232, 126, 32, 90, 20, 181, 165, 248]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowAccount.BuyerPolicy;
+  }
   if (
     containsBytes(
       data,
@@ -111,17 +158,57 @@ export function identifyDealEscrowEvent(
 }
 
 export enum DealEscrowInstruction {
+  Accept,
+  Cancel,
+  Challenge,
   Claim,
   CreateDeal,
+  InitPolicy,
   Refund,
   Release,
+  Resolve,
   SubmitDelivery,
+  TimeoutRefund,
+  UpdatePolicy,
 }
 
 export function identifyDealEscrowInstruction(
   instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): DealEscrowInstruction {
   const data = "data" in instruction ? instruction.data : instruction;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([65, 150, 70, 216, 133, 6, 107, 4]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.Accept;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([232, 219, 223, 41, 219, 236, 220, 190]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.Cancel;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([16, 107, 14, 39, 244, 150, 81, 187]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.Challenge;
+  }
   if (
     containsBytes(
       data,
@@ -143,6 +230,17 @@ export function identifyDealEscrowInstruction(
     )
   ) {
     return DealEscrowInstruction.CreateDeal;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([45, 234, 110, 100, 209, 146, 191, 86]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.InitPolicy;
   }
   if (
     containsBytes(
@@ -170,12 +268,45 @@ export function identifyDealEscrowInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([246, 150, 236, 206, 108, 63, 58, 10]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.Resolve;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([217, 177, 33, 54, 136, 185, 123, 96]),
       ),
       0,
     )
   ) {
     return DealEscrowInstruction.SubmitDelivery;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([194, 205, 141, 37, 231, 118, 147, 9]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.TimeoutRefund;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([212, 245, 246, 7, 163, 151, 18, 57]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.UpdatePolicy;
   }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION,
@@ -187,11 +318,23 @@ export type ParsedDealEscrowInstruction<
   TProgram extends string = "CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV",
 > =
   | ({
+      instructionType: DealEscrowInstruction.Accept;
+    } & ParsedAcceptInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.Cancel;
+    } & ParsedCancelInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.Challenge;
+    } & ParsedChallengeInstruction<TProgram>)
+  | ({
       instructionType: DealEscrowInstruction.Claim;
     } & ParsedClaimInstruction<TProgram>)
   | ({
       instructionType: DealEscrowInstruction.CreateDeal;
     } & ParsedCreateDealInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.InitPolicy;
+    } & ParsedInitPolicyInstruction<TProgram>)
   | ({
       instructionType: DealEscrowInstruction.Refund;
     } & ParsedRefundInstruction<TProgram>)
@@ -199,14 +342,44 @@ export type ParsedDealEscrowInstruction<
       instructionType: DealEscrowInstruction.Release;
     } & ParsedReleaseInstruction<TProgram>)
   | ({
+      instructionType: DealEscrowInstruction.Resolve;
+    } & ParsedResolveInstruction<TProgram>)
+  | ({
       instructionType: DealEscrowInstruction.SubmitDelivery;
-    } & ParsedSubmitDeliveryInstruction<TProgram>);
+    } & ParsedSubmitDeliveryInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.TimeoutRefund;
+    } & ParsedTimeoutRefundInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.UpdatePolicy;
+    } & ParsedUpdatePolicyInstruction<TProgram>);
 
 export function parseDealEscrowInstruction<TProgram extends string>(
   instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
 ): ParsedDealEscrowInstruction<TProgram> {
   const instructionType = identifyDealEscrowInstruction(instruction);
   switch (instructionType) {
+    case DealEscrowInstruction.Accept: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.Accept,
+        ...parseAcceptInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.Cancel: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.Cancel,
+        ...parseCancelInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.Challenge: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.Challenge,
+        ...parseChallengeInstruction(instruction),
+      };
+    }
     case DealEscrowInstruction.Claim: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -219,6 +392,13 @@ export function parseDealEscrowInstruction<TProgram extends string>(
       return {
         instructionType: DealEscrowInstruction.CreateDeal,
         ...parseCreateDealInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.InitPolicy: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.InitPolicy,
+        ...parseInitPolicyInstruction(instruction),
       };
     }
     case DealEscrowInstruction.Refund: {
@@ -235,11 +415,32 @@ export function parseDealEscrowInstruction<TProgram extends string>(
         ...parseReleaseInstruction(instruction),
       };
     }
+    case DealEscrowInstruction.Resolve: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.Resolve,
+        ...parseResolveInstruction(instruction),
+      };
+    }
     case DealEscrowInstruction.SubmitDelivery: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: DealEscrowInstruction.SubmitDelivery,
         ...parseSubmitDeliveryInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.TimeoutRefund: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.TimeoutRefund,
+        ...parseTimeoutRefundInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.UpdatePolicy: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.UpdatePolicy,
+        ...parseUpdatePolicyInstruction(instruction),
       };
     }
     default:
@@ -263,10 +464,22 @@ export type DealEscrowPlugin = {
 };
 
 export type DealEscrowPluginAccounts = {
+  buyerPolicy: ReturnType<typeof getBuyerPolicyCodec> &
+    SelfFetchFunctions<BuyerPolicyArgs, BuyerPolicy>;
   deal: ReturnType<typeof getDealCodec> & SelfFetchFunctions<DealArgs, Deal>;
 };
 
 export type DealEscrowPluginInstructions = {
+  accept: (
+    input: AcceptAsyncInput,
+  ) => ReturnType<typeof getAcceptInstructionAsync> & SelfPlanAndSendFunctions;
+  cancel: (
+    input: CancelAsyncInput,
+  ) => ReturnType<typeof getCancelInstructionAsync> & SelfPlanAndSendFunctions;
+  challenge: (
+    input: ChallengeAsyncInput,
+  ) => ReturnType<typeof getChallengeInstructionAsync> &
+    SelfPlanAndSendFunctions;
   claim: (
     input: ClaimAsyncInput,
   ) => ReturnType<typeof getClaimInstructionAsync> & SelfPlanAndSendFunctions;
@@ -274,19 +487,37 @@ export type DealEscrowPluginInstructions = {
     input: CreateDealAsyncInput,
   ) => ReturnType<typeof getCreateDealInstructionAsync> &
     SelfPlanAndSendFunctions;
+  initPolicy: (
+    input: InitPolicyAsyncInput,
+  ) => ReturnType<typeof getInitPolicyInstructionAsync> &
+    SelfPlanAndSendFunctions;
   refund: (
     input: RefundAsyncInput,
   ) => ReturnType<typeof getRefundInstructionAsync> & SelfPlanAndSendFunctions;
   release: (
     input: ReleaseAsyncInput,
   ) => ReturnType<typeof getReleaseInstructionAsync> & SelfPlanAndSendFunctions;
+  resolve: (
+    input: ResolveAsyncInput,
+  ) => ReturnType<typeof getResolveInstructionAsync> & SelfPlanAndSendFunctions;
   submitDelivery: (
     input: SubmitDeliveryInput,
   ) => ReturnType<typeof getSubmitDeliveryInstruction> &
     SelfPlanAndSendFunctions;
+  timeoutRefund: (
+    input: TimeoutRefundAsyncInput,
+  ) => ReturnType<typeof getTimeoutRefundInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  updatePolicy: (
+    input: UpdatePolicyAsyncInput,
+  ) => ReturnType<typeof getUpdatePolicyInstructionAsync> &
+    SelfPlanAndSendFunctions;
 };
 
-export type DealEscrowPluginPdas = { deal: typeof findDealPda };
+export type DealEscrowPluginPdas = {
+  policy: typeof findPolicyPda;
+  deal: typeof findDealPda;
+};
 
 export type DealEscrowPluginRequirements = ClientWithRpc<
   GetAccountInfoApi & GetMultipleAccountsApi
@@ -300,8 +531,26 @@ export function dealEscrowProgram() {
   ): ExtendedClient<T, { dealEscrow: DealEscrowPlugin }> => {
     return extendClient(client, {
       dealEscrow: <DealEscrowPlugin>{
-        accounts: { deal: addSelfFetchFunctions(client, getDealCodec()) },
+        accounts: {
+          buyerPolicy: addSelfFetchFunctions(client, getBuyerPolicyCodec()),
+          deal: addSelfFetchFunctions(client, getDealCodec()),
+        },
         instructions: {
+          accept: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAcceptInstructionAsync(input),
+            ),
+          cancel: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCancelInstructionAsync(input),
+            ),
+          challenge: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getChallengeInstructionAsync(input),
+            ),
           claim: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -311,6 +560,11 @@ export function dealEscrowProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getCreateDealInstructionAsync(input),
+            ),
+          initPolicy: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getInitPolicyInstructionAsync(input),
             ),
           refund: (input) =>
             addSelfPlanAndSendFunctions(
@@ -322,13 +576,28 @@ export function dealEscrowProgram() {
               client,
               getReleaseInstructionAsync(input),
             ),
+          resolve: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getResolveInstructionAsync(input),
+            ),
           submitDelivery: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getSubmitDeliveryInstruction(input),
             ),
+          timeoutRefund: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getTimeoutRefundInstructionAsync(input),
+            ),
+          updatePolicy: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getUpdatePolicyInstructionAsync(input),
+            ),
         },
-        pdas: { deal: findDealPda },
+        pdas: { policy: findPolicyPda, deal: findDealPda },
         identifyAccount: identifyDealEscrowAccount,
         identifyInstruction: identifyDealEscrowInstruction,
         parseInstruction: parseDealEscrowInstruction,
