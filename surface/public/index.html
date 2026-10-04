@@ -125,9 +125,18 @@ const EXAMPLES = [
 ];
 let cfg, services = [], draft, deal, deadline = 0, reviewEnd = 0, onChain;
 
+// Write token: arrives once as ?token=..., is kept in this browser, and is stripped from the URL.
+const TOKEN = (() => {
+  const q = new URLSearchParams(location.search).get("token");
+  try { if (q) { localStorage.setItem("demoToken", q); history.replaceState(null, "", location.pathname); } return localStorage.getItem("demoToken") || q || ""; }
+  catch { return q || ""; }
+})();
 async function api(path, body) {
-  const res = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  return res.json();
+  const headers = { "content-type": "application/json", authorization: "Bearer " + TOKEN };
+  const res = await fetch(path, body === undefined ? {} : { method: "POST", headers, body: JSON.stringify(body) });
+  const out = await res.json();
+  if (out && out.reason === "UNAUTHORIZED") out.message = "Open this page with the link the server prints (…/?token=…) to enable actions.";
+  return out;
 }
 function refusal(el, r) {
   el.innerHTML = r && !r.ok ? `<div class="refusal">Refused: <code>${r.reason}</code> — ${escapeHtml(r.message || "")}</div>` : "";
