@@ -9,7 +9,7 @@ import { GET as listingRoute } from "../app/api/listings/[address]/route.ts";
 import { GET as llms } from "../app/llms.txt/route.ts";
 import { POST as faucetRoute } from "../app/api/faucet/route.ts";
 import { createDemandStore } from "../lib/demand.ts";
-import { sellerView } from "../lib/dashboard.ts";
+import { connectedSellerHref, sellerView } from "../lib/dashboard.ts";
 import { createFaucet, FAUCET } from "../lib/faucet.ts";
 import { FIXTURES } from "../lib/registry.ts";
 
@@ -88,6 +88,14 @@ test("seller dashboard: one seller's listings and its scored record; nothing for
   assert.ok(v.score && v.summary.length > 0);
   assert.deepEqual(sellerView(FIXTURES, "SeLLerNobody111111111111111111111111111111")?.summary, "no listings yet");
   assert.equal(sellerView(FIXTURES, "../x"), null);
+});
+
+test("seller dashboard: a connected wallet loads its own view unless a seller is already shown", () => {
+  const w = "9hSR6S7WPtxmTojgo6GG3k4yDPecgJY292j7xrsUGWBu";
+  assert.equal(connectedSellerHref(null, w), `/dashboard?seller=${w}`);
+  assert.equal(connectedSellerHref(null, null), null);
+  assert.equal(connectedSellerHref("CKPKJWNdJEqa81x7CkZ14BVPiY6y16Sxs7owznqtWYp5", w), null);
+  assert.equal(connectedSellerHref(null, "../x"), null);
 });
 
 test("faucet: per wallet and per client once a day, a daily cap, and a failed send frees the slot", async () => {
