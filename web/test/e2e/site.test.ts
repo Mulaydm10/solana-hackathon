@@ -74,6 +74,12 @@ test("every navigation page renders with the shell (nav and wallet slot)", async
   }
 });
 
+test("favicon: /favicon.ico is served (no 404 in the console on first load)", async () => {
+  const r = await fetch(`${base}/favicon.ico`);
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get("content-type") ?? "", /icon/);
+});
+
 test("catalogue: lists every fixture, filters by query string, never shows the seller's own grade claim as a grade", async () => {
   const all = await page("/");
   assert.ok(all.html.includes(`${FIXTURES.length} of ${FIXTURES.length} listings`));
