@@ -69,17 +69,21 @@ test("challenge: inside the review window, the verifier decides", async () => {
   assert.equal(data(await tool("deal_status").run({ deal }, ctx())).status, "Challenged");
 });
 
-test("refusals are values: no signer, unattested listing, wrong token, bad input", async () => {
-  const { t, dctx, ctx } = await market();
-  const { listing } = (await (async () => {
-    const r = await listings.create(dctx, t.seller, { listingId: 2n, kind: "Data", price: 1n * USDC, contentHash: hash(40), metaHash: hash(41), assessor: t.verifier.address }).catch(() => null);
-    return { listing: (r as { listing?: string } | null)?.listing ?? "" };
-  })());
-  void listing;
+test("refusals are values: no signer, unknown listing, bad input", async () => {
+  const { ctx } = await market();
   assert.equal(reason(await tool("buy").run({ listing: "x" }, ctx())), "BAD_INPUT");
   assert.equal(reason(await tool("buy").run({ listing: (await generateKeyPairSigner()).address }, ctx())), "NOT_FOUND");
   assert.equal(reason(await tool("buy").run({ listing: (await generateKeyPairSigner()).address }, ctx(null as never))), "NO_SIGNER");
   assert.equal(reason(await tool("setup_policy").run({ daily_budget_usdc: "1", max_price_usdc: "5" }, ctx())), "BAD_INPUT");
+});
+
+test("get_listing: not buyable once its assessor is delisted (the program would refuse)", async () => {
+  const { t, listing, ctx } = await market();
+  await t.registerAssessors((await generateKeyPairSigner()).address);
+  const d = data(await tool("get_listing").run({ listing }, ctx()));
+  assert.equal(d.attested, true);
+  assert.equal(d.assessorRegistered, false);
+  assert.equal(d.buyable, false);
 });
 
 test("setup_policy creates an agent's own spending policy", async () => {
@@ -103,10 +107,9 @@ test("hire_team only returns a link for the human; find_listings asks the site",
   assert.match(seen[0]!, /\/api\/catalogue\?q=power\+prices&kind=Data&maxPrice=5000000$/);
 });
 
-test("hard rule: no tool can approve a stage gate or add a mandate (those are the human's, in their wallet)", () => {
-  const dir = new URL("../src/tools/", import.meta.url);
-  for (const f of readdirSync(dir)) {
-    const src = readFileSync(new URL(f, dir), "utf8");
-    assert.ok(!/approveStage|ApproveStage|addMandate|AddMandate|approve_stage|add_mandate/.test(src.replace(/\/\*\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")), `${f} reaches for an approval or mandate instruction`);
-  }
+test("hard rule: nothing in the package's source can approve a stage gate or add a mandate (the human does, in their wallet)", () => {
+  const banned = /approveStage|ApproveStage|addMandate|AddMandate|approve_stage|add_mandate/;
+  const strip = (src: string) => src.replace(/\/\*\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const walk = (dir: URL): URL[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(new URL(`${e.name}/`, dir)) : [new URL(e.name, dir)]));
+  for (const f of walk(new URL("../src/", import.meta.url))) assert.ok(!banned.test(strip(readFileSync(f, "utf8"))), `${f.pathname} reaches for an approval or mandate instruction`);
 });

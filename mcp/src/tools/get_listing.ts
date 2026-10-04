@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getListing, getSellerRep } from "@deal/chain";
+import { fetchMaybeAssessorRegistry, getListing, getSellerRep, registryAddress } from "@deal/chain";
 import { describeRep, repScore } from "@deal/core";
 import { defineTool, ok, refuse } from "../tool.ts";
 import { badInput, isAddress, needChain, plain } from "../access.ts";
@@ -19,6 +19,12 @@ export default defineTool({
     if (!l) return refuse("NOT_FOUND", "No listing at that address.");
     const rep = await getSellerRep({ ...ch.value.ctx, mint: l.mint }, l.seller);
     const score = repScore(rep);
-    return ok(plain({ ...l, attested: l.assessedAt > 0, buyable: l.active && l.assessedAt > 0, reputation: { ...rep, score: score.score, flags: score.flags, summary: describeRep(score) } }));
+    // Buyable means the program will accept it now: active, attested, and its assessor still registered.
+    const reg = await fetchMaybeAssessorRegistry(ch.value.ctx.client.rpc as never, await registryAddress());
+    const assessorRegistered = reg.exists && reg.data.assessors.includes(l.assessor as never);
+    return ok(plain({
+      ...l, attested: l.assessedAt > 0, assessorRegistered, buyable: l.active && l.assessedAt > 0 && assessorRegistered,
+      reputation: { ...rep, score: score.score, flags: score.flags, summary: describeRep(score) },
+    }));
   },
 });

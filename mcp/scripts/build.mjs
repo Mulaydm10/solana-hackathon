@@ -3,11 +3,13 @@
 // and `npx` needs nothing else. The smoke test runs the bundle from an empty directory to prove it.
 import { build } from "esbuild";
 import { readFileSync, chmodSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-const out = new URL("../dist/cli.js", import.meta.url).pathname;
+// fileURLToPath, not the URL pathname: that is "/D:/..." on Windows (#77).
+const out = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 await build({
-  entryPoints: [new URL("../src/cli.ts", import.meta.url).pathname],
+  entryPoints: [fileURLToPath(new URL("../src/cli.ts", import.meta.url))],
   outfile: out,
   bundle: true,
   platform: "node",
