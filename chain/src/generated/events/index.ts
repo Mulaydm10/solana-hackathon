@@ -7,3 +7,4 @@
  */
 
 export * from "./dealEvent";
+export * from "./spendEvent";

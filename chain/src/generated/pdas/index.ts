@@ -6,9 +6,13 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./authPolicy";
 export * from "./deal";
 export * from "./link";
 export * from "./listing";
+export * from "./mandate";
+export * from "./mission";
+export * from "./missionAuth";
 export * from "./policy";
 export * from "./repPair";
 export * from "./sellerRep";

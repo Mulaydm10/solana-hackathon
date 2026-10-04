@@ -108,6 +108,940 @@
       "args": []
     },
     {
+      "name": "add_mandate",
+      "docs": [
+        "Buyer gives one agent a mandate. Allowed only before the first stage is approved; the",
+        "running digest of all mandates is what the buyer's first approval signs (Batas: the",
+        "mandate set is the terms)."
+      ],
+      "discriminator": [
+        210,
+        99,
+        23,
+        117,
+        100,
+        49,
+        198,
+        66
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "mission"
+          ]
+        },
+        {
+          "name": "mission",
+          "writable": true
+        },
+        {
+          "name": "mandate",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  110,
+                  100,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission"
+              },
+              {
+                "kind": "arg",
+                "path": "p.agent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "p",
+          "type": {
+            "defined": {
+              "name": "MandateParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "agent_challenge",
+      "docs": [
+        "An agent with a live mandate challenges a mission deal. The bond leaves the mission vault,",
+        "so it counts against every cap like any other spend."
+      ],
+      "discriminator": [
+        203,
+        145,
+        116,
+        94,
+        13,
+        246,
+        138,
+        47
+      ],
+      "accounts": [
+        {
+          "name": "agent",
+          "signer": true,
+          "relations": [
+            "mandate"
+          ]
+        },
+        {
+          "name": "mission",
+          "writable": true,
+          "relations": [
+            "mandate"
+          ]
+        },
+        {
+          "name": "mandate",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  110,
+                  100,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission"
+              },
+              {
+                "kind": "account",
+                "path": "agent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mission_auth",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deal",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "mission"
+          ]
+        },
+        {
+          "name": "deal_vault",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "mission_auth"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "deal_program",
+          "address": "CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "agent_open_deal",
+      "docs": [
+        "An agent buys under escrow: the program opens a normal deal with the mission's authority",
+        "as buyer (re-entering `create_deal`, so every deal rule applies), after counting the",
+        "amount against every cap and checking the seller is an allowed payee."
+      ],
+      "discriminator": [
+        82,
+        193,
+        156,
+        116,
+        204,
+        9,
+        235,
+        79
+      ],
+      "accounts": [
+        {
+          "name": "agent",
+          "signer": true,
+          "relations": [
+            "mandate"
+          ]
+        },
+        {
+          "name": "mission",
+          "writable": true,
+          "relations": [
+            "mandate"
+          ]
+        },
+        {
+          "name": "mandate",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  110,
+                  100,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission"
+              },
+              {
+                "kind": "account",
+                "path": "agent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mission_auth",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission"
+              }
+            ]
+          }
+        },
+        {
+          "name": "seller"
+        },
+        {
+          "name": "auth_policy",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "mission"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "mission_auth"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "deal",
+          "writable": true
+        },
+        {
+          "name": "deal_vault",
+          "writable": true
+        },
+        {
+          "name": "seller_rep",
+          "writable": true
+        },
+        {
+          "name": "rep_pair",
+          "writable": true
+        },
+        {
+          "name": "listing",
+          "optional": true
+        },
+        {
+          "name": "link",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "deal_program",
+          "address": "CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV"
+        }
+      ],
+      "args": [
+        {
+          "name": "deal_id",
+          "type": "u64"
+        },
+        {
+          "name": "p",
+          "type": {
+            "defined": {
+              "name": "DealParams"
+            }
+          }
+        },
+        {
+          "name": "receipt_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "agent_release",
+      "docs": [
+        "An agent with a live mandate releases a mission deal (re-entering `release` as the",
+        "mission's authority). Moves nothing out of the mission vault, so no cap is charged."
+      ],
+      "discriminator": [
+        142,
+        243,
+        249,
+        32,
+        118,
+        188,
+        42,
+        155
+      ],
+      "accounts": [
+        {
+          "name": "agent",
+          "signer": true,
+          "relations": [
+            "mandate"
+          ]
+        },
+        {
+          "name": "mission",
+          "relations": [
+            "mandate"
+          ]
+        },
+        {
+          "name": "mandate",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  110,
+                  100,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission"
+              },
+              {
+                "kind": "account",
+                "path": "agent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mission_auth",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deal",
+          "writable": true
+        },
+        {
+          "name": "auth_policy",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "mission"
+          ]
+        },
+        {
+          "name": "deal_vault",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "mission_auth"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "seller_token",
+          "writable": true
+        },
+        {
+          "name": "seller_rep",
+          "writable": true
+        },
+        {
+          "name": "rep_pair",
+          "writable": true
+        },
+        {
+          "name": "link"
+        },
+        {
+          "name": "listing",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "deal_program",
+          "address": "CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV"
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_delivery_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "agent_spend",
+      "docs": [
+        "An agent pays an allowed payee straight from the mission vault, within every cap.",
+        "`receipt_hash` commits to the off-chain context that justified the payment (LedgerMind)."
+      ],
+      "discriminator": [
+        23,
+        170,
+        137,
+        159,
+        219,
+        53,
+        9,
+        61
+      ],
+      "accounts": [
+        {
+          "name": "agent",
+          "signer": true,
+          "relations": [
+            "mandate"
+          ]
+        },
+        {
+          "name": "mission",
+          "writable": true,
+          "relations": [
+            "mandate"
+          ]
+        },
+        {
+          "name": "mandate",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  110,
+                  100,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission"
+              },
+              {
+                "kind": "account",
+                "path": "agent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mission_auth",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "mission"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "mission_auth"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "payee_token",
+          "writable": true
+        },
+        {
+          "name": "listing",
+          "docs": [
+            "Required when the mandate has no payee list: the payee must be this listing's seller."
+          ],
+          "optional": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "receipt_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "approve_stage",
+      "docs": [
+        "The human gate. No agent spends in a stage until the buyer approves its plan hash (plus",
+        "the policy approver when the stage cap is above the threshold). The first approval also",
+        "names the mandate digest it saw and locks the mandate set."
+      ],
+      "discriminator": [
+        157,
+        71,
+        79,
+        106,
+        104,
+        156,
+        167,
+        157
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "signer": true,
+          "relations": [
+            "mission"
+          ]
+        },
+        {
+          "name": "approver",
+          "signer": true,
+          "optional": true
+        },
+        {
+          "name": "policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mission",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "stage",
+          "type": "u8"
+        },
+        {
+          "name": "plan_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "mandates_digest",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "attest_listing",
       "docs": [
         "The listing's assessor attests the report it produced for exactly the listed content."
@@ -724,6 +1658,169 @@
       "args": []
     },
     {
+      "name": "close_mission",
+      "docs": [
+        "Buyer at any time, anyone after expiry: returns what is in the mission vault (and the",
+        "authority's unused SOL) to the buyer and credits the unspent budget back to the policy.",
+        "Callable again later to sweep refunds from the mission's deals."
+      ],
+      "discriminator": [
+        210,
+        206,
+        244,
+        221,
+        106,
+        88,
+        181,
+        235
+      ],
+      "accounts": [
+        {
+          "name": "actor",
+          "signer": true
+        },
+        {
+          "name": "mission",
+          "writable": true
+        },
+        {
+          "name": "buyer",
+          "writable": true,
+          "relations": [
+            "mission"
+          ]
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission.buyer",
+                "account": "Mission"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mission_auth",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "mission"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "mission_auth"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "buyer_token",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "create_deal",
       "docs": [
         "Buyer opens a deal and moves the order amount into the vault. Policy is checked first."
@@ -1049,6 +2146,238 @@
           "type": {
             "defined": {
               "name": "ListingParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "create_mission",
+      "docs": [
+        "Buyer funds a mission: the budget moves into a vault owned by the mission's authority PDA,",
+        "charged to the buyer's policy like a deal (period budget, approver above the threshold).",
+        "The authority also gets its own policy so deals opened for the mission obey the buyer's",
+        "seller allowlist and max price. `rent_lamports` pays rent for those deals."
+      ],
+      "discriminator": [
+        15,
+        28,
+        105,
+        135,
+        65,
+        62,
+        188,
+        255
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "policy"
+          ]
+        },
+        {
+          "name": "approver",
+          "docs": [
+            "Required only when the budget is above the policy's approval threshold."
+          ],
+          "signer": true,
+          "optional": true
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "buyer_token",
+          "writable": true
+        },
+        {
+          "name": "mission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              },
+              {
+                "kind": "arg",
+                "path": "mission_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mission_auth",
+          "docs": [
+            "The mission's authority: owns the vault, is the buyer of record of agents' deals."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auth_policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mission_auth"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "mission_auth"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "mission_id",
+          "type": "u64"
+        },
+        {
+          "name": "p",
+          "type": {
+            "defined": {
+              "name": "MissionParams"
             }
           }
         }
@@ -1790,6 +3119,43 @@
       ]
     },
     {
+      "name": "revoke_mandate",
+      "docs": [
+        "Buyer revokes one agent in one transaction: its next spend, deal or release is refused,",
+        "and its runner sees the flag and stops (PLAN §6.2)."
+      ],
+      "discriminator": [
+        252,
+        97,
+        140,
+        119,
+        67,
+        43,
+        177,
+        108
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "signer": true,
+          "relations": [
+            "mission"
+          ]
+        },
+        {
+          "name": "mission",
+          "relations": [
+            "mandate"
+          ]
+        },
+        {
+          "name": "mandate",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "submit_delivery",
       "docs": [
         "Seller records the delivery hash and invoices. The invoice must match the order amount",
@@ -2227,6 +3593,32 @@
       ]
     },
     {
+      "name": "Mandate",
+      "discriminator": [
+        113,
+        216,
+        98,
+        159,
+        185,
+        63,
+        55,
+        18
+      ]
+    },
+    {
+      "name": "Mission",
+      "discriminator": [
+        170,
+        56,
+        116,
+        75,
+        24,
+        11,
+        109,
+        12
+      ]
+    },
+    {
       "name": "RepPair",
       "discriminator": [
         18,
@@ -2265,6 +3657,19 @@
         236,
         203,
         71
+      ]
+    },
+    {
+      "name": "SpendEvent",
+      "discriminator": [
+        53,
+        88,
+        173,
+        183,
+        74,
+        205,
+        27,
+        182
       ]
     }
   ],
@@ -2453,6 +3858,86 @@
       "code": 6036,
       "name": "NotListedContent",
       "msg": "Delivery is not the listed content"
+    },
+    {
+      "code": 6037,
+      "name": "BadMission",
+      "msg": "Invalid mission parameters"
+    },
+    {
+      "code": 6038,
+      "name": "BadMandate",
+      "msg": "Invalid mandate parameters"
+    },
+    {
+      "code": 6039,
+      "name": "MissionClosed",
+      "msg": "Mission is closed"
+    },
+    {
+      "code": 6040,
+      "name": "MissionExpired",
+      "msg": "Mission has expired"
+    },
+    {
+      "code": 6041,
+      "name": "MandatesLocked",
+      "msg": "Mandates can no longer change once the first stage is approved"
+    },
+    {
+      "code": 6042,
+      "name": "MandatesChanged",
+      "msg": "The mandate set is not the one the approval names"
+    },
+    {
+      "code": 6043,
+      "name": "BadStage",
+      "msg": "Stage cannot be approved now"
+    },
+    {
+      "code": 6044,
+      "name": "StageNotApproved",
+      "msg": "The current stage has not been approved by the buyer"
+    },
+    {
+      "code": 6045,
+      "name": "MandateRevoked",
+      "msg": "Mandate has been revoked"
+    },
+    {
+      "code": 6046,
+      "name": "MandateExpired",
+      "msg": "Mandate has expired"
+    },
+    {
+      "code": 6047,
+      "name": "OverPerTxCap",
+      "msg": "Amount is above the mandate's per-payment cap"
+    },
+    {
+      "code": 6048,
+      "name": "OverMandateCap",
+      "msg": "Amount would exceed the mandate's cap"
+    },
+    {
+      "code": 6049,
+      "name": "OverStageCap",
+      "msg": "Amount would exceed the stage's cap"
+    },
+    {
+      "code": 6050,
+      "name": "OverMissionBudget",
+      "msg": "Amount would exceed the mission budget"
+    },
+    {
+      "code": 6051,
+      "name": "PayeeNotAllowed",
+      "msg": "Payee is not allowed by the mandate"
+    },
+    {
+      "code": 6052,
+      "name": "NotThisStage",
+      "msg": "This agent does not work in the current stage"
     }
   ],
   "types": [
@@ -2997,6 +4482,268 @@
       }
     },
     {
+      "name": "Mandate",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mission",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "docs": [
+              "The agent's own key (its wallet, holding SOL for fees only)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "role_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "cap",
+            "type": "u64"
+          },
+          {
+            "name": "per_tx_cap",
+            "type": "u64"
+          },
+          {
+            "name": "spent",
+            "type": "u64"
+          },
+          {
+            "name": "payees",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "stage_mask",
+            "type": "u8"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          },
+          {
+            "name": "revoked",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MandateParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "role_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "cap",
+            "type": "u64"
+          },
+          {
+            "name": "per_tx_cap",
+            "type": "u64"
+          },
+          {
+            "name": "payees",
+            "docs": [
+              "Token-account owners this agent may pay; empty = only sellers of attested listings."
+            ],
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "stage_mask",
+            "docs": [
+              "Bit i set = this agent may spend in stage i (the blueprint's stages[].roles)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Mission",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "mission_id",
+            "type": "u64"
+          },
+          {
+            "name": "team_listing",
+            "type": "pubkey"
+          },
+          {
+            "name": "terms_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "budget",
+            "type": "u64"
+          },
+          {
+            "name": "spent",
+            "docs": [
+              "Everything that ever left the mission vault through an agent (spends, deals, bonds).",
+              "Refunds coming back never reduce it: caps limit outflow."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "mandate_caps",
+            "type": "u64"
+          },
+          {
+            "name": "mandate_count",
+            "type": "u32"
+          },
+          {
+            "name": "mandates_digest",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "mandates_locked",
+            "type": "bool"
+          },
+          {
+            "name": "stages",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Stage"
+                }
+              }
+            }
+          },
+          {
+            "name": "current_stage",
+            "type": "u8"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "closed",
+            "type": "bool"
+          },
+          {
+            "name": "auth_bump",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MissionParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "budget",
+            "type": "u64"
+          },
+          {
+            "name": "terms_hash",
+            "docs": [
+              "Hash of the canonical mission terms (core `missionTerms`), recorded for audit."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "team_listing",
+            "docs": [
+              "The team listing hired (default = none)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "stage_caps",
+            "docs": [
+              "One cap per stage, in order (1..=8)."
+            ],
+            "type": {
+              "vec": "u64"
+            }
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          },
+          {
+            "name": "rent_lamports",
+            "docs": [
+              "SOL moved to the mission authority to pay rent for the deals agents open."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "PolicyParams",
       "type": {
         "kind": "struct",
@@ -3132,6 +4879,71 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SpendEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mission",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "payee",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "receipt_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Stage",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "cap",
+            "type": "u64"
+          },
+          {
+            "name": "spent",
+            "type": "u64"
+          },
+          {
+            "name": "plan_hash",
+            "docs": [
+              "The plan the human approved for this stage; zero until approved."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "approved_at",
+            "type": "i64"
           }
         ]
       }

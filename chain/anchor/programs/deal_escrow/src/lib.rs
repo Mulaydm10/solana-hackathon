@@ -23,9 +23,18 @@
 //!   report hash. Changing the content clears the attestation. A deal opened from a Data listing
 //!   must be delivered with exactly the listed content hash (checked through its DealLink).
 //!
+//! - Missions and agent mandates (PLAN §2.3; LedgerMind payment intents, Batas mandates, Cordon's
+//!   shared budget): a buyer funds a mission budget, gives each team agent a mandate (caps, payee
+//!   list, expiry, revocable in one transaction) and approves every stage's plan before any agent
+//!   can spend in it. Agents never hold tokens: every token they move goes through `agent_spend`
+//!   or through an escrow deal the program opens for the mission (`agent_open_deal`), and every
+//!   such movement counts against every cap.
+//!
 //! Tokens leave the vault only in `settle`, after every check, and only to the deal's own buyer and
 //! seller token accounts; a refused instruction moves nothing.
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::{instruction::Instruction, program::invoke_signed};
+use anchor_lang::{InstructionData, ToAccountMetas};
 use anchor_spl::{
     associated_token::AssociatedToken,
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
@@ -38,6 +47,11 @@ pub const POLICY_SEED: &[u8] = b"policy";
 pub const REP_SEED: &[u8] = b"rep";
 pub const LISTING_SEED: &[u8] = b"listing";
 pub const LINK_SEED: &[u8] = b"link";
+pub const MISSION_SEED: &[u8] = b"mission";
+pub const MISSION_AUTH_SEED: &[u8] = b"mission_auth";
+pub const MANDATE_SEED: &[u8] = b"mandate";
+pub const MAX_STAGES: usize = 8;
+pub const MAX_PAYEES: usize = 8;
 pub const MAX_WINDOW_SECS: i64 = 30 * 86_400;
 pub const MIN_RESOLVE_SECS: i64 = 60;
 pub const MAX_TOLERANCE_BPS: u16 = 2_000;
@@ -404,6 +418,420 @@ pub mod deal_escrow {
         let to_buyer = total_held(d)?;
         settle(ctx.accounts, &ctx.bumps, 0, to_buyer, DealStatus::Refunded, true)
     }
+
+    /// Buyer funds a mission: the budget moves into a vault owned by the mission's authority PDA,
+    /// charged to the buyer's policy like a deal (period budget, approver above the threshold).
+    /// The authority also gets its own policy so deals opened for the mission obey the buyer's
+    /// seller allowlist and max price. `rent_lamports` pays rent for those deals.
+    pub fn create_mission(ctx: Context<CreateMission>, mission_id: u64, p: MissionParams) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        require!(p.budget > 0, DealError::ZeroAmount);
+        require!(p.expires_at > now && p.expires_at - now <= MAX_WINDOW_SECS, DealError::BadMission);
+        require!(!p.stage_caps.is_empty() && p.stage_caps.len() <= MAX_STAGES, DealError::BadMission);
+        for c in &p.stage_caps {
+            require!(*c > 0 && *c <= p.budget, DealError::BadMission);
+        }
+        let policy = &mut ctx.accounts.policy;
+        require_keys_eq!(policy.mint, ctx.accounts.mint.key(), DealError::PolicyMintMismatch);
+        if now >= policy.period_start.saturating_add(policy.period_secs) {
+            policy.period_start = now;
+            policy.period_spent = 0;
+        }
+        let spent = policy.period_spent.checked_add(p.budget).ok_or(DealError::MathOverflow)?;
+        require!(spent <= policy.period_budget, DealError::OverPeriodBudget);
+        if p.budget > policy.approval_threshold {
+            let approver = ctx.accounts.approver.as_ref().ok_or(DealError::ApprovalRequired)?;
+            require!(policy.approver != Pubkey::default(), DealError::ApprovalRequired);
+            require_keys_eq!(approver.key(), policy.approver, DealError::ApprovalRequired);
+        }
+        policy.period_spent = spent;
+
+        let auth = ctx.accounts.mission_auth.key();
+        ctx.accounts.auth_policy.set_inner(BuyerPolicy {
+            buyer: auth,
+            mint: ctx.accounts.mint.key(),
+            period_secs: 366 * 86_400,
+            period_start: now,
+            period_budget: p.budget,
+            period_spent: 0,
+            max_price: policy.max_price.min(p.budget),
+            // Human gates are the stage approvals; there is no co-signer for agent deals.
+            approval_threshold: u64::MAX,
+            approver: Pubkey::default(),
+            allow_any_seller: policy.allow_any_seller,
+            allowed_sellers: policy.allowed_sellers.clone(),
+            bump: ctx.bumps.auth_policy,
+        });
+        ctx.accounts.mission.set_inner(Mission {
+            buyer: ctx.accounts.buyer.key(),
+            mint: ctx.accounts.mint.key(),
+            mission_id,
+            team_listing: p.team_listing,
+            terms_hash: p.terms_hash,
+            budget: p.budget,
+            spent: 0,
+            mandate_caps: 0,
+            mandate_count: 0,
+            mandates_digest: [0; 32],
+            mandates_locked: false,
+            stages: p.stage_caps.iter().map(|c| Stage { cap: *c, spent: 0, plan_hash: [0; 32], approved_at: 0 }).collect(),
+            current_stage: 0,
+            expires_at: p.expires_at,
+            created_at: now,
+            closed: false,
+            auth_bump: ctx.bumps.mission_auth,
+            bump: ctx.bumps.mission,
+        });
+        move_in(&ctx.accounts.buyer_token, &ctx.accounts.vault, &ctx.accounts.mint, &ctx.accounts.buyer, &ctx.accounts.token_program, p.budget)?;
+        if p.rent_lamports > 0 {
+            anchor_lang::system_program::transfer(
+                CpiContext::new(
+                    ctx.accounts.system_program.key(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.buyer.to_account_info(),
+                        to: ctx.accounts.mission_auth.to_account_info(),
+                    },
+                ),
+                p.rent_lamports,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Buyer gives one agent a mandate. Allowed only before the first stage is approved; the
+    /// running digest of all mandates is what the buyer's first approval signs (Batas: the
+    /// mandate set is the terms).
+    pub fn add_mandate(ctx: Context<AddMandate>, p: MandateParams) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let m = &mut ctx.accounts.mission;
+        require!(!m.closed, DealError::MissionClosed);
+        require!(!m.mandates_locked, DealError::MandatesLocked);
+        require!(p.agent != Pubkey::default() && p.agent != m.buyer, DealError::BadMandate);
+        require!(p.cap > 0 && p.per_tx_cap > 0 && p.per_tx_cap <= p.cap, DealError::BadMandate);
+        require!(p.payees.len() <= MAX_PAYEES, DealError::BadMandate);
+        // Every stage the agent may spend in must exist.
+        require!(p.stage_mask != 0 && (p.stage_mask as u32) < (1u32 << m.stages.len()), DealError::BadMandate);
+        require!(p.expires_at > now && p.expires_at <= m.expires_at, DealError::BadMandate);
+        let caps = m.mandate_caps.checked_add(p.cap).ok_or(DealError::MathOverflow)?;
+        require!(caps <= m.budget, DealError::OverMissionBudget);
+        m.mandate_caps = caps;
+        m.mandate_count = m.mandate_count.checked_add(1).ok_or(DealError::MathOverflow)?;
+        m.mandates_digest = mandate_digest(&m.mandates_digest, &p);
+        ctx.accounts.mandate.set_inner(Mandate {
+            mission: m.key(),
+            agent: p.agent,
+            role_hash: p.role_hash,
+            cap: p.cap,
+            per_tx_cap: p.per_tx_cap,
+            spent: 0,
+            payees: p.payees,
+            stage_mask: p.stage_mask,
+            expires_at: p.expires_at,
+            revoked: false,
+            bump: ctx.bumps.mandate,
+        });
+        Ok(())
+    }
+
+    /// The human gate. No agent spends in a stage until the buyer approves its plan hash (plus
+    /// the policy approver when the stage cap is above the threshold). The first approval also
+    /// names the mandate digest it saw and locks the mandate set.
+    pub fn approve_stage(ctx: Context<ApproveStage>, stage: u8, plan_hash: [u8; 32], mandates_digest: [u8; 32]) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let m = &mut ctx.accounts.mission;
+        require!(!m.closed, DealError::MissionClosed);
+        require!(now < m.expires_at, DealError::MissionExpired);
+        require!(plan_hash != [0; 32], DealError::BadStage);
+        require!(mandates_digest == m.mandates_digest, DealError::MandatesChanged);
+        let s = stage as usize;
+        require!(s < m.stages.len(), DealError::BadStage);
+        if !m.mandates_locked {
+            require!(s == 0, DealError::BadStage);
+            m.mandates_locked = true;
+        } else {
+            let cur = m.current_stage as usize;
+            require!(m.stages[cur].approved_at != 0 && s == cur + 1, DealError::BadStage);
+        }
+        if m.stages[s].cap > ctx.accounts.policy.approval_threshold {
+            let approver = ctx.accounts.approver.as_ref().ok_or(DealError::ApprovalRequired)?;
+            require!(ctx.accounts.policy.approver != Pubkey::default(), DealError::ApprovalRequired);
+            require_keys_eq!(approver.key(), ctx.accounts.policy.approver, DealError::ApprovalRequired);
+        }
+        m.stages[s].plan_hash = plan_hash;
+        m.stages[s].approved_at = now;
+        m.current_stage = stage;
+        Ok(())
+    }
+
+    /// An agent pays an allowed payee straight from the mission vault, within every cap.
+    /// `receipt_hash` commits to the off-chain context that justified the payment (LedgerMind).
+    pub fn agent_spend(ctx: Context<AgentSpend>, amount: u64, receipt_hash: [u8; 32]) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let payee = ctx.accounts.payee_token.owner;
+        payee_allowed(&ctx.accounts.mandate, payee, ctx.accounts.listing.as_deref().map(|l| &**l), ctx.accounts.mint.key())?;
+        check_spend(&mut ctx.accounts.mission, &mut ctx.accounts.mandate, amount, now)?;
+        let mission_key = ctx.accounts.mission.key();
+        let seeds: &[&[u8]] = &[MISSION_AUTH_SEED, mission_key.as_ref(), &[ctx.accounts.mission.auth_bump]];
+        transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                TransferChecked {
+                    from: ctx.accounts.vault.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.payee_token.to_account_info(),
+                    authority: ctx.accounts.mission_auth.to_account_info(),
+                },
+                &[seeds],
+            ),
+            amount,
+            ctx.accounts.mint.decimals,
+        )?;
+        emit!(SpendEvent { mission: mission_key, agent: ctx.accounts.agent.key(), payee, amount, receipt_hash });
+        Ok(())
+    }
+
+    /// An agent buys under escrow: the program opens a normal deal with the mission's authority
+    /// as buyer (re-entering `create_deal`, so every deal rule applies), after counting the
+    /// amount against every cap and checking the seller is an allowed payee.
+    pub fn agent_open_deal(ctx: Context<AgentOpenDeal>, deal_id: u64, p: DealParams, receipt_hash: [u8; 32]) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let seller = ctx.accounts.seller.key();
+        payee_allowed(&ctx.accounts.mandate, seller, ctx.accounts.listing.as_deref().map(|l| &**l), ctx.accounts.mint.key())?;
+        check_spend(&mut ctx.accounts.mission, &mut ctx.accounts.mandate, p.amount, now)?;
+        let a = &ctx.accounts;
+        let metas = crate::accounts::CreateDeal {
+            buyer: a.mission_auth.key(),
+            seller,
+            approver: None,
+            policy: a.auth_policy.key(),
+            mint: a.mint.key(),
+            buyer_token: a.vault.key(),
+            deal: a.deal.key(),
+            seller_rep: a.seller_rep.key(),
+            rep_pair: a.rep_pair.key(),
+            listing: a.listing.as_ref().map(|l| l.key()),
+            link: a.link.as_ref().map(|l| l.key()),
+            vault: a.deal_vault.key(),
+            token_program: a.token_program.key(),
+            associated_token_program: a.associated_token_program.key(),
+            system_program: a.system_program.key(),
+        }
+        .to_account_metas(None);
+        let mut infos = vec![
+            a.mission_auth.to_account_info(), a.seller.to_account_info(), a.auth_policy.to_account_info(),
+            a.mint.to_account_info(), a.vault.to_account_info(), a.deal.to_account_info(), a.seller_rep.to_account_info(),
+            a.rep_pair.to_account_info(), a.deal_vault.to_account_info(), a.token_program.to_account_info(),
+            a.associated_token_program.to_account_info(), a.system_program.to_account_info(), a.deal_program.to_account_info(),
+        ];
+        if let Some(l) = &a.listing { infos.push(l.to_account_info()); }
+        if let Some(l) = &a.link { infos.push(l.to_account_info()); }
+        let ix = Instruction { program_id: crate::ID, accounts: metas, data: crate::instruction::CreateDeal { deal_id, p: p.clone() }.data() };
+        let mission_key = a.mission.key();
+        invoke_signed(&ix, &infos, &[&[MISSION_AUTH_SEED, mission_key.as_ref(), &[a.mission.auth_bump]]])?;
+        emit!(SpendEvent { mission: mission_key, agent: a.agent.key(), payee: seller, amount: p.amount, receipt_hash });
+        Ok(())
+    }
+
+    /// An agent with a live mandate releases a mission deal (re-entering `release` as the
+    /// mission's authority). Moves nothing out of the mission vault, so no cap is charged.
+    pub fn agent_release(ctx: Context<AgentSettle>, expected_delivery_hash: [u8; 32]) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        mandate_live(&ctx.accounts.mission, &ctx.accounts.mandate, now)?;
+        let a = &ctx.accounts;
+        let data = crate::instruction::Release { expected_delivery_hash }.data();
+        invoke_settle(a, data)
+    }
+
+    /// An agent with a live mandate challenges a mission deal. The bond leaves the mission vault,
+    /// so it counts against every cap like any other spend.
+    pub fn agent_challenge(ctx: Context<AgentChallenge>) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let deal = read_deal(&ctx.accounts.deal)?;
+        require_keys_eq!(deal.buyer, ctx.accounts.mission_auth.key(), DealError::Unauthorized);
+        let bond = bps_of(deal.amount, deal.bond_bps)?;
+        if bond > 0 {
+            check_spend(&mut ctx.accounts.mission, &mut ctx.accounts.mandate, bond, now)?;
+        } else {
+            mandate_live(&ctx.accounts.mission, &ctx.accounts.mandate, now)?;
+        }
+        let a = &ctx.accounts;
+        let metas = crate::accounts::Challenge {
+            buyer: a.mission_auth.key(),
+            deal: a.deal.key(),
+            mint: a.mint.key(),
+            vault: a.deal_vault.key(),
+            buyer_token: a.vault.key(),
+            token_program: a.token_program.key(),
+        }
+        .to_account_metas(None);
+        let infos = vec![
+            a.mission_auth.to_account_info(), a.deal.to_account_info(), a.mint.to_account_info(), a.deal_vault.to_account_info(),
+            a.vault.to_account_info(), a.token_program.to_account_info(), a.deal_program.to_account_info(),
+        ];
+        let ix = Instruction { program_id: crate::ID, accounts: metas, data: crate::instruction::Challenge {}.data() };
+        let mission_key = a.mission.key();
+        invoke_signed(&ix, &infos, &[&[MISSION_AUTH_SEED, mission_key.as_ref(), &[a.mission.auth_bump]]])?;
+        Ok(())
+    }
+
+    /// Buyer revokes one agent in one transaction: its next spend, deal or release is refused,
+    /// and its runner sees the flag and stops (PLAN §6.2).
+    pub fn revoke_mandate(ctx: Context<RevokeMandate>) -> Result<()> {
+        ctx.accounts.mandate.revoked = true;
+        Ok(())
+    }
+
+    /// Buyer at any time, anyone after expiry: returns what is in the mission vault (and the
+    /// authority's unused SOL) to the buyer and credits the unspent budget back to the policy.
+    /// Callable again later to sweep refunds from the mission's deals.
+    pub fn close_mission(ctx: Context<CloseMission>) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let m = &ctx.accounts.mission;
+        require!(ctx.accounts.actor.key() == m.buyer || now >= m.expires_at, DealError::Unauthorized);
+        let mission_key = m.key();
+        let bump = m.auth_bump;
+        let seeds: &[&[u8]] = &[MISSION_AUTH_SEED, mission_key.as_ref(), &[bump]];
+        let amount = ctx.accounts.vault.amount;
+        if amount > 0 {
+            transfer_checked(
+                CpiContext::new_with_signer(
+                    ctx.accounts.token_program.key(),
+                    TransferChecked {
+                        from: ctx.accounts.vault.to_account_info(),
+                        mint: ctx.accounts.mint.to_account_info(),
+                        to: ctx.accounts.buyer_token.to_account_info(),
+                        authority: ctx.accounts.mission_auth.to_account_info(),
+                    },
+                    &[seeds],
+                ),
+                amount,
+                ctx.accounts.mint.decimals,
+            )?;
+        }
+        let lamports = ctx.accounts.mission_auth.lamports();
+        if lamports > 0 {
+            anchor_lang::system_program::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.system_program.key(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.mission_auth.to_account_info(),
+                        to: ctx.accounts.buyer.to_account_info(),
+                    },
+                    &[seeds],
+                ),
+                lamports,
+            )?;
+        }
+        let m = &mut ctx.accounts.mission;
+        if !m.closed {
+            if m.created_at >= ctx.accounts.policy.period_start {
+                let unspent = m.budget - m.spent;
+                ctx.accounts.policy.period_spent = ctx.accounts.policy.period_spent.saturating_sub(unspent);
+            }
+            m.closed = true;
+        }
+        Ok(())
+    }
+}
+
+/// Every check an agent's token movement must pass, then the counters it moves. Order: mission,
+/// mandate, stage gate, then each cap from the smallest scope outwards.
+fn check_spend(m: &mut Mission, d: &mut Mandate, amount: u64, now: i64) -> Result<()> {
+    mandate_live(m, d, now)?;
+    require!(amount > 0, DealError::ZeroAmount);
+    require!(amount <= d.per_tx_cap, DealError::OverPerTxCap);
+    let mandate_spent = d.spent.checked_add(amount).ok_or(DealError::MathOverflow)?;
+    require!(mandate_spent <= d.cap, DealError::OverMandateCap);
+    let cur = m.current_stage as usize;
+    let stage_spent = m.stages[cur].spent.checked_add(amount).ok_or(DealError::MathOverflow)?;
+    require!(stage_spent <= m.stages[cur].cap, DealError::OverStageCap);
+    let mission_spent = m.spent.checked_add(amount).ok_or(DealError::MathOverflow)?;
+    require!(mission_spent <= m.budget, DealError::OverMissionBudget);
+    d.spent = mandate_spent;
+    m.stages[cur].spent = stage_spent;
+    m.spent = mission_spent;
+    Ok(())
+}
+
+/// Mission open, mandate neither revoked nor expired, current stage approved by the human.
+fn mandate_live(m: &Mission, d: &Mandate, now: i64) -> Result<()> {
+    require!(!m.closed, DealError::MissionClosed);
+    require!(now < m.expires_at, DealError::MissionExpired);
+    require!(!d.revoked, DealError::MandateRevoked);
+    require!(now < d.expires_at, DealError::MandateExpired);
+    require!(m.mandates_locked && m.stages[m.current_stage as usize].approved_at != 0, DealError::StageNotApproved);
+    require!(d.stage_mask & (1u8 << m.current_stage) != 0, DealError::NotThisStage);
+    Ok(())
+}
+
+/// Only listed payees; with no list, only the seller of an active, attested listing in this mint
+/// (the payee's token-account owner must be that seller; checked by the caller via `payee`).
+fn payee_allowed(d: &Mandate, payee: Pubkey, listing: Option<&Listing>, mint: Pubkey) -> Result<()> {
+    if !d.payees.is_empty() {
+        require!(d.payees.contains(&payee), DealError::PayeeNotAllowed);
+        return Ok(());
+    }
+    let l = listing.ok_or(DealError::PayeeNotAllowed)?;
+    require!(l.active && l.assessed_at != 0, DealError::PayeeNotAllowed);
+    require_keys_eq!(l.seller, payee, DealError::PayeeNotAllowed);
+    require_keys_eq!(l.mint, mint, DealError::PayeeNotAllowed);
+    Ok(())
+}
+
+/// Running digest over every mandate added to a mission, in order.
+fn mandate_digest(prev: &[u8; 32], p: &MandateParams) -> [u8; 32] {
+    let mut parts: Vec<&[u8]> = vec![prev, p.agent.as_ref(), &p.role_hash];
+    let cap = p.cap.to_le_bytes();
+    let per_tx = p.per_tx_cap.to_le_bytes();
+    let exp = p.expires_at.to_le_bytes();
+    let mask = [p.stage_mask];
+    parts.push(&mask);
+    parts.push(&cap);
+    parts.push(&per_tx);
+    parts.push(&exp);
+    for payee in &p.payees {
+        parts.push(payee.as_ref());
+    }
+    solana_sha256_hasher::hashv(&parts).to_bytes()
+}
+
+fn read_deal(info: &UncheckedAccount) -> Result<Deal> {
+    require_keys_eq!(*info.owner, crate::ID, DealError::Unauthorized);
+    let data = info.try_borrow_data()?;
+    Ok(Deal::try_deserialize(&mut &data[..])?)
+}
+
+/// Re-enters one of the payout instructions as the mission's authority.
+fn invoke_settle(a: &AgentSettle, data: Vec<u8>) -> Result<()> {
+    let deal = read_deal(&a.deal)?;
+    require_keys_eq!(deal.buyer, a.mission_auth.key(), DealError::Unauthorized);
+    let metas = crate::accounts::Settle {
+        actor: a.mission_auth.key(),
+        deal: a.deal.key(),
+        policy: a.auth_policy.key(),
+        mint: a.mint.key(),
+        vault: a.deal_vault.key(),
+        buyer_token: a.vault.key(),
+        seller_token: a.seller_token.key(),
+        seller_rep: a.seller_rep.key(),
+        rep_pair: a.rep_pair.key(),
+        link: a.link.key(),
+        listing: a.listing.as_ref().map(|l| l.key()),
+        token_program: a.token_program.key(),
+        system_program: a.system_program.key(),
+    }
+    .to_account_metas(None);
+    let mut infos = vec![
+        a.mission_auth.to_account_info(), a.deal.to_account_info(), a.auth_policy.to_account_info(), a.mint.to_account_info(),
+        a.deal_vault.to_account_info(), a.vault.to_account_info(), a.seller_token.to_account_info(), a.seller_rep.to_account_info(),
+        a.rep_pair.to_account_info(), a.link.to_account_info(), a.token_program.to_account_info(), a.system_program.to_account_info(),
+        a.deal_program.to_account_info(),
+    ];
+    if let Some(l) = &a.listing { infos.push(l.to_account_info()); }
+    let ix = Instruction { program_id: crate::ID, accounts: metas, data };
+    let mission_key = a.mission.key();
+    invoke_signed(&ix, &infos, &[&[MISSION_AUTH_SEED, mission_key.as_ref(), &[a.mission.auth_bump]]])?;
+    Ok(())
 }
 
 /// Everything the vault holds for this deal.
@@ -720,6 +1148,95 @@ pub struct DealLink {
     pub bump: u8,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct MissionParams {
+    pub budget: u64,
+    /// Hash of the canonical mission terms (core `missionTerms`), recorded for audit.
+    pub terms_hash: [u8; 32],
+    /// The team listing hired (default = none).
+    pub team_listing: Pubkey,
+    /// One cap per stage, in order (1..=8).
+    pub stage_caps: Vec<u64>,
+    pub expires_at: i64,
+    /// SOL moved to the mission authority to pay rent for the deals agents open.
+    pub rent_lamports: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct MandateParams {
+    pub agent: Pubkey,
+    pub role_hash: [u8; 32],
+    pub cap: u64,
+    pub per_tx_cap: u64,
+    /// Token-account owners this agent may pay; empty = only sellers of attested listings.
+    pub payees: Vec<Pubkey>,
+    /// Bit i set = this agent may spend in stage i (the blueprint's stages[].roles).
+    pub stage_mask: u8,
+    pub expires_at: i64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace)]
+pub struct Stage {
+    pub cap: u64,
+    pub spent: u64,
+    /// The plan the human approved for this stage; zero until approved.
+    pub plan_hash: [u8; 32],
+    pub approved_at: i64,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct Mission {
+    pub buyer: Pubkey,
+    pub mint: Pubkey,
+    pub mission_id: u64,
+    pub team_listing: Pubkey,
+    pub terms_hash: [u8; 32],
+    pub budget: u64,
+    /// Everything that ever left the mission vault through an agent (spends, deals, bonds).
+    /// Refunds coming back never reduce it: caps limit outflow.
+    pub spent: u64,
+    pub mandate_caps: u64,
+    pub mandate_count: u32,
+    pub mandates_digest: [u8; 32],
+    pub mandates_locked: bool,
+    #[max_len(8)]
+    pub stages: Vec<Stage>,
+    pub current_stage: u8,
+    pub expires_at: i64,
+    pub created_at: i64,
+    pub closed: bool,
+    pub auth_bump: u8,
+    pub bump: u8,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct Mandate {
+    pub mission: Pubkey,
+    /// The agent's own key (its wallet, holding SOL for fees only).
+    pub agent: Pubkey,
+    pub role_hash: [u8; 32],
+    pub cap: u64,
+    pub per_tx_cap: u64,
+    pub spent: u64,
+    #[max_len(8)]
+    pub payees: Vec<Pubkey>,
+    pub stage_mask: u8,
+    pub expires_at: i64,
+    pub revoked: bool,
+    pub bump: u8,
+}
+
+#[event]
+pub struct SpendEvent {
+    pub mission: Pubkey,
+    pub agent: Pubkey,
+    pub payee: Pubkey,
+    pub amount: u64,
+    pub receipt_hash: [u8; 32],
+}
+
 /// A seller's track record in one token, written only by `settle`.
 #[account]
 #[derive(InitSpace)]
@@ -905,6 +1422,207 @@ pub struct CloseListing<'info> {
     pub listing: Box<Account<'info, Listing>>,
 }
 
+#[derive(Accounts)]
+#[instruction(mission_id: u64)]
+pub struct CreateMission<'info> {
+    #[account(mut)]
+    pub buyer: Signer<'info>,
+    /// Required only when the budget is above the policy's approval threshold.
+    pub approver: Option<Signer<'info>>,
+    #[account(mut, has_one = buyer @ DealError::Unauthorized, seeds = [POLICY_SEED, buyer.key().as_ref()], bump = policy.bump)]
+    pub policy: Box<Account<'info, BuyerPolicy>>,
+    #[account(mint::token_program = token_program)]
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mut, token::mint = mint, token::authority = buyer, token::token_program = token_program)]
+    pub buyer_token: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(init, payer = buyer, space = 8 + Mission::INIT_SPACE, seeds = [MISSION_SEED, buyer.key().as_ref(), &mission_id.to_le_bytes()], bump)]
+    pub mission: Box<Account<'info, Mission>>,
+    /// The mission's authority: owns the vault, is the buyer of record of agents' deals.
+    #[account(mut, seeds = [MISSION_AUTH_SEED, mission.key().as_ref()], bump)]
+    pub mission_auth: SystemAccount<'info>,
+    #[account(init, payer = buyer, space = 8 + BuyerPolicy::INIT_SPACE, seeds = [POLICY_SEED, mission_auth.key().as_ref()], bump)]
+    pub auth_policy: Box<Account<'info, BuyerPolicy>>,
+    #[account(init, payer = buyer, associated_token::mint = mint, associated_token::authority = mission_auth, associated_token::token_program = token_program)]
+    pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(p: MandateParams)]
+pub struct AddMandate<'info> {
+    #[account(mut)]
+    pub buyer: Signer<'info>,
+    #[account(mut, has_one = buyer @ DealError::Unauthorized)]
+    pub mission: Box<Account<'info, Mission>>,
+    #[account(init, payer = buyer, space = 8 + Mandate::INIT_SPACE, seeds = [MANDATE_SEED, mission.key().as_ref(), p.agent.as_ref()], bump)]
+    pub mandate: Box<Account<'info, Mandate>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ApproveStage<'info> {
+    pub buyer: Signer<'info>,
+    pub approver: Option<Signer<'info>>,
+    #[account(seeds = [POLICY_SEED, buyer.key().as_ref()], bump = policy.bump)]
+    pub policy: Box<Account<'info, BuyerPolicy>>,
+    #[account(mut, has_one = buyer @ DealError::Unauthorized)]
+    pub mission: Box<Account<'info, Mission>>,
+}
+
+#[derive(Accounts)]
+pub struct AgentSpend<'info> {
+    pub agent: Signer<'info>,
+    #[account(mut, has_one = mint)]
+    pub mission: Box<Account<'info, Mission>>,
+    #[account(mut, has_one = agent @ DealError::Unauthorized, has_one = mission @ DealError::Unauthorized, seeds = [MANDATE_SEED, mission.key().as_ref(), agent.key().as_ref()], bump = mandate.bump)]
+    pub mandate: Box<Account<'info, Mandate>>,
+    /// CHECK: PDA signer for the vault; seeds checked.
+    #[account(seeds = [MISSION_AUTH_SEED, mission.key().as_ref()], bump = mission.auth_bump)]
+    pub mission_auth: UncheckedAccount<'info>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mut, associated_token::mint = mint, associated_token::authority = mission_auth, associated_token::token_program = token_program)]
+    pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(mut, token::mint = mint, token::token_program = token_program)]
+    pub payee_token: Box<InterfaceAccount<'info, TokenAccount>>,
+    /// Required when the mandate has no payee list: the payee must be this listing's seller.
+    pub listing: Option<Box<Account<'info, Listing>>>,
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct AgentOpenDeal<'info> {
+    pub agent: Signer<'info>,
+    #[account(mut, has_one = mint)]
+    pub mission: Box<Account<'info, Mission>>,
+    #[account(mut, has_one = agent @ DealError::Unauthorized, has_one = mission @ DealError::Unauthorized, seeds = [MANDATE_SEED, mission.key().as_ref(), agent.key().as_ref()], bump = mandate.bump)]
+    pub mandate: Box<Account<'info, Mandate>>,
+    #[account(mut, seeds = [MISSION_AUTH_SEED, mission.key().as_ref()], bump = mission.auth_bump)]
+    pub mission_auth: SystemAccount<'info>,
+    /// CHECK: checked by create_deal (and here against the mandate's payees or the listing).
+    pub seller: UncheckedAccount<'info>,
+    /// CHECK: the authority's policy; checked by create_deal.
+    #[account(mut)]
+    pub auth_policy: UncheckedAccount<'info>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mut, associated_token::mint = mint, associated_token::authority = mission_auth, associated_token::token_program = token_program)]
+    pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    /// CHECK: created by create_deal.
+    #[account(mut)]
+    pub deal: UncheckedAccount<'info>,
+    /// CHECK: created by create_deal.
+    #[account(mut)]
+    pub deal_vault: UncheckedAccount<'info>,
+    /// CHECK: checked by create_deal.
+    #[account(mut)]
+    pub seller_rep: UncheckedAccount<'info>,
+    /// CHECK: checked by create_deal.
+    #[account(mut)]
+    pub rep_pair: UncheckedAccount<'info>,
+    pub listing: Option<Box<Account<'info, Listing>>>,
+    /// CHECK: created by create_deal when a listing is given.
+    #[account(mut)]
+    pub link: Option<UncheckedAccount<'info>>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+    pub deal_program: Program<'info, crate::program::DealEscrow>,
+}
+
+#[derive(Accounts)]
+pub struct AgentSettle<'info> {
+    pub agent: Signer<'info>,
+    #[account(has_one = mint)]
+    pub mission: Box<Account<'info, Mission>>,
+    #[account(has_one = agent @ DealError::Unauthorized, has_one = mission @ DealError::Unauthorized, seeds = [MANDATE_SEED, mission.key().as_ref(), agent.key().as_ref()], bump = mandate.bump)]
+    pub mandate: Box<Account<'info, Mandate>>,
+    #[account(mut, seeds = [MISSION_AUTH_SEED, mission.key().as_ref()], bump = mission.auth_bump)]
+    pub mission_auth: SystemAccount<'info>,
+    /// CHECK: a deal whose buyer is this mission's authority (read_deal + release checks).
+    #[account(mut)]
+    pub deal: UncheckedAccount<'info>,
+    /// CHECK: checked by release.
+    #[account(mut)]
+    pub auth_policy: UncheckedAccount<'info>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
+    /// CHECK: checked by release.
+    #[account(mut)]
+    pub deal_vault: UncheckedAccount<'info>,
+    #[account(mut, associated_token::mint = mint, associated_token::authority = mission_auth, associated_token::token_program = token_program)]
+    pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    /// CHECK: checked by release.
+    #[account(mut)]
+    pub seller_token: UncheckedAccount<'info>,
+    /// CHECK: checked by release.
+    #[account(mut)]
+    pub seller_rep: UncheckedAccount<'info>,
+    /// CHECK: checked by release.
+    #[account(mut)]
+    pub rep_pair: UncheckedAccount<'info>,
+    /// CHECK: checked by release.
+    pub link: UncheckedAccount<'info>,
+    /// CHECK: checked by release.
+    #[account(mut)]
+    pub listing: Option<UncheckedAccount<'info>>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub system_program: Program<'info, System>,
+    pub deal_program: Program<'info, crate::program::DealEscrow>,
+}
+
+#[derive(Accounts)]
+pub struct AgentChallenge<'info> {
+    pub agent: Signer<'info>,
+    #[account(mut, has_one = mint)]
+    pub mission: Box<Account<'info, Mission>>,
+    #[account(mut, has_one = agent @ DealError::Unauthorized, has_one = mission @ DealError::Unauthorized, seeds = [MANDATE_SEED, mission.key().as_ref(), agent.key().as_ref()], bump = mandate.bump)]
+    pub mandate: Box<Account<'info, Mandate>>,
+    /// CHECK: PDA signer; seeds checked.
+    #[account(seeds = [MISSION_AUTH_SEED, mission.key().as_ref()], bump = mission.auth_bump)]
+    pub mission_auth: UncheckedAccount<'info>,
+    /// CHECK: a deal whose buyer is this mission's authority (checked in the handler).
+    #[account(mut)]
+    pub deal: UncheckedAccount<'info>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
+    /// CHECK: checked by challenge.
+    #[account(mut)]
+    pub deal_vault: UncheckedAccount<'info>,
+    #[account(mut, associated_token::mint = mint, associated_token::authority = mission_auth, associated_token::token_program = token_program)]
+    pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub deal_program: Program<'info, crate::program::DealEscrow>,
+}
+
+#[derive(Accounts)]
+pub struct RevokeMandate<'info> {
+    pub buyer: Signer<'info>,
+    #[account(has_one = buyer @ DealError::Unauthorized)]
+    pub mission: Box<Account<'info, Mission>>,
+    #[account(mut, has_one = mission @ DealError::Unauthorized)]
+    pub mandate: Box<Account<'info, Mandate>>,
+}
+
+#[derive(Accounts)]
+pub struct CloseMission<'info> {
+    pub actor: Signer<'info>,
+    #[account(mut, has_one = mint, has_one = buyer)]
+    pub mission: Box<Account<'info, Mission>>,
+    /// CHECK: receives the authority's unused SOL; must be the mission's buyer (has_one).
+    #[account(mut)]
+    pub buyer: UncheckedAccount<'info>,
+    #[account(mut, seeds = [POLICY_SEED, mission.buyer.as_ref()], bump = policy.bump)]
+    pub policy: Box<Account<'info, BuyerPolicy>>,
+    #[account(mut, seeds = [MISSION_AUTH_SEED, mission.key().as_ref()], bump = mission.auth_bump)]
+    pub mission_auth: SystemAccount<'info>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mut, associated_token::mint = mint, associated_token::authority = mission_auth, associated_token::token_program = token_program)]
+    pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(mut, token::mint = mint, token::authority = mission.buyer, token::token_program = token_program)]
+    pub buyer_token: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub system_program: Program<'info, System>,
+}
+
 /// Shared by every instruction that pays out of the vault. Payouts can only reach the deal's own
 /// buyer and seller token accounts, so the caller (`actor`) never chooses where money goes.
 #[derive(Accounts)]
@@ -1013,4 +1731,36 @@ pub enum DealError {
     ListingMismatch,
     #[msg("Delivery is not the listed content")]
     NotListedContent,
+    #[msg("Invalid mission parameters")]
+    BadMission,
+    #[msg("Invalid mandate parameters")]
+    BadMandate,
+    #[msg("Mission is closed")]
+    MissionClosed,
+    #[msg("Mission has expired")]
+    MissionExpired,
+    #[msg("Mandates can no longer change once the first stage is approved")]
+    MandatesLocked,
+    #[msg("The mandate set is not the one the approval names")]
+    MandatesChanged,
+    #[msg("Stage cannot be approved now")]
+    BadStage,
+    #[msg("The current stage has not been approved by the buyer")]
+    StageNotApproved,
+    #[msg("Mandate has been revoked")]
+    MandateRevoked,
+    #[msg("Mandate has expired")]
+    MandateExpired,
+    #[msg("Amount is above the mandate's per-payment cap")]
+    OverPerTxCap,
+    #[msg("Amount would exceed the mandate's cap")]
+    OverMandateCap,
+    #[msg("Amount would exceed the stage's cap")]
+    OverStageCap,
+    #[msg("Amount would exceed the mission budget")]
+    OverMissionBudget,
+    #[msg("Payee is not allowed by the mandate")]
+    PayeeNotAllowed,
+    #[msg("This agent does not work in the current stage")]
+    NotThisStage,
 }
