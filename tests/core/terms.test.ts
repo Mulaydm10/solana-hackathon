@@ -52,3 +52,14 @@ test("describeTerms names price, refund and review window", () => {
   assert.match(s, /refunded/);
   assert.match(s, /10 minutes/);
 });
+
+test("hash is pinned to a known vector (implementation-independent)", () => {
+  const hex = Buffer.from(termsHash({ ...base, deadline: 1_800_003_600 })).toString("hex");
+  assert.equal(hex, "c617535da90d283077d05b5cbd7d06636e47abc7c553193fe5083a7f2177e8ad");
+});
+
+test("core/src has no Node built-in imports (browser-safe)", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const dir = new URL("../../core/src/", import.meta.url);
+  for (const f of readdirSync(dir)) assert.doesNotMatch(readFileSync(new URL(f, dir), "utf8"), /from "node:/, f);
+});

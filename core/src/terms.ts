@@ -1,8 +1,9 @@
 /**
- * `core/` is pure: no network, no chain SDK, no clock, no `process.env`.
+ * `core/` is pure: no network, no chain SDK, no clock, no `process.env`, no Node built-ins, so it
+ * runs unchanged in the browser (web lane) and in a bundled npm package (mcp lane).
  * Time enters as a `now` argument (unix seconds). See `contracts/core.md`.
  */
-import { createHash } from "node:crypto";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 export type TemplateId = "pay_on_delivery";
 export const TEMPLATES: readonly TemplateId[] = ["pay_on_delivery"];
@@ -68,7 +69,7 @@ export function canonicalJson(terms: DealTerms): string {
 
 /** sha256 of the canonical terms; stored on chain at lock so the deal commits to what the buyer approved. */
 export function termsHash(terms: DealTerms): Uint8Array {
-  return new Uint8Array(createHash("sha256").update(canonicalJson(terms)).digest());
+  return sha256(new TextEncoder().encode(canonicalJson(terms)));
 }
 
 export function formatAmount(amount: bigint, decimals: number): string {
