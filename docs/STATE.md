@@ -20,10 +20,12 @@ design: Mulaydm10
 | `lane:surface` | `surface/` | HTTP API + web demo of Ask -> Find -> Terms -> Lock -> Deliver -> Settle; Claude drafts terms (refusals are normal results) | `contracts/surface.md` |
 | `lane:chain` | `chain/` | Solana program `deal_escrow` (Anchor) + TS client; tests run the compiled program in LiteSVM | `contracts/chain.md` |
 | `lane:core` | `core/` | chain-agnostic deal terms: validation, terms hash, plain-language summary; no network or chain code | `contracts/core.md` |
+| `lane:web` | `web/` | public site on Vercel: marketplace UI where buyers sign with their own wallet; server routes for drafting and the verifier | `contracts/web.md` |
+| `lane:mcp` | `mcp/` | npm package run with `npx`: MCP server giving AI agents deal tools, signing with the agent's own local key | `contracts/mcp.md` |
 <!-- bootstrap.sh appends one row per lane you pass it; design edits after that. A lane may be a nested path (`src/01_ingest`); no lane may be a prefix of another. -->
 
 ## Verify environment
-`docs/setup.sh` (design-owned; CI runs the copy on `main`; changing it needs a canary like any workflow change). Python + `requirements-dev.txt` for the canary only; TypeScript/Node per lane (`npm test --prefix <lane>`; a lane without `package.json` is skipped at install and gets one in its first PR). Workers run the same script once per worktree.
+`docs/setup.sh` (design-owned; CI runs the copy on `main`; changing it needs a canary like any workflow change). Python + `requirements-dev.txt` for the canary only; TypeScript/Node per lane (`npm test --prefix <lane>`, lanes core chain surface web mcp; a lane without `package.json` is skipped at install and gets one in its first PR). Workers run the same script once per worktree.
 <!-- change both this line and requirements-dev.txt / docs/verify.txt if the project is not Python -->
 
 ## Decisions
@@ -44,3 +46,4 @@ design: Mulaydm10
 - 2026-09-29: repo created from agent-bus-template; bootstrap run (mode=team).
 - 2026-09-29: no Devin on this repo. Design = Dhruv's Claude Code on `mac` (Mulaydm10); the only worker = vedant059. Omen is not in this project's pool. Teammate setup is plugin-free: vedant059 follows AGENTS.md via docs/TEAMMATE.md.
 - 2026-10-04: direction set to the AI procurement layer (pay-on-delivery escrow program). On Dhruv's instruction the design session also builds the first lane tasks (deviation from "design never claims lane tasks"); vedant059 reviews.
+- 2026-10-04: lanes `web` (Vercel site) and `mcp` (npx MCP package) added as infrastructure only; no product code yet. Shared code must stay browser-safe (core, chain).
