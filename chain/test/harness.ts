@@ -15,7 +15,6 @@ import {
 import {
   DEAL_ESCROW_PROGRAM_ADDRESS,
   PROGRAM_ERRORS,
-  PROGRAM_SO,
   dealAddress,
   fetchDeal,
   fetchMaybeDeal,
@@ -34,6 +33,7 @@ import {
   policyAddress,
   type PolicyParamsArgs,
 } from "../src/index.ts";
+import { PROGRAM_SO } from "../src/node.ts";
 
 export const USDC = 1_000_000n;
 export const HOUR = 3600n;
