@@ -1,0 +1,16 @@
+{
+  "name": "@deal/core",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "node --import tsx --test ../tests/core/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
