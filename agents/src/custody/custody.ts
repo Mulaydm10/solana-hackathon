@@ -10,7 +10,8 @@
  *   openFor(buyerSecret, sealedKey, ciphertext, expectedContentHash?)
  *                                    -> the data, or Refused: TAMPERED (wrong buyer, tampered key or data)
  *                                       or CONTENT_MISMATCH (decrypts, but sha256 is not the on-chain hash)
- *   createCustody({ isFunded })      -> releaseKey(...) refuses until the deal is Funded on chain
+ *   createCustody({ readDeal })      -> releaseKey(...) only for a funded deal of this buyer, opened from this
+ *                                       listing (all three read from chain, none taken from the request)
  *
  * The wrapped key is bound (as AES-GCM associated data) to the buyer's key and the content hash, so it cannot
  * be replayed for another buyer or for other data.
@@ -108,19 +109,32 @@ export function openFor(buyerSecret: Uint8Array, sealedKey: Uint8Array, cipherte
   }
 }
 
-/** What the chain says about a deal right now (read through @deal/chain in production, #66). */
-export type IsFunded = (deal: string) => Promise<boolean>;
+/** What the chain says about a deal right now: `getDeal` plus its `DealLink` through @deal/chain (#66). */
+export type DealFacts = {
+  /** On-chain status name (chain STATUS_NAMES). */
+  status: string;
+  buyer: string;
+  /** The listing from the deal's DealLink; null for a deal not opened from a listing. */
+  listing: string | null;
+};
+export type ReadDeal = (deal: string) => Promise<DealFacts | null>;
+
+/** The money is in escrow and the deal has not been unwound: Funded and every later state that pays the seller. */
+export const KEY_RELEASE_STATUSES: readonly string[] = ["Funded", "Delivered", "Challenged", "Released", "Claimed", "VerifiedPass"];
 
 export type KeyRelease = { listing: string; deal: string; buyer: string };
 
 export type Custody = {
   /** Encrypts a listing's data; the key stays here, the ciphertext and hash are returned for storage. */
   store(listing: string, data: Uint8Array): { ciphertext: Uint8Array; contentHash: Uint8Array };
-  /** The key sealed to the deal's buyer, only once the deal is Funded on chain. */
+  /**
+   * The key sealed to the deal's buyer, only when the chain says this deal is funded, belongs to this buyer,
+   * and was opened from this listing. Nothing in the request is trusted on its own word.
+   */
   releaseKey(r: KeyRelease): Promise<Ok<{ sealedKey: Uint8Array }> | Refused>;
 };
 
-export function createCustody(o: { isFunded: IsFunded }): Custody {
+export function createCustody(o: { readDeal: ReadDeal }): Custody {
   const keys = new Map<string, { key: Uint8Array; contentHash: Uint8Array }>();
   return {
     store(listing, data) {
@@ -131,8 +145,14 @@ export function createCustody(o: { isFunded: IsFunded }): Custody {
     async releaseKey(r) {
       const k = keys.get(r.listing);
       if (!k) return refuse("NO_KEY", "no stored data for this listing");
-      const funded = await o.isFunded(r.deal).catch(() => false);
-      if (!funded) return refuse("NOT_FUNDED", "the deal is not funded on chain; the key is released only after the escrow holds the money");
+      // A failed chain read counts as "no such deal".
+      const facts = await o.readDeal(r.deal).catch(() => null);
+      if (!facts) return refuse("NO_DEAL", "the chain shows no such deal");
+      if (!KEY_RELEASE_STATUSES.includes(facts.status)) {
+        return refuse("NOT_FUNDED", `the deal is ${facts.status}; the key is released only while the escrow holds the money`);
+      }
+      if (facts.buyer !== r.buyer) return refuse("WRONG_BUYER", "the key is sealed only to the deal's own buyer");
+      if (facts.listing !== r.listing) return refuse("WRONG_LISTING", "this deal was not opened from this listing");
       try {
         return { ok: true, sealedKey: sealKeyTo(r.buyer, k.key, k.contentHash) };
       } catch {

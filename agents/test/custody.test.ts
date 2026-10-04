@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { ed25519, x25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { base58Encode } from "@deal/core";
-import { createCustody, openFor, sampleForAssessment, seal, sealKeyTo } from "../src/index.ts";
+import { createCustody, KEY_RELEASE_STATUSES, openFor, sampleForAssessment, seal, sealKeyTo, type DealFacts } from "../src/index.ts";
 
 const wallet = () => {
   const seed = new Uint8Array(randomBytes(32));
@@ -79,24 +79,65 @@ test("the ed25519 -> x25519 conversion matches noble's reference on both sides",
   assert.deepEqual(fromPub, fromSecret);
 });
 
-test("the key is never released before the deal is Funded on chain", async () => {
-  const funded = new Set<string>();
-  const checks: string[] = [];
-  const custody = createCustody({ isFunded: async (d) => (checks.push(d), funded.has(d)) });
+function chainWith(deals: Record<string, DealFacts>) {
+  const reads: string[] = [];
+  return { reads, readDeal: async (d: string) => (reads.push(d), deals[d] ?? null) };
+}
+
+test("the key is released only for a funded deal of this buyer, opened from this listing", async () => {
   const buyer = wallet();
+  const other = wallet();
+  const chain = chainWith({
+    D1: { status: "Funded", buyer: buyer.address, listing: "L1" },
+    OPEN: { status: "Open", buyer: buyer.address, listing: "L1" },
+    THEIRS: { status: "Funded", buyer: other.address, listing: "L1" },
+    CHEAP: { status: "Funded", buyer: buyer.address, listing: "L2" },
+    PLAIN: { status: "Funded", buyer: buyer.address, listing: null },
+  });
+  const custody = createCustody({ readDeal: chain.readDeal });
   const { ciphertext, contentHash } = custody.store("L1", DATA);
-  assert.equal(reason(await custody.releaseKey({ listing: "L1", deal: "D1", buyer: buyer.address })), "NOT_FUNDED");
-  funded.add("D1");
+  custody.store("L2", new TextEncoder().encode("a cheap listing"));
+
   const r = await custody.releaseKey({ listing: "L1", deal: "D1", buyer: buyer.address });
   assert.ok(r.ok);
   assert.deepEqual((openFor(buyer.seed, r.sealedKey, ciphertext, contentHash) as { data: Uint8Array }).data, DATA);
-  assert.deepEqual(checks, ["D1", "D1"]);
-  assert.equal(reason(await custody.releaseKey({ listing: "nope", deal: "D1", buyer: buyer.address })), "NO_KEY");
-  assert.equal(reason(await custody.releaseKey({ listing: "L1", deal: "D1", buyer: "not-a-wallet" })), "BAD_BUYER");
-  // A chain read that fails counts as not funded.
-  const flaky = createCustody({ isFunded: async () => { throw new Error("rpc down"); } });
+
+  const rel = (listing: string, deal: string, who = buyer.address) => custody.releaseKey({ listing, deal, buyer: who }).then(reason);
+  assert.equal(await rel("L1", "OPEN"), "NOT_FUNDED"); // offered, not funded
+  assert.equal(await rel("L1", "NOPE"), "NO_DEAL");
+  // Someone else's funded deal on this listing does not get the key sealed to my wallet.
+  assert.equal(await rel("L1", "THEIRS"), "WRONG_BUYER");
+  // ...and the deal's own buyer cannot ask for it sealed to a different wallet.
+  assert.equal(await rel("L1", "D1", other.address), "WRONG_BUYER");
+  // A 1-cent deal on another listing does not unlock this one.
+  assert.equal(await rel("L1", "CHEAP"), "WRONG_LISTING");
+  // A plain deal (no DealLink) unlocks nothing.
+  assert.equal(await rel("L1", "PLAIN"), "WRONG_LISTING");
+  assert.equal(await rel("nope", "D1"), "NO_KEY");
+  assert.ok(chain.reads.includes("THEIRS"));
+});
+
+test("unwound deals never release the key; later paying states do", async () => {
+  const buyer = wallet();
+  for (const status of ["Open", "Refunded", "Cancelled", "VerifiedFail", "NoVerdict", "Unknown"]) {
+    const c = createCustody(chainWith({ D: { status, buyer: buyer.address, listing: "L" } }));
+    c.store("L", DATA);
+    assert.equal(reason(await c.releaseKey({ listing: "L", deal: "D", buyer: buyer.address })), "NOT_FUNDED", status);
+  }
+  for (const status of KEY_RELEASE_STATUSES) {
+    const c = createCustody(chainWith({ D: { status, buyer: buyer.address, listing: "L" } }));
+    c.store("L", DATA);
+    assert.ok((await c.releaseKey({ listing: "L", deal: "D", buyer: buyer.address })).ok, status);
+  }
+});
+
+test("a failed chain read releases nothing; a bad wallet is refused", async () => {
+  const flaky = createCustody({ readDeal: async () => { throw new Error("rpc down"); } });
   flaky.store("L1", DATA);
-  assert.equal(reason(await flaky.releaseKey({ listing: "L1", deal: "D1", buyer: buyer.address })), "NOT_FUNDED");
+  assert.equal(reason(await flaky.releaseKey({ listing: "L1", deal: "D1", buyer: wallet().address })), "NO_DEAL");
+  const c = createCustody(chainWith({ D1: { status: "Funded", buyer: "not-a-wallet", listing: "L1" } }));
+  c.store("L1", DATA);
+  assert.equal(reason(await c.releaseKey({ listing: "L1", deal: "D1", buyer: "not-a-wallet" })), "BAD_BUYER");
 });
 
 test("sample-only assessment: the assessor gets a prefix; the full hash is what the listing commits to", () => {
