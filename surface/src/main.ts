@@ -19,6 +19,8 @@ const app = createApp({
   decimals: cfg.decimals,
   symbol: cfg.symbol,
   defaultBudgetUsdc: 50,
+  drafting: claude ? "claude" : "rules",
+  cluster: process.env.CLUSTER ?? (cfg.rpcUrl.includes("devnet") ? "devnet" : "localnet"),
 });
 const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => {

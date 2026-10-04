@@ -51,6 +51,14 @@
   pre.delivery { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font-size: 13px; max-height: 260px; overflow: auto; }
   .muted { color: var(--muted); font-size: 13px; }
   .spin::after { content: " …"; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .stat .k { color: var(--muted); font-size: 12px; } .stat .v { font-weight: 650; margin-top: 2px; overflow-wrap: anywhere; }
+  .stat .v a { color: var(--accent); }
+  ul.checks { list-style: none; padding: 0; margin: 14px 0 0; }
+  ul.checks li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  ul.checks .i { font-weight: 800; } ul.checks .pass { color: var(--ok); } ul.checks .fail { color: #d1242f; } ul.checks .run { color: var(--muted); }
+  ul.checks .d { color: var(--muted); font-size: 12.5px; } ul.checks .d a { color: var(--accent); }
   @media (max-width: 520px) { .kv { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -60,6 +68,13 @@
     <h1>Procurement Layer <span class="tag" id="cluster">devnet</span></h1>
     <p>The AI writes the terms; Solana enforces them. Describe a need, approve the deal, and a Solana program holds the money until delivery.</p>
   </header>
+
+  <section id="proof">
+    <h2>Live proof</h2>
+    <div class="grid" id="stats"><div class="stat"><div class="k">Loading</div><div class="v">…</div></div></div>
+    <div class="row"><button id="proveBtn">Run all checks on chain</button><span class="muted" id="proveNote">Runs every scenario against the real program (~1.5 min: the refund check waits for a deadline).</span></div>
+    <ul class="checks" id="checks"></ul>
+  </section>
 
   <section id="ask">
     <h2><b>1</b>Ask</h2>
@@ -217,7 +232,94 @@ setInterval(tick, 1000);
   services = await api("/api/services");
   $("cluster").textContent = cfg.cluster;
   $("sym").textContent = cfg.symbol;
+  await loadStatus();
 })();
+
+// ---- Live proof: every scenario, run for real against the program, through the same API the page uses.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function loadStatus() {
+  const st = await api("/api/status");
+  if (!st.ok) { $("stats").innerHTML = `<div class="refusal">Status unavailable: ${escapeHtml(st.message || st.reason)}</div>`; return; }
+  const ex = (a) => cfg.cluster === "devnet" ? `<a href="https://explorer.solana.com/address/${a}?cluster=devnet" target="_blank">${a.slice(0, 4)}…${a.slice(-4)}</a>` : `${a.slice(0, 4)}…${a.slice(-4)}`;
+  $("stats").innerHTML = [
+    ["Escrow program", `${st.programDeployed ? "✓ deployed" : "✗ not deployed"} · ${ex(st.program)}`],
+    ["Network", st.cluster],
+    ["Buyer wallet", `${st.buyerSol.toFixed(3)} SOL · ${fmt(st.buyerTokens)} ${cfg.symbol}`],
+    ["Sellers listed", `${st.sellers} (sign without SOL)`],
+    ["Terms drafted by", st.drafting === "claude" ? "Claude" : "rule-based parser"],
+  ].map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+}
+function check(label) {
+  const li = document.createElement("li");
+  li.innerHTML = `<span class="i run">…</span><div><div>${label}</div><div class="d"></div></div>`;
+  $("checks").append(li);
+  const links = [];
+  return {
+    link(step, r) { if (r && r.explorer) { links.push(`<a href="${r.explorer}" target="_blank">${step}</a>`); li.querySelector(".d").innerHTML = links.join(" · "); } },
+    note(t) { li.querySelector(".d").innerHTML = [...links, escapeHtml(t)].join(" · "); },
+    done(ok, why) { const i = li.querySelector(".i"); i.className = "i " + (ok ? "pass" : "fail"); i.textContent = ok ? "✓" : "✗"; if (why) this.note(why); return ok; },
+  };
+}
+async function draftAndLock(request, deadlineMins) {
+  const d = await api("/api/draft", { request });
+  if (!d.ok) return { d };
+  const terms = { ...d.terms };
+  if (deadlineMins) terms.deadline = Math.floor(Date.now() / 1000) + deadlineMins * 60;
+  const l = await api("/api/lock", { terms, budgetUsdc: d.budgetUsdc });
+  return { d, l };
+}
+$("proveBtn").onclick = () => busy($("proveBtn"), async () => {
+  $("checks").innerHTML = "";
+  let passed = 0, total = 0;
+  const run = async (label, fn) => { total++; const c = check(label); try { if (await fn(c)) passed++; } catch (e) { c.done(false, String(e)); } };
+
+  let payDeal;
+  await run("AI drafts terms from a plain-English request (service, price, deadline)", async (c) => {
+    const d = await api("/api/draft", { request: EXAMPLES[0] });
+    return c.done(d.ok && d.service.id === "translate", d.ok ? `${d.service.name}, ${fmt(d.terms.price)} ${cfg.symbol}, via ${d.source}` : d.reason);
+  });
+  await run("Lock: one transaction moves the money into the program's escrow", async (c) => {
+    const { l } = await draftAndLock(EXAMPLES[0]);
+    c.link("lock tx", l); payDeal = l.ok && l.deal;
+    const st = payDeal && (await api(`/api/deals/${payDeal}`)).onChain;
+    return c.done(st && st.status === "Funded", st ? `deal status on chain: ${st.status}, ${fmt(st.amount)} ${cfg.symbol} escrowed` : l.reason);
+  });
+  await run("Deliver: the seller records a hash of the work on chain", async (c) => {
+    const r = await api(`/api/deals/${payDeal}/deliver`, {}); c.link("deliver tx", r);
+    const st = (await api(`/api/deals/${payDeal}`)).onChain;
+    return c.done(r.ok && st.status === "Delivered", `status: ${st.status}, delivery hash ${st.deliveryHash.slice(0, 12)}…`);
+  });
+  await run("Release: the buyer accepts and the program pays the seller", async (c) => {
+    const r = await api(`/api/deals/${payDeal}/release`, {}); c.link("release tx", r);
+    const st = (await api(`/api/deals/${payDeal}`)).onChain;
+    return c.done(r.ok && st.status === "Released", `status: ${st.status}`);
+  });
+  await run("Solana refuses to pay the same deal twice", async (c) => {
+    const r = await api(`/api/deals/${payDeal}/release`, {});
+    return c.done(!r.ok && r.reason === "WrongStatus", `refused by the program: ${r.reason}`);
+  });
+  await run("Budget guard: over-budget terms are refused before any money moves", async (c) => {
+    const { l } = await draftAndLock(EXAMPLES[2]);
+    return c.done(!l.ok && l.reason === "OVER_BUDGET", `refused: ${l.reason}`);
+  });
+  let refundDeal, deadlineAt;
+  await run("Solana refuses a refund before the deadline", async (c) => {
+    const { l } = await draftAndLock(EXAMPLES[3], 1);
+    c.link("lock tx", l); refundDeal = l.deal; deadlineAt = Date.now() + 61_000;
+    const r = await api(`/api/deals/${refundDeal}/refund`, {});
+    return c.done(!r.ok && r.reason === "DeadlineNotReached", `refused by the program: ${r.reason}`);
+  });
+  await run("No delivery by the deadline: the buyer gets a full refund", async (c) => {
+    while (Date.now() < deadlineAt + 3000) { c.note(`waiting for the deadline… ${Math.ceil((deadlineAt + 3000 - Date.now()) / 1000)}s`); await sleep(1000); }
+    let r;
+    for (let i = 0; i < 10; i++) { r = await api(`/api/deals/${refundDeal}/refund`, {}); if (r.ok || r.reason !== "DeadlineNotReached") break; await sleep(3000); }
+    c.link("refund tx", r);
+    const st = (await api(`/api/deals/${refundDeal}`)).onChain;
+    return c.done(r.ok && st.status === "Refunded", `status: ${st.status}`);
+  });
+  $("proveNote").textContent = `${passed} / ${total} checks passed${passed === total ? " — everything works on chain." : "."}`;
+  await loadStatus();
+});
 </script>
 </body>
 </html>

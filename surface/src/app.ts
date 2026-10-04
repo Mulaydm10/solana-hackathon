@@ -20,6 +20,8 @@ export type AppDeps = {
   defaultBudgetUsdc: number;
   now?: () => number;
   cluster?: string;
+  /** "claude" or "rules", shown on the proof panel. */
+  drafting?: string;
 };
 
 type Record_ = { terms: DealTerms; serviceId: string; delivery?: string; log: { step: string; signature: string }[] };
@@ -54,6 +56,10 @@ export function createApp(deps: AppDeps) {
 
   app.get("/api/config", (_req, res) => {
     res.json({ buyer: deps.desk.buyer, symbol: deps.symbol, decimals: deps.decimals, cluster, defaultBudgetUsdc: deps.defaultBudgetUsdc });
+  });
+
+  app.get("/api/status", async (_req, res) => {
+    await chainCall(res, async () => ({ ...(await deps.desk.status()), drafting: deps.drafting ?? "rules", cluster }));
   });
 
   app.get("/api/services", (_req, res) => {

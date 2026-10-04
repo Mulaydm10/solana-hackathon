@@ -3,8 +3,9 @@
 import { createClient, type Address, type KeyPairSigner } from "@solana/kit";
 import { solanaRpc } from "@solana/kit-plugin-rpc";
 import { signer as signerPlugin } from "@solana/kit-plugin-signer";
-import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import { fetchMaybeToken, findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import {
+  DEAL_ESCROW_PROGRAM_ADDRESS,
   STATUS_NAMES,
   dealAddress,
   fetchMaybeDeal,
@@ -49,7 +50,18 @@ export interface Desk {
   refund(deal: Address): Promise<string>;
   claim(deal: Address): Promise<string>;
   get(deal: Address): Promise<DealView | null>;
+  /** Live proof the setup is real: program deployed, buyer balances. */
+  status(): Promise<DeskStatus>;
 }
+
+export type DeskStatus = {
+  program: Address;
+  programDeployed: boolean;
+  buyerSol: number;
+  buyerTokens: string;
+  mint: Address;
+  sellers: number;
+};
 
 const hex = (b: ArrayLike<number>) => Buffer.from(Uint8Array.from(b)).toString("hex");
 
@@ -110,6 +122,18 @@ export async function createDesk(cfg: DeskConfig): Promise<Desk> {
         address: deal, buyer: x.buyer, seller: x.seller, amount: x.amount.toString(),
         deadline: Number(x.deadline), reviewSecs: Number(x.reviewSecs), status: STATUS_NAMES[x.status],
         termsHash: hex(x.termsHash), deliveryHash: hex(x.deliveryHash), deliveredAt: Number(x.deliveredAt),
+      };
+    },
+    async status() {
+      const [program, sol, token] = await Promise.all([
+        client.rpc.getAccountInfo(DEAL_ESCROW_PROGRAM_ADDRESS, { encoding: "base64" }).send(),
+        client.rpc.getBalance(buyerSigner.address).send(),
+        fetchMaybeToken(client.rpc, await ata(buyerSigner.address)),
+      ]);
+      return {
+        program: DEAL_ESCROW_PROGRAM_ADDRESS, programDeployed: Boolean(program.value?.executable),
+        buyerSol: Number(sol.value) / 1e9, buyerTokens: token.exists ? token.data.amount.toString() : "0",
+        mint, sellers: sellers.size,
       };
     },
   };

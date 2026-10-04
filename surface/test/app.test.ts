@@ -29,6 +29,9 @@ function fakeDesk(failWith?: number) {
     async refund(deal) { fail(); calls.push({ op: "refund", arg: deal }); return "sigRefund"; },
     async claim(deal) { fail(); calls.push({ op: "claim", arg: deal }); return "sigClaim"; },
     async get() { return null; },
+    async status() {
+      return { program: "Prog" as Address, programDeployed: true, buyerSol: 1, buyerTokens: "5", mint: "Mint" as Address, sellers: 4 };
+    },
   };
   return { desk, calls };
 }
@@ -43,7 +46,7 @@ async function serve(desk: Desk) {
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const post = async (path: string, body: unknown = {}) =>
     (await fetch(base + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json() as Promise<Record<string, any>>;
-  return { post, close: () => server.close() };
+  return { post, base, close: () => server.close() };
 }
 
 test("rule parser: deadline and budget", () => {
@@ -121,6 +124,17 @@ test("program refusals come back as reason codes", async () => {
   try {
     const r = await s.post("/api/deals/Deal1111111111111111111111111111111111111/refund");
     assert.deepEqual([r.ok, r.reason], [false, "DeadlineNotReached"]);
+  } finally {
+    s.close();
+  }
+});
+
+test("status reports the live setup", async () => {
+  const { desk } = fakeDesk();
+  const s = await serve(desk);
+  try {
+    const r = await (await fetch(s.base + "/api/status")).json() as Record<string, any>;
+    assert.deepEqual([r.ok, r.programDeployed, r.sellers, r.drafting], [true, true, 4, "rules"]);
   } finally {
     s.close();
   }
