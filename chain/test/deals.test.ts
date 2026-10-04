@@ -127,3 +127,34 @@ test("safeSend: timeouts every time and never landed -> CONFIRMATION_TIMEOUT", a
   const r = await safeSend(ctxOf(f.client, { attempts: 2 }), DEAL, async () => false, async () => []);
   assert.deepEqual([r.ok, !r.ok && r.reason], [false, "CONFIRMATION_TIMEOUT"]);
 });
+
+const netError = () => Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }) });
+
+test("safeSend: a network blip after landing -> chain decides, no second send", async () => {
+  const f = fake([async () => { throw netError(); }]);
+  assert.deepEqual(await safeSend(ctxOf(f.client), DEAL, async () => true, async () => []), { ok: true, signature: "SIG_FROM_CHAIN" });
+  assert.equal(f.sends(), 1);
+});
+
+test("safeSend: 5xx / blockhash-not-found, not landed -> resend succeeds", async () => {
+  const blockhash = () => new Error("Transaction simulation failed: Blockhash not found");
+  const http503 = () => Object.assign(new Error("send failed"), { cause: { context: { causeMessage: "HTTP error (503)" } } });
+  for (const make of [blockhash, http503]) {
+    const f = fake([async () => { throw make(); }, async () => ({ context: { signature: "S2" } })]);
+    assert.deepEqual(await safeSend(ctxOf(f.client), DEAL, async () => false, async () => []), { ok: true, signature: "S2" });
+    assert.equal(f.sends(), 2);
+  }
+});
+
+test("safeSend: persistent network failure, never landed -> RPC_UNAVAILABLE", async () => {
+  const f = fake([async () => { throw netError(); }]);
+  const r = await safeSend(ctxOf(f.client, { attempts: 3 }), DEAL, async () => false, async () => []);
+  assert.deepEqual([r.ok, !r.ok && r.reason], [false, "RPC_UNAVAILABLE"]);
+});
+
+test("isTransient: program errors and plain bugs are not transient", async () => {
+  const { isTransient } = await import("../src/retry.ts");
+  assert.equal(isTransient(programError(6004)), false);
+  assert.equal(isTransient(new Error("Cannot read properties of undefined")), false);
+  assert.equal(isTransient(http429()), true);
+});

@@ -40,4 +40,4 @@ export function programErrorName(e: unknown): ProgramErrorName | undefined {
 }
 
 export * from "./deals.ts";
-export { isRateLimited } from "./retry.ts";
+export { isRateLimited, isTransient } from "./retry.ts";

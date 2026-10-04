@@ -23,7 +23,7 @@ import {
   type PolicyParamsArgs,
 } from "./generated/index.ts";
 import { dealAddress, policyAddress, programErrorName, STATUS_NAMES } from "./index.ts";
-import { isRateLimited } from "./retry.ts";
+import { isRateLimited, isTransient } from "./retry.ts";
 
 /** The parts of a Kit client the library needs. Any plugin client (RPC, LiteSVM, wallet) fits. */
 export type DealClient = {
@@ -113,6 +113,7 @@ export function toRefusal(e: unknown): Refusal {
   const name = programErrorName(e);
   if (name) return refuse(name, `Solana program refused: ${name}`);
   if (isRateLimited(e)) return refuse("RATE_LIMITED", "The RPC rate-limited this request; try again shortly.");
+  if (isTransient(e)) return refuse("RPC_UNAVAILABLE", "The RPC failed transiently; check the deal, then try again.");
   return refuse("CHAIN_ERROR", e instanceof Error ? e.message.slice(0, 300) : String(e));
 }
 
@@ -148,7 +149,9 @@ export async function safeSend(
       }
     } catch (e) {
       const timedOut = (e as { confirmTimeout?: boolean }).confirmTimeout === true;
-      const transient = timedOut || isRateLimited(e);
+      // Program errors are definitive; rate limits, network blips, 5xx and expired blockhashes are
+      // not: the transaction may have landed, so the chain decides before any resend.
+      const transient = timedOut || (programErrorName(e) === undefined && isTransient(e));
       if (transient) uncertain = true;
       if (uncertain) {
         await sleep(1_500);
@@ -158,21 +161,23 @@ export async function safeSend(
       if (attempt >= attempts) {
         return timedOut
           ? refuse("CONFIRMATION_TIMEOUT", "No confirmation and the chain does not show the action; check the deal before retrying.")
-          : refuse("RATE_LIMITED", "The RPC kept rate-limiting this request; try again shortly.");
+          : isRateLimited(e)
+            ? refuse("RATE_LIMITED", "The RPC kept rate-limiting this request; try again shortly.")
+            : refuse("RPC_UNAVAILABLE", "The RPC kept failing transiently and the chain does not show the action; try again shortly.");
       }
       await sleep(800 * 2 ** (attempt - 1));
     }
   }
 }
 
-/** Reads are idempotent: retry them on rate limits only. */
+/** Reads are idempotent: retry them on any transient failure. */
 async function readWithRetry<T>(ctx: DealContext, read: () => Promise<T>): Promise<T> {
   const sleep = ctx.sleep ?? defaultSleep;
   for (let i = 1; ; i++) {
     try {
       return await read();
     } catch (e) {
-      if (!isRateLimited(e) || i >= 6) throw e;
+      if (!isTransient(e) || i >= 6) throw e;
       await sleep(800 * 2 ** (i - 1));
     }
   }
