@@ -4,7 +4,7 @@
 import {
   appendTransactionMessageInstructions, compileTransaction, createSolanaRpc, createTransactionMessage, getBase58Decoder,
   getTransactionEncoder, pipe, setTransactionMessageFeePayer, setTransactionMessageLifetimeUsingBlockhash,
-  type Address, type Instruction,
+  type Address, type Instruction, type Signature,
 } from "@solana/kit";
 import type { Wallet, WalletAccount } from "@wallet-standard/base";
 
@@ -37,4 +37,15 @@ export async function sendWithWallet(wallet: Wallet, account: WalletAccount, rpc
   } catch (e) {
     return { ok: false, reason: "REJECTED_OR_FAILED", message: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** Waits until the cluster confirms `signature`: the server reads what it created only after that (#147). */
+export async function confirmSignature(rpcUrl: string, signature: string, timeoutMs = 60_000): Promise<"confirmed" | "failed" | "timeout"> {
+  const rpc = createSolanaRpc(rpcUrl);
+  for (const end = Date.now() + timeoutMs; Date.now() < end; await new Promise((r) => setTimeout(r, 1000))) {
+    const s = (await rpc.getSignatureStatuses([signature as Signature]).send().catch(() => null))?.value[0];
+    if (s?.err) return "failed";
+    if (s?.confirmationStatus === "confirmed" || s?.confirmationStatus === "finalized") return "confirmed";
+  }
+  return "timeout";
 }

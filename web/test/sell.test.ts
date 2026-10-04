@@ -11,7 +11,7 @@ import { createClient, generateKeyPairSigner, getAddressEncoder, getProgramDeriv
 import { litesvm } from "@solana/kit-plugin-litesvm";
 import { airdropSigner, generatedSigner } from "@solana/kit-plugin-signer";
 import { getCreateMintInstructionPlan } from "@solana-program/token";
-import { DEAL_ESCROW_PROGRAM_ADDRESS, getListing, getSetAssessorsInstructionAsync, ListingKind, type DealClient, type DealContext } from "@deal/chain";
+import { DEAL_ESCROW_PROGRAM_ADDRESS, getListing, listingAddress, getSetAssessorsInstructionAsync, ListingKind, type DealClient, type DealContext } from "@deal/chain";
 import { PROGRAM_SO } from "@deal/chain/node";
 import { metaHash, sha256Hex, type ListingMeta } from "@deal/core";
 import { acceptCustody, assessAndAttest, draftListing, type AssessDeps } from "../lib/sell.ts";
@@ -202,6 +202,23 @@ test("storage: Vercel Blob (private objects) and files behind one interface; nam
   }
   assert.ok(calls.every((o) => o.access === "private"));
   assert.ok([...objects.keys()].every((k) => k.startsWith("docs/")));
+});
+
+test("custody reads at confirmed commitment and waits for a listing that is still landing (#147)", async () => {
+  const c = await chain();
+  const d = await drafted(c);
+  const id = 4242n;
+  const listing = await listingAddress(c.seller.address, id);
+  const rpc = c.ctx.client.rpc;
+  const commitments: unknown[] = [];
+  const spy = new Proxy(rpc, {
+    get: (t, k, r) => (k === "getAccountInfo" ? (a: Address, o: { commitment?: string }) => (commitments.push(o?.commitment), t.getAccountInfo(a, o as never)) : Reflect.get(t, k, r)),
+  });
+  let landed = false;
+  const sleep = async () => { if (!landed) { landed = true; await c.list(d.listing, c.seller, id); } };
+  const r = await acceptCustody({ ...c.deps, ctx: { ...c.ctx, client: { ...c.ctx.client, rpc: spy }, sleep } }, { listing, seller: c.seller.address, data: b64(CSV) });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.ok(landed && commitments.length >= 2 && commitments.every((x) => x === "confirmed"), String(commitments));
 });
 
 test("/api/sell/* answer NOT_CONFIGURED without the assessor key and the custody master key", async () => {

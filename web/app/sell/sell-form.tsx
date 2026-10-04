@@ -5,12 +5,15 @@
 import { useState } from "react";
 import { createNoopSigner, type Address } from "@solana/kit";
 import { useWallet } from "../wallet";
-import { sendWithWallet } from "../../lib/wallet-tx";
+import { confirmSignature, sendWithWallet } from "../../lib/wallet-tx";
 import { PUBLIC_MINT, PUBLIC_RPC } from "../../lib/public-config";
 import { createListingIxs, toBase64, type DraftedListing } from "../../lib/sell-tx";
 
 type Step = { step: string; [k: string]: unknown };
 type Draft = { ok: true; steps: Step[]; meta: Record<string, unknown>; needsConfirmation: boolean; listing: DraftedListing } | { ok: false; reason: string; message: string; steps?: Step[] };
+type Source = { data?: string; service?: Record<string, unknown> };
+/** A listing that is on chain (or being confirmed) but not yet in custody / attested: retried without a new transaction. */
+type Pending = { listing: string; signature?: string; d: Extract<Draft, { ok: true }>; src: Source };
 
 const usdc = (base: string) => `${(Number(base) / 1e6).toFixed(2)} USDC`;
 const post = async (path: string, body: unknown) =>
@@ -40,8 +43,10 @@ export function SellForm() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ listing: string; grade?: string } | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [resumeAt, setResumeAt] = useState("");
 
-  async function source(): Promise<{ data?: string; service?: Record<string, unknown> }> {
+  async function source(): Promise<Source> {
     if (mode === "data") {
       if (!file) throw new Error("choose a file");
       return { data: toBase64(new Uint8Array(await file.arrayBuffer())) };
@@ -50,7 +55,7 @@ export function SellForm() {
   }
 
   async function run() {
-    setMsg(null); setDraft(null); setShown(0); setDone(null);
+    setMsg(null); setDraft(null); setShown(0); setDone(null); setPending(null);
     if (!connected) return setMsg("Connect your devnet wallet first: you are the seller.");
     setBusy(true);
     try {
@@ -87,18 +92,56 @@ export function SellForm() {
       const { listing, ixs } = await createListingIxs(createNoopSigner(connected.account.address as Address), PUBLIC_MINT as Address, listingId, d.listing);
       const sent = await sendWithWallet(connected.wallet, connected.account, PUBLIC_RPC, ixs);
       if (!sent.ok) throw new Error(sent.message);
-      const src = await source();
-      if (src.data) {
-        const c = await post("/api/sell/custody", { listing, seller: connected.account.address, data: src.data });
-        if (!c.ok) throw new Error(`custody: ${c.reason} (${c.message})`);
+      const p: Pending = { listing, signature: sent.signature, d, src: await source() };
+      setPending(p);
+      setMsg("Listing sent; waiting for the chain to confirm it…");
+      if ((await confirmSignature(PUBLIC_RPC, sent.signature)) === "failed") {
+        setPending(null);
+        throw new Error("the listing transaction failed on chain; nothing was listed");
       }
-      const a = await post("/api/sell/assess", { listing, contentHash: d.listing.contentHash, meta: d.meta, ...(src.service ? { service: src.service } : {}) });
-      if (!a.ok) throw new Error(`listed as ${listing}, but the assessor refused: ${a.reason} (${a.message})`);
-      setDone({ listing, grade: String(a.grade) });
+      await finish(p);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Custody and assessment of a listing already on chain. Never signs or creates anything. */
+  async function finish(p: Pending) {
+    if (!connected) throw new Error("Connect your devnet wallet first: you are the seller.");
+    setMsg(null);
+    if (p.src.data) {
+      const c = await post("/api/sell/custody", { listing: p.listing, seller: connected.account.address, data: p.src.data });
+      if (!c.ok) throw new Error(`listed as ${p.listing}, but custody refused: ${c.reason} (${c.message})`);
+    }
+    const a = await post("/api/sell/assess", { listing: p.listing, contentHash: p.d.listing.contentHash, meta: p.d.meta, ...(p.src.service ? { service: p.src.service } : {}) });
+    if (!a.ok) throw new Error(`listed as ${p.listing}, but the assessor refused: ${a.reason} (${a.message})`);
+    setPending(null);
+    setDone({ listing: p.listing, grade: String(a.grade) });
+  }
+
+  async function retry(p: Pending | null) {
+    if (!p) return;
+    setBusy(true);
+    try {
+      setPending(p);
+      await finish(p);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resume() {
+    if (!draft?.ok) return;
+    const listing = resumeAt.trim();
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(listing)) return setMsg("Enter the listing address you already signed.");
+    try {
+      await retry({ listing, d: draft, src: await source() });
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -135,7 +178,21 @@ export function SellForm() {
           {draft.needsConfirmation && (
             <label style={{ display: "block" }}><input type="checkbox" checked={pii} onChange={(e) => setPii(e.target.checked)} /> The assessment found personal data. I confirm I may sell it.</label>
           )}
-          <button type="button" disabled={busy} onClick={() => void sign()}>Sign the listing (wallet)</button>
+          {pending ? (
+            <p data-testid="sell-pending">
+              Listing <code>{pending.listing}</code> is signed
+              {pending.signature && <> (<a href={`https://explorer.solana.com/tx/${pending.signature}?cluster=devnet`} target="_blank" rel="noreferrer">transaction</a>)</>}.{" "}
+              <button type="button" disabled={busy} onClick={() => void retry(pending)}>Retry custody and assessment (no new transaction)</button>
+            </p>
+          ) : (
+            <>
+              <button type="button" disabled={busy} onClick={() => void sign()}>Sign the listing (wallet)</button>
+              <p>
+                Already signed this listing? <input value={resumeAt} onChange={(e) => setResumeAt(e.target.value)} placeholder="listing address" size={44} />{" "}
+                <button type="button" disabled={busy} onClick={() => void resume()}>Finish custody and assessment</button>
+              </p>
+            </>
+          )}
         </div>
       )}
       {done && <p data-testid="sell-done">Listed: <a href={`/listing/${done.listing}`}><code>{done.listing}</code></a>, attested grade {done.grade} by the marketplace assessor.</p>}

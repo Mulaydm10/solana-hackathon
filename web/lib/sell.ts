@@ -34,12 +34,33 @@ function decodeData(b64: unknown): Uint8Array | null {
 
 export type Probe = (url: string, init: RequestInit) => Promise<Response>;
 
-/** The listing at an address, or null when there is none OR the account is something else (it would not decode). */
+/**
+ * Reads at "confirmed": the RPC default is "finalized", which trails the seller's just-confirmed create_listing by
+ * ~13 s, so custody right after signing saw no listing (#147).
+ */
+function confirmedReads(ctx: DealContext): DealContext {
+  const rpc = new Proxy(ctx.client.rpc, {
+    get: (t, k, r) => (k === "getAccountInfo"
+      ? (a: Address, o: { commitment?: string } = {}) => t.getAccountInfo(a, { ...o, commitment: o.commitment ?? "confirmed" } as never)
+      : Reflect.get(t, k, r)),
+  });
+  return { ...ctx, client: { ...ctx.client, rpc } };
+}
+
+const LISTING_WAITS = 6;
+const LISTING_WAIT_MS = 1500;
+
+/**
+ * The listing at an address, or null when there is none OR the account is something else (it would not decode).
+ * A listing still landing (or a lagging RPC node) gets a few seconds before it counts as absent.
+ */
 async function listingAt(ctx: DealContext, address: Address) {
-  try {
-    return await getListing(ctx, address);
-  } catch {
-    return null;
+  const c = confirmedReads(ctx);
+  const sleep = ctx.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  for (let i = 1; ; i++) {
+    const l = await getListing(c, address).catch(() => null);
+    if (l || i >= LISTING_WAITS) return l;
+    await sleep(LISTING_WAIT_MS);
   }
 }
 
