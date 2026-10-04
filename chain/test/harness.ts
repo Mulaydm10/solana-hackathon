@@ -1,7 +1,7 @@
 // Shared LiteSVM harness: one in-process chain with the compiled program, a test mint, and the
 // parties of a deal. Tests and the attack search both drive the program only through this.
 import assert from "node:assert/strict";
-import { createClient, generateKeyPairSigner, lamports, type Address, type KeyPairSigner, type TransactionSigner } from "@solana/kit";
+import { createClient, generateKeyPairSigner, getAddressEncoder, getProgramDerivedAddress, lamports, type Address, type KeyPairSigner, type TransactionSigner } from "@solana/kit";
 import { litesvm } from "@solana/kit-plugin-litesvm";
 import { airdropSigner, generatedSigner } from "@solana/kit-plugin-signer";
 import {
@@ -35,6 +35,7 @@ import {
   getSubmitDeliveryInstructionAsync,
   getTimeoutRefundInstructionAsync,
   getUpdatePolicyInstructionAsync,
+  getSetAssessorsInstructionAsync,
   policyAddress,
   sellerRepAddress,
   repPairAddress,
@@ -43,6 +44,7 @@ import {
 import { PROGRAM_SO } from "../src/node.ts";
 
 const SYSTEM = "11111111111111111111111111111111" as Address;
+const LOADER_V3 = "BPFLoaderUpgradeab1e11111111111111111111111" as Address;
 
 export const USDC = 1_000_000n;
 export const HOUR = 3600n;
@@ -159,6 +161,7 @@ export async function setup(opts: { policy?: (s: Address, a: Address) => PolicyP
         reviewSecs: o.reviewSecs ?? 600n, resolveSecs: o.resolveSecs ?? 600n,
         toleranceBps: o.toleranceBps ?? 500, stakeRequired: o.stakeRequired ?? 1n * USDC,
         bondBps: o.bondBps ?? 1000, verifier: o.verifier ?? verifier.address, termsHash: hash(7),
+        listingContentHash: new Uint8Array(32),
       }),
     ]);
     return dealAddress(buyer.address, dealId);
@@ -205,6 +208,21 @@ export async function setup(opts: { policy?: (s: Address, a: Address) => PolicyP
     const r = await fetchMaybeRepPair(client.rpc, await repPairAddress(seller, b, mint.address));
     return r.exists ? r.data : null;
   };
+  /**
+   * Makes `buyer` this program's upgrade authority (a ProgramData account as the upgradeable loader
+   * would write it) and sets the assessor registry. LiteSVM loads the program non-upgradeable, so the
+   * account is written directly; on devnet it is the real ProgramData of the deployed program.
+   */
+  const registerAssessors = async (...assessors: Address[]) => {
+    const [programData] = await getProgramDerivedAddress({ programAddress: LOADER_V3, seeds: [getAddressEncoder().encode(DEAL_ESCROW_PROGRAM_ADDRESS)] });
+    const data = new Uint8Array(45);
+    data.set([3, 0, 0, 0], 0); // UpgradeableLoaderState::ProgramData
+    data[12] = 1; // Some(upgrade authority)
+    data.set(getAddressEncoder().encode(buyer.address), 13);
+    client.svm.setAccount({ address: programData, data, executable: false, lamports: lamports(1_000_000_000n), programAddress: LOADER_V3, space: 45n });
+    await send([await getSetAssessorsInstructionAsync({ authority: buyer, programData, assessors })]);
+    return programData;
+  };
   /** Delete an account, to recreate states from before v3 (deals opened without reputation accounts). */
   const wipe = (address: Address) =>
     client.svm.setAccount({ address, data: new Uint8Array(), executable: false, lamports: lamports(0n), programAddress: SYSTEM, space: 0n });
@@ -215,6 +233,6 @@ export async function setup(opts: { policy?: (s: Address, a: Address) => PolicyP
 
   return {
     client, buyer, seller, stranger, verifier, approver, mint, policy, ata, balance, now, warp, send, open, deal, maybeDeal,
-    vaultBalance, rep, pair, wipe, fund, ...ops,
+    vaultBalance, rep, pair, wipe, fund, registerAssessors, ...ops,
   };
 }

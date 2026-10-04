@@ -34,12 +34,17 @@ import {
   type SelfPlanAndSendFunctions,
 } from "@solana/program-client-core";
 import {
+  getAssessorRegistryCodec,
   getBuyerPolicyCodec,
   getDealCodec,
   getDealLinkCodec,
   getListingCodec,
+  getMandateCodec,
+  getMissionCodec,
   getRepPairCodec,
   getSellerRepCodec,
+  type AssessorRegistry,
+  type AssessorRegistryArgs,
   type BuyerPolicy,
   type BuyerPolicyArgs,
   type Deal,
@@ -48,6 +53,10 @@ import {
   type DealLinkArgs,
   type Listing,
   type ListingArgs,
+  type Mandate,
+  type MandateArgs,
+  type Mission,
+  type MissionArgs,
   type RepPair,
   type RepPairArgs,
   type SellerRep,
@@ -55,58 +64,96 @@ import {
 } from "../accounts";
 import {
   getAcceptInstructionAsync,
-  getAttestListingInstruction,
+  getAddMandateInstruction,
+  getAgentChallengeInstructionAsync,
+  getAgentOpenDealInstructionAsync,
+  getAgentReleaseInstructionAsync,
+  getAgentSpendInstructionAsync,
+  getApproveStageInstructionAsync,
+  getAttestListingInstructionAsync,
   getCancelInstructionAsync,
   getChallengeInstructionAsync,
   getClaimInstructionAsync,
   getCloseListingInstruction,
+  getCloseMissionInstructionAsync,
   getCreateDealInstructionAsync,
   getCreateListingInstructionAsync,
+  getCreateMissionInstructionAsync,
   getInitPolicyInstructionAsync,
   getRefundInstructionAsync,
   getReleaseInstructionAsync,
   getResolveInstructionAsync,
+  getRevokeMandateInstruction,
+  getSetAssessorsInstructionAsync,
   getSubmitDeliveryInstructionAsync,
   getTimeoutRefundInstructionAsync,
   getUpdateListingInstruction,
   getUpdatePolicyInstructionAsync,
   parseAcceptInstruction,
+  parseAddMandateInstruction,
+  parseAgentChallengeInstruction,
+  parseAgentOpenDealInstruction,
+  parseAgentReleaseInstruction,
+  parseAgentSpendInstruction,
+  parseApproveStageInstruction,
   parseAttestListingInstruction,
   parseCancelInstruction,
   parseChallengeInstruction,
   parseClaimInstruction,
   parseCloseListingInstruction,
+  parseCloseMissionInstruction,
   parseCreateDealInstruction,
   parseCreateListingInstruction,
+  parseCreateMissionInstruction,
   parseInitPolicyInstruction,
   parseRefundInstruction,
   parseReleaseInstruction,
   parseResolveInstruction,
+  parseRevokeMandateInstruction,
+  parseSetAssessorsInstruction,
   parseSubmitDeliveryInstruction,
   parseTimeoutRefundInstruction,
   parseUpdateListingInstruction,
   parseUpdatePolicyInstruction,
   type AcceptAsyncInput,
-  type AttestListingInput,
+  type AddMandateInput,
+  type AgentChallengeAsyncInput,
+  type AgentOpenDealAsyncInput,
+  type AgentReleaseAsyncInput,
+  type AgentSpendAsyncInput,
+  type ApproveStageAsyncInput,
+  type AttestListingAsyncInput,
   type CancelAsyncInput,
   type ChallengeAsyncInput,
   type ClaimAsyncInput,
   type CloseListingInput,
+  type CloseMissionAsyncInput,
   type CreateDealAsyncInput,
   type CreateListingAsyncInput,
+  type CreateMissionAsyncInput,
   type InitPolicyAsyncInput,
   type ParsedAcceptInstruction,
+  type ParsedAddMandateInstruction,
+  type ParsedAgentChallengeInstruction,
+  type ParsedAgentOpenDealInstruction,
+  type ParsedAgentReleaseInstruction,
+  type ParsedAgentSpendInstruction,
+  type ParsedApproveStageInstruction,
   type ParsedAttestListingInstruction,
   type ParsedCancelInstruction,
   type ParsedChallengeInstruction,
   type ParsedClaimInstruction,
   type ParsedCloseListingInstruction,
+  type ParsedCloseMissionInstruction,
   type ParsedCreateDealInstruction,
   type ParsedCreateListingInstruction,
+  type ParsedCreateMissionInstruction,
   type ParsedInitPolicyInstruction,
   type ParsedRefundInstruction,
   type ParsedReleaseInstruction,
   type ParsedResolveInstruction,
+  type ParsedRevokeMandateInstruction,
+  type ParsedSetAssessorsInstruction,
   type ParsedSubmitDeliveryInstruction,
   type ParsedTimeoutRefundInstruction,
   type ParsedUpdateListingInstruction,
@@ -114,16 +161,23 @@ import {
   type RefundAsyncInput,
   type ReleaseAsyncInput,
   type ResolveAsyncInput,
+  type RevokeMandateInput,
+  type SetAssessorsAsyncInput,
   type SubmitDeliveryAsyncInput,
   type TimeoutRefundAsyncInput,
   type UpdateListingInput,
   type UpdatePolicyAsyncInput,
 } from "../instructions";
 import {
+  findAuthPolicyPda,
   findDealPda,
   findLinkPda,
   findListingPda,
+  findMandatePda,
+  findMissionAuthPda,
+  findMissionPda,
   findPolicyPda,
+  findRegistryPda,
   findRepPairPda,
   findSellerRepPda,
 } from "../pdas";
@@ -132,10 +186,13 @@ export const DEAL_ESCROW_PROGRAM_ADDRESS =
   "CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV" as Address<"CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV">;
 
 export enum DealEscrowAccount {
+  AssessorRegistry,
   BuyerPolicy,
   Deal,
   DealLink,
   Listing,
+  Mandate,
+  Mission,
   RepPair,
   SellerRep,
 }
@@ -144,6 +201,17 @@ export function identifyDealEscrowAccount(
   account: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): DealEscrowAccount {
   const data = "data" in account ? account.data : account;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([123, 183, 152, 209, 212, 33, 210, 241]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowAccount.AssessorRegistry;
+  }
   if (
     containsBytes(
       data,
@@ -192,6 +260,28 @@ export function identifyDealEscrowAccount(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([113, 216, 98, 159, 185, 63, 55, 18]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowAccount.Mandate;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([170, 56, 116, 75, 24, 11, 109, 12]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowAccount.Mission;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([18, 154, 200, 198, 20, 143, 75, 57]),
       ),
       0,
@@ -218,6 +308,7 @@ export function identifyDealEscrowAccount(
 
 export enum DealEscrowEvent {
   DealEvent,
+  SpendEvent,
 }
 
 export function identifyDealEscrowEvent(
@@ -235,6 +326,17 @@ export function identifyDealEscrowEvent(
   ) {
     return DealEscrowEvent.DealEvent;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([53, 88, 173, 183, 74, 205, 27, 182]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowEvent.SpendEvent;
+  }
   throw new Error(
     "The provided event could not be identified as a dealEscrow event.",
   );
@@ -242,17 +344,27 @@ export function identifyDealEscrowEvent(
 
 export enum DealEscrowInstruction {
   Accept,
+  AddMandate,
+  AgentChallenge,
+  AgentOpenDeal,
+  AgentRelease,
+  AgentSpend,
+  ApproveStage,
   AttestListing,
   Cancel,
   Challenge,
   Claim,
   CloseListing,
+  CloseMission,
   CreateDeal,
   CreateListing,
+  CreateMission,
   InitPolicy,
   Refund,
   Release,
   Resolve,
+  RevokeMandate,
+  SetAssessors,
   SubmitDelivery,
   TimeoutRefund,
   UpdateListing,
@@ -273,6 +385,72 @@ export function identifyDealEscrowInstruction(
     )
   ) {
     return DealEscrowInstruction.Accept;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([210, 99, 23, 117, 100, 49, 198, 66]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.AddMandate;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([203, 145, 116, 94, 13, 246, 138, 47]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.AgentChallenge;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([82, 193, 156, 116, 204, 9, 235, 79]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.AgentOpenDeal;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([142, 243, 249, 32, 118, 188, 42, 155]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.AgentRelease;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([23, 170, 137, 159, 219, 53, 9, 61]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.AgentSpend;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([157, 71, 79, 106, 104, 156, 167, 157]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.ApproveStage;
   }
   if (
     containsBytes(
@@ -333,6 +511,17 @@ export function identifyDealEscrowInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([210, 206, 244, 221, 106, 88, 181, 235]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.CloseMission;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([198, 212, 144, 151, 97, 56, 149, 113]),
       ),
       0,
@@ -350,6 +539,17 @@ export function identifyDealEscrowInstruction(
     )
   ) {
     return DealEscrowInstruction.CreateListing;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([15, 28, 105, 135, 65, 62, 188, 255]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.CreateMission;
   }
   if (
     containsBytes(
@@ -394,6 +594,28 @@ export function identifyDealEscrowInstruction(
     )
   ) {
     return DealEscrowInstruction.Resolve;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([252, 97, 140, 119, 67, 43, 177, 108]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.RevokeMandate;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([120, 68, 133, 43, 98, 114, 242, 173]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.SetAssessors;
   }
   if (
     containsBytes(
@@ -452,6 +674,24 @@ export type ParsedDealEscrowInstruction<
       instructionType: DealEscrowInstruction.Accept;
     } & ParsedAcceptInstruction<TProgram>)
   | ({
+      instructionType: DealEscrowInstruction.AddMandate;
+    } & ParsedAddMandateInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.AgentChallenge;
+    } & ParsedAgentChallengeInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.AgentOpenDeal;
+    } & ParsedAgentOpenDealInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.AgentRelease;
+    } & ParsedAgentReleaseInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.AgentSpend;
+    } & ParsedAgentSpendInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.ApproveStage;
+    } & ParsedApproveStageInstruction<TProgram>)
+  | ({
       instructionType: DealEscrowInstruction.AttestListing;
     } & ParsedAttestListingInstruction<TProgram>)
   | ({
@@ -467,11 +707,17 @@ export type ParsedDealEscrowInstruction<
       instructionType: DealEscrowInstruction.CloseListing;
     } & ParsedCloseListingInstruction<TProgram>)
   | ({
+      instructionType: DealEscrowInstruction.CloseMission;
+    } & ParsedCloseMissionInstruction<TProgram>)
+  | ({
       instructionType: DealEscrowInstruction.CreateDeal;
     } & ParsedCreateDealInstruction<TProgram>)
   | ({
       instructionType: DealEscrowInstruction.CreateListing;
     } & ParsedCreateListingInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.CreateMission;
+    } & ParsedCreateMissionInstruction<TProgram>)
   | ({
       instructionType: DealEscrowInstruction.InitPolicy;
     } & ParsedInitPolicyInstruction<TProgram>)
@@ -484,6 +730,12 @@ export type ParsedDealEscrowInstruction<
   | ({
       instructionType: DealEscrowInstruction.Resolve;
     } & ParsedResolveInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.RevokeMandate;
+    } & ParsedRevokeMandateInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.SetAssessors;
+    } & ParsedSetAssessorsInstruction<TProgram>)
   | ({
       instructionType: DealEscrowInstruction.SubmitDelivery;
     } & ParsedSubmitDeliveryInstruction<TProgram>)
@@ -507,6 +759,48 @@ export function parseDealEscrowInstruction<TProgram extends string>(
       return {
         instructionType: DealEscrowInstruction.Accept,
         ...parseAcceptInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.AddMandate: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.AddMandate,
+        ...parseAddMandateInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.AgentChallenge: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.AgentChallenge,
+        ...parseAgentChallengeInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.AgentOpenDeal: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.AgentOpenDeal,
+        ...parseAgentOpenDealInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.AgentRelease: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.AgentRelease,
+        ...parseAgentReleaseInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.AgentSpend: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.AgentSpend,
+        ...parseAgentSpendInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.ApproveStage: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.ApproveStage,
+        ...parseApproveStageInstruction(instruction),
       };
     }
     case DealEscrowInstruction.AttestListing: {
@@ -544,6 +838,13 @@ export function parseDealEscrowInstruction<TProgram extends string>(
         ...parseCloseListingInstruction(instruction),
       };
     }
+    case DealEscrowInstruction.CloseMission: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.CloseMission,
+        ...parseCloseMissionInstruction(instruction),
+      };
+    }
     case DealEscrowInstruction.CreateDeal: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -556,6 +857,13 @@ export function parseDealEscrowInstruction<TProgram extends string>(
       return {
         instructionType: DealEscrowInstruction.CreateListing,
         ...parseCreateListingInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.CreateMission: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.CreateMission,
+        ...parseCreateMissionInstruction(instruction),
       };
     }
     case DealEscrowInstruction.InitPolicy: {
@@ -584,6 +892,20 @@ export function parseDealEscrowInstruction<TProgram extends string>(
       return {
         instructionType: DealEscrowInstruction.Resolve,
         ...parseResolveInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.RevokeMandate: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.RevokeMandate,
+        ...parseRevokeMandateInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.SetAssessors: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.SetAssessors,
+        ...parseSetAssessorsInstruction(instruction),
       };
     }
     case DealEscrowInstruction.SubmitDelivery: {
@@ -635,6 +957,8 @@ export type DealEscrowPlugin = {
 };
 
 export type DealEscrowPluginAccounts = {
+  assessorRegistry: ReturnType<typeof getAssessorRegistryCodec> &
+    SelfFetchFunctions<AssessorRegistryArgs, AssessorRegistry>;
   buyerPolicy: ReturnType<typeof getBuyerPolicyCodec> &
     SelfFetchFunctions<BuyerPolicyArgs, BuyerPolicy>;
   deal: ReturnType<typeof getDealCodec> & SelfFetchFunctions<DealArgs, Deal>;
@@ -642,6 +966,10 @@ export type DealEscrowPluginAccounts = {
     SelfFetchFunctions<DealLinkArgs, DealLink>;
   listing: ReturnType<typeof getListingCodec> &
     SelfFetchFunctions<ListingArgs, Listing>;
+  mandate: ReturnType<typeof getMandateCodec> &
+    SelfFetchFunctions<MandateArgs, Mandate>;
+  mission: ReturnType<typeof getMissionCodec> &
+    SelfFetchFunctions<MissionArgs, Mission>;
   repPair: ReturnType<typeof getRepPairCodec> &
     SelfFetchFunctions<RepPairArgs, RepPair>;
   sellerRep: ReturnType<typeof getSellerRepCodec> &
@@ -652,9 +980,32 @@ export type DealEscrowPluginInstructions = {
   accept: (
     input: AcceptAsyncInput,
   ) => ReturnType<typeof getAcceptInstructionAsync> & SelfPlanAndSendFunctions;
+  addMandate: (
+    input: AddMandateInput,
+  ) => ReturnType<typeof getAddMandateInstruction> & SelfPlanAndSendFunctions;
+  agentChallenge: (
+    input: AgentChallengeAsyncInput,
+  ) => ReturnType<typeof getAgentChallengeInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  agentOpenDeal: (
+    input: AgentOpenDealAsyncInput,
+  ) => ReturnType<typeof getAgentOpenDealInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  agentRelease: (
+    input: AgentReleaseAsyncInput,
+  ) => ReturnType<typeof getAgentReleaseInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  agentSpend: (
+    input: AgentSpendAsyncInput,
+  ) => ReturnType<typeof getAgentSpendInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  approveStage: (
+    input: ApproveStageAsyncInput,
+  ) => ReturnType<typeof getApproveStageInstructionAsync> &
+    SelfPlanAndSendFunctions;
   attestListing: (
-    input: AttestListingInput,
-  ) => ReturnType<typeof getAttestListingInstruction> &
+    input: AttestListingAsyncInput,
+  ) => ReturnType<typeof getAttestListingInstructionAsync> &
     SelfPlanAndSendFunctions;
   cancel: (
     input: CancelAsyncInput,
@@ -669,6 +1020,10 @@ export type DealEscrowPluginInstructions = {
   closeListing: (
     input: CloseListingInput,
   ) => ReturnType<typeof getCloseListingInstruction> & SelfPlanAndSendFunctions;
+  closeMission: (
+    input: CloseMissionAsyncInput,
+  ) => ReturnType<typeof getCloseMissionInstructionAsync> &
+    SelfPlanAndSendFunctions;
   createDeal: (
     input: CreateDealAsyncInput,
   ) => ReturnType<typeof getCreateDealInstructionAsync> &
@@ -676,6 +1031,10 @@ export type DealEscrowPluginInstructions = {
   createListing: (
     input: CreateListingAsyncInput,
   ) => ReturnType<typeof getCreateListingInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  createMission: (
+    input: CreateMissionAsyncInput,
+  ) => ReturnType<typeof getCreateMissionInstructionAsync> &
     SelfPlanAndSendFunctions;
   initPolicy: (
     input: InitPolicyAsyncInput,
@@ -690,6 +1049,14 @@ export type DealEscrowPluginInstructions = {
   resolve: (
     input: ResolveAsyncInput,
   ) => ReturnType<typeof getResolveInstructionAsync> & SelfPlanAndSendFunctions;
+  revokeMandate: (
+    input: RevokeMandateInput,
+  ) => ReturnType<typeof getRevokeMandateInstruction> &
+    SelfPlanAndSendFunctions;
+  setAssessors: (
+    input: SetAssessorsAsyncInput,
+  ) => ReturnType<typeof getSetAssessorsInstructionAsync> &
+    SelfPlanAndSendFunctions;
   submitDelivery: (
     input: SubmitDeliveryAsyncInput,
   ) => ReturnType<typeof getSubmitDeliveryInstructionAsync> &
@@ -709,12 +1076,17 @@ export type DealEscrowPluginInstructions = {
 };
 
 export type DealEscrowPluginPdas = {
-  link: typeof findLinkPda;
+  mandate: typeof findMandatePda;
+  missionAuth: typeof findMissionAuthPda;
+  registry: typeof findRegistryPda;
   policy: typeof findPolicyPda;
+  link: typeof findLinkPda;
   deal: typeof findDealPda;
   sellerRep: typeof findSellerRepPda;
   repPair: typeof findRepPairPda;
   listing: typeof findListingPda;
+  mission: typeof findMissionPda;
+  authPolicy: typeof findAuthPolicyPda;
 };
 
 export type DealEscrowPluginRequirements = ClientWithRpc<
@@ -730,10 +1102,16 @@ export function dealEscrowProgram() {
     return extendClient(client, {
       dealEscrow: <DealEscrowPlugin>{
         accounts: {
+          assessorRegistry: addSelfFetchFunctions(
+            client,
+            getAssessorRegistryCodec(),
+          ),
           buyerPolicy: addSelfFetchFunctions(client, getBuyerPolicyCodec()),
           deal: addSelfFetchFunctions(client, getDealCodec()),
           dealLink: addSelfFetchFunctions(client, getDealLinkCodec()),
           listing: addSelfFetchFunctions(client, getListingCodec()),
+          mandate: addSelfFetchFunctions(client, getMandateCodec()),
+          mission: addSelfFetchFunctions(client, getMissionCodec()),
           repPair: addSelfFetchFunctions(client, getRepPairCodec()),
           sellerRep: addSelfFetchFunctions(client, getSellerRepCodec()),
         },
@@ -743,10 +1121,40 @@ export function dealEscrowProgram() {
               client,
               getAcceptInstructionAsync(input),
             ),
+          addMandate: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAddMandateInstruction(input),
+            ),
+          agentChallenge: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAgentChallengeInstructionAsync(input),
+            ),
+          agentOpenDeal: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAgentOpenDealInstructionAsync(input),
+            ),
+          agentRelease: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAgentReleaseInstructionAsync(input),
+            ),
+          agentSpend: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAgentSpendInstructionAsync(input),
+            ),
+          approveStage: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getApproveStageInstructionAsync(input),
+            ),
           attestListing: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getAttestListingInstruction(input),
+              getAttestListingInstructionAsync(input),
             ),
           cancel: (input) =>
             addSelfPlanAndSendFunctions(
@@ -768,6 +1176,11 @@ export function dealEscrowProgram() {
               client,
               getCloseListingInstruction(input),
             ),
+          closeMission: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCloseMissionInstructionAsync(input),
+            ),
           createDeal: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -777,6 +1190,11 @@ export function dealEscrowProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getCreateListingInstructionAsync(input),
+            ),
+          createMission: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCreateMissionInstructionAsync(input),
             ),
           initPolicy: (input) =>
             addSelfPlanAndSendFunctions(
@@ -797,6 +1215,16 @@ export function dealEscrowProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getResolveInstructionAsync(input),
+            ),
+          revokeMandate: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getRevokeMandateInstruction(input),
+            ),
+          setAssessors: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSetAssessorsInstructionAsync(input),
             ),
           submitDelivery: (input) =>
             addSelfPlanAndSendFunctions(
@@ -820,12 +1248,17 @@ export function dealEscrowProgram() {
             ),
         },
         pdas: {
-          link: findLinkPda,
+          mandate: findMandatePda,
+          missionAuth: findMissionAuthPda,
+          registry: findRegistryPda,
           policy: findPolicyPda,
+          link: findLinkPda,
           deal: findDealPda,
           sellerRep: findSellerRepPda,
           repPair: findRepPairPda,
           listing: findListingPda,
+          mission: findMissionPda,
+          authPolicy: findAuthPolicyPda,
         },
         identifyAccount: identifyDealEscrowAccount,
         identifyInstruction: identifyDealEscrowInstruction,

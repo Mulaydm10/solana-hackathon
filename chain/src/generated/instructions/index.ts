@@ -7,17 +7,27 @@
  */
 
 export * from "./accept";
+export * from "./addMandate";
+export * from "./agentChallenge";
+export * from "./agentOpenDeal";
+export * from "./agentRelease";
+export * from "./agentSpend";
+export * from "./approveStage";
 export * from "./attestListing";
 export * from "./cancel";
 export * from "./challenge";
 export * from "./claim";
 export * from "./closeListing";
+export * from "./closeMission";
 export * from "./createDeal";
 export * from "./createListing";
+export * from "./createMission";
 export * from "./initPolicy";
 export * from "./refund";
 export * from "./release";
 export * from "./resolve";
+export * from "./revokeMandate";
+export * from "./setAssessors";
 export * from "./submitDelivery";
 export * from "./timeoutRefund";
 export * from "./updateListing";

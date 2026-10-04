@@ -3,7 +3,7 @@
 // This entry must stay browser/bundler-safe (web and mcp lanes): no Node built-ins, no file paths.
 // Node-only helpers (the program binary path) live in ./node.ts, exported as "@deal/chain/node".
 import type { Address } from "@solana/kit";
-import { findPolicyPda, findDealPda, findSellerRepPda, findRepPairPda } from "./generated/index.ts";
+import { findPolicyPda, findDealPda, findSellerRepPda, findRepPairPda, findRegistryPda } from "./generated/index.ts";
 import idl from "../program/deal_escrow.json" with { type: "json" };
 
 export * from "./generated/index.ts";
@@ -31,6 +31,11 @@ export async function sellerRepAddress(seller: Address, mint: Address): Promise<
 export async function repPairAddress(seller: Address, buyer: Address, mint: Address): Promise<Address> {
   const [address] = await findRepPairPda({ seller, buyer, mint });
   return address;
+}
+
+/** The assessor registry PDA (one per program). */
+export async function registryAddress(): Promise<Address> {
+  return (await findRegistryPda())[0];
 }
 
 /** Status names in on-chain order, for display (read from the IDL so they cannot drift). */

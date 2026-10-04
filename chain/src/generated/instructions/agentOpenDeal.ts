@@ -39,83 +39,90 @@ import {
   type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type WritableAccount,
-  type WritableSignerAccount,
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
   getAddressFromResolvedInstructionAccount,
-  getNonNullResolvedInstructionInput,
   type InstructionAccountInput,
   type InstructionAccountInputAddress,
   type InstructionSignerInput,
   type ResolvedInstructionAccount,
   type ResolvedInstructionAccountMeta,
 } from "@solana/program-client-core";
-import {
-  findDealPda,
-  findPolicyPda,
-  findRepPairPda,
-  findSellerRepPda,
-} from "../pdas";
+import { findMandatePda, findMissionAuthPda } from "../pdas";
 import { DEAL_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
-export const CREATE_DEAL_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
-  198, 212, 144, 151, 97, 56, 149, 113,
-]);
+export const AGENT_OPEN_DEAL_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array(
+  [82, 193, 156, 116, 204, 9, 235, 79],
+);
 
-export function getCreateDealDiscriminatorBytes(): ReadonlyUint8Array {
-  return fixEncoderSize(getBytesEncoder(), 8).encode(CREATE_DEAL_DISCRIMINATOR);
+export function getAgentOpenDealDiscriminatorBytes(): ReadonlyUint8Array {
+  return fixEncoderSize(getBytesEncoder(), 8).encode(
+    AGENT_OPEN_DEAL_DISCRIMINATOR,
+  );
 }
 
-export type CreateDealInstruction<
+export type AgentOpenDealInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
-  TAccountBuyer extends string | AccountMeta<string> = string,
+  TAccountAgent extends string | AccountMeta<string> = string,
+  TAccountMission extends string | AccountMeta<string> = string,
+  TAccountMandate extends string | AccountMeta<string> = string,
+  TAccountMissionAuth extends string | AccountMeta<string> = string,
   TAccountSeller extends string | AccountMeta<string> = string,
-  TAccountApprover extends string | AccountMeta<string> = string,
-  TAccountPolicy extends string | AccountMeta<string> = string,
+  TAccountAuthPolicy extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
-  TAccountBuyerToken extends string | AccountMeta<string> = string,
+  TAccountVault extends string | AccountMeta<string> = string,
   TAccountDeal extends string | AccountMeta<string> = string,
+  TAccountDealVault extends string | AccountMeta<string> = string,
   TAccountSellerRep extends string | AccountMeta<string> = string,
   TAccountRepPair extends string | AccountMeta<string> = string,
   TAccountListing extends string | AccountMeta<string> = string,
   TAccountLink extends string | AccountMeta<string> = string,
   TAccountRegistry extends string | AccountMeta<string> = string,
-  TAccountVault extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TAccountAssociatedTokenProgram extends string | AccountMeta<string> =
     "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
   TAccountSystemProgram extends string | AccountMeta<string> =
     "11111111111111111111111111111111",
+  TAccountDealProgram extends string | AccountMeta<string> =
+    "CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
   InstructionWithAccounts<
     [
-      TAccountBuyer extends string
-        ? WritableSignerAccount<TAccountBuyer> &
-            AccountSignerMeta<TAccountBuyer>
-        : TAccountBuyer,
+      TAccountAgent extends string
+        ? ReadonlySignerAccount<TAccountAgent> &
+            AccountSignerMeta<TAccountAgent>
+        : TAccountAgent,
+      TAccountMission extends string
+        ? WritableAccount<TAccountMission>
+        : TAccountMission,
+      TAccountMandate extends string
+        ? WritableAccount<TAccountMandate>
+        : TAccountMandate,
+      TAccountMissionAuth extends string
+        ? WritableAccount<TAccountMissionAuth>
+        : TAccountMissionAuth,
       TAccountSeller extends string
         ? ReadonlyAccount<TAccountSeller>
         : TAccountSeller,
-      TAccountApprover extends string
-        ? ReadonlySignerAccount<TAccountApprover> &
-            AccountSignerMeta<TAccountApprover>
-        : TAccountApprover,
-      TAccountPolicy extends string
-        ? WritableAccount<TAccountPolicy>
-        : TAccountPolicy,
+      TAccountAuthPolicy extends string
+        ? WritableAccount<TAccountAuthPolicy>
+        : TAccountAuthPolicy,
       TAccountMint extends string
         ? ReadonlyAccount<TAccountMint>
         : TAccountMint,
-      TAccountBuyerToken extends string
-        ? WritableAccount<TAccountBuyerToken>
-        : TAccountBuyerToken,
+      TAccountVault extends string
+        ? WritableAccount<TAccountVault>
+        : TAccountVault,
       TAccountDeal extends string
         ? WritableAccount<TAccountDeal>
         : TAccountDeal,
+      TAccountDealVault extends string
+        ? WritableAccount<TAccountDealVault>
+        : TAccountDealVault,
       TAccountSellerRep extends string
         ? WritableAccount<TAccountSellerRep>
         : TAccountSellerRep,
@@ -131,9 +138,6 @@ export type CreateDealInstruction<
       TAccountRegistry extends string
         ? ReadonlyAccount<TAccountRegistry>
         : TAccountRegistry,
-      TAccountVault extends string
-        ? WritableAccount<TAccountVault>
-        : TAccountVault,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -143,11 +147,14 @@ export type CreateDealInstruction<
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
+      TAccountDealProgram extends string
+        ? ReadonlyAccount<TAccountDealProgram>
+        : TAccountDealProgram,
       ...TRemainingAccounts,
     ]
   >;
 
-export type CreateDealInstructionData = {
+export type AgentOpenDealInstructionData = {
   discriminator: ReadonlyUint8Array;
   dealId: bigint;
   amount: bigint;
@@ -161,9 +168,10 @@ export type CreateDealInstructionData = {
   termsHash: ReadonlyUint8Array;
   /** When opening from a listing: the listing content hash the buyer saw (ignored otherwise). */
   listingContentHash: ReadonlyUint8Array;
+  receiptHash: ReadonlyUint8Array;
 };
 
-export type CreateDealInstructionDataArgs = {
+export type AgentOpenDealInstructionDataArgs = {
   dealId: number | bigint;
   amount: number | bigint;
   deadline: number | bigint;
@@ -176,9 +184,10 @@ export type CreateDealInstructionDataArgs = {
   termsHash: ReadonlyUint8Array;
   /** When opening from a listing: the listing content hash the buyer saw (ignored otherwise). */
   listingContentHash: ReadonlyUint8Array;
+  receiptHash: ReadonlyUint8Array;
 };
 
-export function getCreateDealInstructionDataEncoder(): FixedSizeEncoder<CreateDealInstructionDataArgs> {
+export function getAgentOpenDealInstructionDataEncoder(): FixedSizeEncoder<AgentOpenDealInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
@@ -193,12 +202,13 @@ export function getCreateDealInstructionDataEncoder(): FixedSizeEncoder<CreateDe
       ["verifier", getAddressEncoder()],
       ["termsHash", fixEncoderSize(getBytesEncoder(), 32)],
       ["listingContentHash", fixEncoderSize(getBytesEncoder(), 32)],
+      ["receiptHash", fixEncoderSize(getBytesEncoder(), 32)],
     ]),
-    (value) => ({ ...value, discriminator: CREATE_DEAL_DISCRIMINATOR }),
+    (value) => ({ ...value, discriminator: AGENT_OPEN_DEAL_DISCRIMINATOR }),
   );
 }
 
-export function getCreateDealInstructionDataDecoder(): FixedSizeDecoder<CreateDealInstructionData> {
+export function getAgentOpenDealInstructionDataDecoder(): FixedSizeDecoder<AgentOpenDealInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["dealId", getU64Decoder()],
@@ -212,141 +222,163 @@ export function getCreateDealInstructionDataDecoder(): FixedSizeDecoder<CreateDe
     ["verifier", getAddressDecoder()],
     ["termsHash", fixDecoderSize(getBytesDecoder(), 32)],
     ["listingContentHash", fixDecoderSize(getBytesDecoder(), 32)],
+    ["receiptHash", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 
-export function getCreateDealInstructionDataCodec(): FixedSizeCodec<
-  CreateDealInstructionDataArgs,
-  CreateDealInstructionData
+export function getAgentOpenDealInstructionDataCodec(): FixedSizeCodec<
+  AgentOpenDealInstructionDataArgs,
+  AgentOpenDealInstructionData
 > {
   return combineCodec(
-    getCreateDealInstructionDataEncoder(),
-    getCreateDealInstructionDataDecoder(),
+    getAgentOpenDealInstructionDataEncoder(),
+    getAgentOpenDealInstructionDataDecoder(),
   );
 }
 
-export type CreateDealAsyncInput<
-  TAccountBuyer extends InstructionSignerInput = InstructionSignerInput,
+export type AgentOpenDealAsyncInput<
+  TAccountAgent extends InstructionSignerInput = InstructionSignerInput,
+  TAccountMission extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMissionAuth extends InstructionAccountInput = InstructionAccountInput,
   TAccountSeller extends InstructionAccountInput = InstructionAccountInput,
-  TAccountApprover extends InstructionSignerInput = InstructionSignerInput,
-  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
+  TAccountAuthPolicy extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
-  TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
+  TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
+  TAccountDealVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput = InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
   TAccountLink extends InstructionAccountInput = InstructionAccountInput,
   TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
-  TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
   TAccountAssociatedTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput =
     InstructionAccountInput,
+  TAccountDealProgram extends InstructionAccountInput = InstructionAccountInput,
 > = {
-  buyer: TAccountBuyer;
-  /** tokens into its own token account. */
+  agent: TAccountAgent;
+  mission: TAccountMission;
+  mandate?: TAccountMandate;
+  missionAuth?: TAccountMissionAuth;
   seller: TAccountSeller;
-  /** Required only when the amount is above the policy's approval threshold. */
-  approver?: TAccountApprover;
-  policy?: TAccountPolicy;
+  authPolicy: TAccountAuthPolicy;
   mint: TAccountMint;
-  buyerToken: TAccountBuyerToken;
-  deal?: TAccountDeal;
-  sellerRep?: TAccountSellerRep;
-  repPair?: TAccountRepPair;
-  /** Present only when the deal is opened from a listing. */
+  vault?: TAccountVault;
+  deal: TAccountDeal;
+  dealVault: TAccountDealVault;
+  sellerRep: TAccountSellerRep;
+  repPair: TAccountRepPair;
   listing?: TAccountListing;
   link?: TAccountLink;
-  /** Required with a listing: its assessor must still be registered. */
   registry?: TAccountRegistry;
-  vault?: TAccountVault;
   tokenProgram?: TAccountTokenProgram;
   associatedTokenProgram?: TAccountAssociatedTokenProgram;
   systemProgram?: TAccountSystemProgram;
-  dealId: CreateDealInstructionDataArgs["dealId"];
-  amount: CreateDealInstructionDataArgs["amount"];
-  deadline: CreateDealInstructionDataArgs["deadline"];
-  reviewSecs: CreateDealInstructionDataArgs["reviewSecs"];
-  resolveSecs: CreateDealInstructionDataArgs["resolveSecs"];
-  toleranceBps: CreateDealInstructionDataArgs["toleranceBps"];
-  stakeRequired: CreateDealInstructionDataArgs["stakeRequired"];
-  bondBps: CreateDealInstructionDataArgs["bondBps"];
-  verifier: CreateDealInstructionDataArgs["verifier"];
-  termsHash: CreateDealInstructionDataArgs["termsHash"];
-  listingContentHash: CreateDealInstructionDataArgs["listingContentHash"];
+  dealProgram?: TAccountDealProgram;
+  dealId: AgentOpenDealInstructionDataArgs["dealId"];
+  amount: AgentOpenDealInstructionDataArgs["amount"];
+  deadline: AgentOpenDealInstructionDataArgs["deadline"];
+  reviewSecs: AgentOpenDealInstructionDataArgs["reviewSecs"];
+  resolveSecs: AgentOpenDealInstructionDataArgs["resolveSecs"];
+  toleranceBps: AgentOpenDealInstructionDataArgs["toleranceBps"];
+  stakeRequired: AgentOpenDealInstructionDataArgs["stakeRequired"];
+  bondBps: AgentOpenDealInstructionDataArgs["bondBps"];
+  verifier: AgentOpenDealInstructionDataArgs["verifier"];
+  termsHash: AgentOpenDealInstructionDataArgs["termsHash"];
+  listingContentHash: AgentOpenDealInstructionDataArgs["listingContentHash"];
+  receiptHash: AgentOpenDealInstructionDataArgs["receiptHash"];
 };
 
-export async function getCreateDealInstructionAsync<
-  TAccountBuyer extends InstructionSignerInput,
+export async function getAgentOpenDealInstructionAsync<
+  TAccountAgent extends InstructionSignerInput,
+  TAccountMission extends InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput,
+  TAccountMissionAuth extends InstructionAccountInput,
   TAccountSeller extends InstructionAccountInput,
-  TAccountApprover extends InstructionSignerInput,
-  TAccountPolicy extends InstructionAccountInput,
+  TAccountAuthPolicy extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
-  TAccountBuyerToken extends InstructionAccountInput,
+  TAccountVault extends InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput,
+  TAccountDealVault extends InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
   TAccountLink extends InstructionAccountInput,
   TAccountRegistry extends InstructionAccountInput,
-  TAccountVault extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TAccountAssociatedTokenProgram extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
+  TAccountDealProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: CreateDealAsyncInput<
-    TAccountBuyer,
+  input: AgentOpenDealAsyncInput<
+    TAccountAgent,
+    TAccountMission,
+    TAccountMandate,
+    TAccountMissionAuth,
     TAccountSeller,
-    TAccountApprover,
-    TAccountPolicy,
+    TAccountAuthPolicy,
     TAccountMint,
-    TAccountBuyerToken,
+    TAccountVault,
     TAccountDeal,
+    TAccountDealVault,
     TAccountSellerRep,
     TAccountRepPair,
     TAccountListing,
     TAccountLink,
     TAccountRegistry,
-    TAccountVault,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
-    TAccountSystemProgram
+    TAccountSystemProgram,
+    TAccountDealProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
-  CreateDealInstruction<
+  AgentOpenDealInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountBuyer,
-      InstructionAccountInputAddress<TAccountBuyer>
+      TAccountAgent,
+      InstructionAccountInputAddress<TAccountAgent>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMission,
+      InstructionAccountInputAddress<TAccountMission>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMandate,
+      InstructionAccountInputAddress<TAccountMandate>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMissionAuth,
+      InstructionAccountInputAddress<TAccountMissionAuth>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSeller,
       InstructionAccountInputAddress<TAccountSeller>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountApprover,
-      InstructionAccountInputAddress<TAccountApprover>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountPolicy,
-      InstructionAccountInputAddress<TAccountPolicy>
+      TAccountAuthPolicy,
+      InstructionAccountInputAddress<TAccountAuthPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
       InstructionAccountInputAddress<TAccountMint>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountBuyerToken,
-      InstructionAccountInputAddress<TAccountBuyerToken>
+      TAccountVault,
+      InstructionAccountInputAddress<TAccountVault>
     >,
     ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountDealVault,
+      InstructionAccountInputAddress<TAccountDealVault>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSellerRep,
@@ -369,10 +401,6 @@ export async function getCreateDealInstructionAsync<
       InstructionAccountInputAddress<TAccountRegistry>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountVault,
-      InstructionAccountInputAddress<TAccountVault>
-    >,
-    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >,
@@ -383,6 +411,10 @@ export async function getCreateDealInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
       InstructionAccountInputAddress<TAccountSystemProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountDealProgram,
+      InstructionAccountInputAddress<TAccountDealProgram>
     >
   >
 > {
@@ -394,21 +426,36 @@ export async function getCreateDealInstructionAsync<
 
   // Original accounts.
   const originalAccounts = {
-    buyer: { value: input.buyer ?? null, isSigner: true, isWritable: true },
-    seller: { value: input.seller ?? null, isSigner: false, isWritable: false },
-    approver: {
-      value: input.approver ?? null,
-      isSigner: true,
-      isWritable: false,
-    },
-    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
-    mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
-    buyerToken: {
-      value: input.buyerToken ?? null,
+    agent: { value: input.agent ?? null, isSigner: true, isWritable: false },
+    mission: {
+      value: input.mission ?? null,
       isSigner: false,
       isWritable: true,
     },
+    mandate: {
+      value: input.mandate ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    missionAuth: {
+      value: input.missionAuth ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    seller: { value: input.seller ?? null, isSigner: false, isWritable: false },
+    authPolicy: {
+      value: input.authPolicy ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
+    vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
+    dealVault: {
+      value: input.dealVault ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
     sellerRep: {
       value: input.sellerRep ?? null,
       isSigner: false,
@@ -430,7 +477,6 @@ export async function getCreateDealInstructionAsync<
       isSigner: false,
       isWritable: false,
     },
-    vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
     tokenProgram: {
       value: input.tokenProgram ?? null,
       isSigner: false,
@@ -446,6 +492,11 @@ export async function getCreateDealInstructionAsync<
       isSigner: false,
       isWritable: false,
     },
+    dealProgram: {
+      value: input.dealProgram ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -456,58 +507,27 @@ export async function getCreateDealInstructionAsync<
   const args = { ...input };
 
   // Resolve default values.
-  if (!accounts.policy.value) {
-    accounts.policy.value = await findPolicyPda(
+  if (!accounts.mandate.value) {
+    accounts.mandate.value = await findMandatePda(
       {
-        buyer: getAddressFromResolvedInstructionAccount(
-          "buyer",
-          accounts.buyer.value,
+        mission: getAddressFromResolvedInstructionAccount(
+          "mission",
+          accounts.mission.value,
+        ),
+        agent: getAddressFromResolvedInstructionAccount(
+          "agent",
+          accounts.agent.value,
         ),
       },
       { programAddress },
     );
   }
-  if (!accounts.deal.value) {
-    accounts.deal.value = await findDealPda(
+  if (!accounts.missionAuth.value) {
+    accounts.missionAuth.value = await findMissionAuthPda(
       {
-        buyer: getAddressFromResolvedInstructionAccount(
-          "buyer",
-          accounts.buyer.value,
-        ),
-        dealId: getNonNullResolvedInstructionInput("dealId", args.dealId),
-      },
-      { programAddress },
-    );
-  }
-  if (!accounts.sellerRep.value) {
-    accounts.sellerRep.value = await findSellerRepPda(
-      {
-        seller: getAddressFromResolvedInstructionAccount(
-          "seller",
-          accounts.seller.value,
-        ),
-        mint: getAddressFromResolvedInstructionAccount(
-          "mint",
-          accounts.mint.value,
-        ),
-      },
-      { programAddress },
-    );
-  }
-  if (!accounts.repPair.value) {
-    accounts.repPair.value = await findRepPairPda(
-      {
-        seller: getAddressFromResolvedInstructionAccount(
-          "seller",
-          accounts.seller.value,
-        ),
-        buyer: getAddressFromResolvedInstructionAccount(
-          "buyer",
-          accounts.buyer.value,
-        ),
-        mint: getAddressFromResolvedInstructionAccount(
-          "mint",
-          accounts.mint.value,
+        mission: getAddressFromResolvedInstructionAccount(
+          "mission",
+          accounts.mission.value,
         ),
       },
       { programAddress },
@@ -523,7 +543,10 @@ export async function getCreateDealInstructionAsync<
         "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" as Address<"ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL">,
       seeds: [
         getAddressEncoder().encode(
-          getAddressFromResolvedInstructionAccount("deal", accounts.deal.value),
+          getAddressFromResolvedInstructionAccount(
+            "missionAuth",
+            accounts.missionAuth.value,
+          ),
         ),
         getAddressEncoder().encode(
           getAddressFromResolvedInstructionAccount(
@@ -545,59 +568,78 @@ export async function getCreateDealInstructionAsync<
     accounts.systemProgram.value =
       "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
   }
+  if (!accounts.dealProgram.value) {
+    accounts.dealProgram.value =
+      "CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV" as Address<"CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV">;
+  }
 
   return Object.freeze({
     accounts: [
-      getAccountMeta("buyer", accounts.buyer),
+      getAccountMeta("agent", accounts.agent),
+      getAccountMeta("mission", accounts.mission),
+      getAccountMeta("mandate", accounts.mandate),
+      getAccountMeta("missionAuth", accounts.missionAuth),
       getAccountMeta("seller", accounts.seller),
-      getAccountMeta("approver", accounts.approver),
-      getAccountMeta("policy", accounts.policy),
+      getAccountMeta("authPolicy", accounts.authPolicy),
       getAccountMeta("mint", accounts.mint),
-      getAccountMeta("buyerToken", accounts.buyerToken),
+      getAccountMeta("vault", accounts.vault),
       getAccountMeta("deal", accounts.deal),
+      getAccountMeta("dealVault", accounts.dealVault),
       getAccountMeta("sellerRep", accounts.sellerRep),
       getAccountMeta("repPair", accounts.repPair),
       getAccountMeta("listing", accounts.listing),
       getAccountMeta("link", accounts.link),
       getAccountMeta("registry", accounts.registry),
-      getAccountMeta("vault", accounts.vault),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("associatedTokenProgram", accounts.associatedTokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
+      getAccountMeta("dealProgram", accounts.dealProgram),
     ],
-    data: getCreateDealInstructionDataEncoder().encode(
-      args as CreateDealInstructionDataArgs,
+    data: getAgentOpenDealInstructionDataEncoder().encode(
+      args as AgentOpenDealInstructionDataArgs,
     ),
     programAddress,
-  } as CreateDealInstruction<
+  } as AgentOpenDealInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountBuyer,
-      InstructionAccountInputAddress<TAccountBuyer>
+      TAccountAgent,
+      InstructionAccountInputAddress<TAccountAgent>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMission,
+      InstructionAccountInputAddress<TAccountMission>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMandate,
+      InstructionAccountInputAddress<TAccountMandate>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMissionAuth,
+      InstructionAccountInputAddress<TAccountMissionAuth>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSeller,
       InstructionAccountInputAddress<TAccountSeller>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountApprover,
-      InstructionAccountInputAddress<TAccountApprover>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountPolicy,
-      InstructionAccountInputAddress<TAccountPolicy>
+      TAccountAuthPolicy,
+      InstructionAccountInputAddress<TAccountAuthPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
       InstructionAccountInputAddress<TAccountMint>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountBuyerToken,
-      InstructionAccountInputAddress<TAccountBuyerToken>
+      TAccountVault,
+      InstructionAccountInputAddress<TAccountVault>
     >,
     ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountDealVault,
+      InstructionAccountInputAddress<TAccountDealVault>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSellerRep,
@@ -620,10 +662,6 @@ export async function getCreateDealInstructionAsync<
       InstructionAccountInputAddress<TAccountRegistry>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountVault,
-      InstructionAccountInputAddress<TAccountVault>
-    >,
-    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >,
@@ -634,131 +672,156 @@ export async function getCreateDealInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
       InstructionAccountInputAddress<TAccountSystemProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountDealProgram,
+      InstructionAccountInputAddress<TAccountDealProgram>
     >
   >);
 }
 
-export type CreateDealInput<
-  TAccountBuyer extends InstructionSignerInput = InstructionSignerInput,
+export type AgentOpenDealInput<
+  TAccountAgent extends InstructionSignerInput = InstructionSignerInput,
+  TAccountMission extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMissionAuth extends InstructionAccountInput = InstructionAccountInput,
   TAccountSeller extends InstructionAccountInput = InstructionAccountInput,
-  TAccountApprover extends InstructionSignerInput = InstructionSignerInput,
-  TAccountPolicy extends InstructionAccountInput = InstructionAccountInput,
+  TAccountAuthPolicy extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
-  TAccountBuyerToken extends InstructionAccountInput = InstructionAccountInput,
+  TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
+  TAccountDealVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput = InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
   TAccountLink extends InstructionAccountInput = InstructionAccountInput,
   TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
-  TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
   TAccountAssociatedTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput =
     InstructionAccountInput,
+  TAccountDealProgram extends InstructionAccountInput = InstructionAccountInput,
 > = {
-  buyer: TAccountBuyer;
-  /** tokens into its own token account. */
+  agent: TAccountAgent;
+  mission: TAccountMission;
+  mandate: TAccountMandate;
+  missionAuth: TAccountMissionAuth;
   seller: TAccountSeller;
-  /** Required only when the amount is above the policy's approval threshold. */
-  approver?: TAccountApprover;
-  policy: TAccountPolicy;
+  authPolicy: TAccountAuthPolicy;
   mint: TAccountMint;
-  buyerToken: TAccountBuyerToken;
+  vault: TAccountVault;
   deal: TAccountDeal;
+  dealVault: TAccountDealVault;
   sellerRep: TAccountSellerRep;
   repPair: TAccountRepPair;
-  /** Present only when the deal is opened from a listing. */
   listing?: TAccountListing;
   link?: TAccountLink;
-  /** Required with a listing: its assessor must still be registered. */
   registry?: TAccountRegistry;
-  vault: TAccountVault;
   tokenProgram?: TAccountTokenProgram;
   associatedTokenProgram?: TAccountAssociatedTokenProgram;
   systemProgram?: TAccountSystemProgram;
-  dealId: CreateDealInstructionDataArgs["dealId"];
-  amount: CreateDealInstructionDataArgs["amount"];
-  deadline: CreateDealInstructionDataArgs["deadline"];
-  reviewSecs: CreateDealInstructionDataArgs["reviewSecs"];
-  resolveSecs: CreateDealInstructionDataArgs["resolveSecs"];
-  toleranceBps: CreateDealInstructionDataArgs["toleranceBps"];
-  stakeRequired: CreateDealInstructionDataArgs["stakeRequired"];
-  bondBps: CreateDealInstructionDataArgs["bondBps"];
-  verifier: CreateDealInstructionDataArgs["verifier"];
-  termsHash: CreateDealInstructionDataArgs["termsHash"];
-  listingContentHash: CreateDealInstructionDataArgs["listingContentHash"];
+  dealProgram?: TAccountDealProgram;
+  dealId: AgentOpenDealInstructionDataArgs["dealId"];
+  amount: AgentOpenDealInstructionDataArgs["amount"];
+  deadline: AgentOpenDealInstructionDataArgs["deadline"];
+  reviewSecs: AgentOpenDealInstructionDataArgs["reviewSecs"];
+  resolveSecs: AgentOpenDealInstructionDataArgs["resolveSecs"];
+  toleranceBps: AgentOpenDealInstructionDataArgs["toleranceBps"];
+  stakeRequired: AgentOpenDealInstructionDataArgs["stakeRequired"];
+  bondBps: AgentOpenDealInstructionDataArgs["bondBps"];
+  verifier: AgentOpenDealInstructionDataArgs["verifier"];
+  termsHash: AgentOpenDealInstructionDataArgs["termsHash"];
+  listingContentHash: AgentOpenDealInstructionDataArgs["listingContentHash"];
+  receiptHash: AgentOpenDealInstructionDataArgs["receiptHash"];
 };
 
-export function getCreateDealInstruction<
-  TAccountBuyer extends InstructionSignerInput,
+export function getAgentOpenDealInstruction<
+  TAccountAgent extends InstructionSignerInput,
+  TAccountMission extends InstructionAccountInput,
+  TAccountMandate extends InstructionAccountInput,
+  TAccountMissionAuth extends InstructionAccountInput,
   TAccountSeller extends InstructionAccountInput,
-  TAccountApprover extends InstructionSignerInput,
-  TAccountPolicy extends InstructionAccountInput,
+  TAccountAuthPolicy extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
-  TAccountBuyerToken extends InstructionAccountInput,
+  TAccountVault extends InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput,
+  TAccountDealVault extends InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
   TAccountLink extends InstructionAccountInput,
   TAccountRegistry extends InstructionAccountInput,
-  TAccountVault extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TAccountAssociatedTokenProgram extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
+  TAccountDealProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: CreateDealInput<
-    TAccountBuyer,
+  input: AgentOpenDealInput<
+    TAccountAgent,
+    TAccountMission,
+    TAccountMandate,
+    TAccountMissionAuth,
     TAccountSeller,
-    TAccountApprover,
-    TAccountPolicy,
+    TAccountAuthPolicy,
     TAccountMint,
-    TAccountBuyerToken,
+    TAccountVault,
     TAccountDeal,
+    TAccountDealVault,
     TAccountSellerRep,
     TAccountRepPair,
     TAccountListing,
     TAccountLink,
     TAccountRegistry,
-    TAccountVault,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
-    TAccountSystemProgram
+    TAccountSystemProgram,
+    TAccountDealProgram
   >,
   config?: { programAddress?: TProgramAddress },
-): CreateDealInstruction<
+): AgentOpenDealInstruction<
   TProgramAddress,
   ResolvedInstructionAccountMeta<
-    TAccountBuyer,
-    InstructionAccountInputAddress<TAccountBuyer>
+    TAccountAgent,
+    InstructionAccountInputAddress<TAccountAgent>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountMission,
+    InstructionAccountInputAddress<TAccountMission>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountMandate,
+    InstructionAccountInputAddress<TAccountMandate>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountMissionAuth,
+    InstructionAccountInputAddress<TAccountMissionAuth>
   >,
   ResolvedInstructionAccountMeta<
     TAccountSeller,
     InstructionAccountInputAddress<TAccountSeller>
   >,
   ResolvedInstructionAccountMeta<
-    TAccountApprover,
-    InstructionAccountInputAddress<TAccountApprover>
-  >,
-  ResolvedInstructionAccountMeta<
-    TAccountPolicy,
-    InstructionAccountInputAddress<TAccountPolicy>
+    TAccountAuthPolicy,
+    InstructionAccountInputAddress<TAccountAuthPolicy>
   >,
   ResolvedInstructionAccountMeta<
     TAccountMint,
     InstructionAccountInputAddress<TAccountMint>
   >,
   ResolvedInstructionAccountMeta<
-    TAccountBuyerToken,
-    InstructionAccountInputAddress<TAccountBuyerToken>
+    TAccountVault,
+    InstructionAccountInputAddress<TAccountVault>
   >,
   ResolvedInstructionAccountMeta<
     TAccountDeal,
     InstructionAccountInputAddress<TAccountDeal>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountDealVault,
+    InstructionAccountInputAddress<TAccountDealVault>
   >,
   ResolvedInstructionAccountMeta<
     TAccountSellerRep,
@@ -781,10 +844,6 @@ export function getCreateDealInstruction<
     InstructionAccountInputAddress<TAccountRegistry>
   >,
   ResolvedInstructionAccountMeta<
-    TAccountVault,
-    InstructionAccountInputAddress<TAccountVault>
-  >,
-  ResolvedInstructionAccountMeta<
     TAccountTokenProgram,
     InstructionAccountInputAddress<TAccountTokenProgram>
   >,
@@ -795,6 +854,10 @@ export function getCreateDealInstruction<
   ResolvedInstructionAccountMeta<
     TAccountSystemProgram,
     InstructionAccountInputAddress<TAccountSystemProgram>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountDealProgram,
+    InstructionAccountInputAddress<TAccountDealProgram>
   >
 > {
   // Program address.
@@ -805,21 +868,36 @@ export function getCreateDealInstruction<
 
   // Original accounts.
   const originalAccounts = {
-    buyer: { value: input.buyer ?? null, isSigner: true, isWritable: true },
-    seller: { value: input.seller ?? null, isSigner: false, isWritable: false },
-    approver: {
-      value: input.approver ?? null,
-      isSigner: true,
-      isWritable: false,
-    },
-    policy: { value: input.policy ?? null, isSigner: false, isWritable: true },
-    mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
-    buyerToken: {
-      value: input.buyerToken ?? null,
+    agent: { value: input.agent ?? null, isSigner: true, isWritable: false },
+    mission: {
+      value: input.mission ?? null,
       isSigner: false,
       isWritable: true,
     },
+    mandate: {
+      value: input.mandate ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    missionAuth: {
+      value: input.missionAuth ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    seller: { value: input.seller ?? null, isSigner: false, isWritable: false },
+    authPolicy: {
+      value: input.authPolicy ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
+    vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
+    dealVault: {
+      value: input.dealVault ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
     sellerRep: {
       value: input.sellerRep ?? null,
       isSigner: false,
@@ -841,7 +919,6 @@ export function getCreateDealInstruction<
       isSigner: false,
       isWritable: false,
     },
-    vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
     tokenProgram: {
       value: input.tokenProgram ?? null,
       isSigner: false,
@@ -854,6 +931,11 @@ export function getCreateDealInstruction<
     },
     systemProgram: {
       value: input.systemProgram ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
+    dealProgram: {
+      value: input.dealProgram ?? null,
       isSigner: false,
       isWritable: false,
     },
@@ -879,59 +961,78 @@ export function getCreateDealInstruction<
     accounts.systemProgram.value =
       "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
   }
+  if (!accounts.dealProgram.value) {
+    accounts.dealProgram.value =
+      "CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV" as Address<"CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV">;
+  }
 
   return Object.freeze({
     accounts: [
-      getAccountMeta("buyer", accounts.buyer),
+      getAccountMeta("agent", accounts.agent),
+      getAccountMeta("mission", accounts.mission),
+      getAccountMeta("mandate", accounts.mandate),
+      getAccountMeta("missionAuth", accounts.missionAuth),
       getAccountMeta("seller", accounts.seller),
-      getAccountMeta("approver", accounts.approver),
-      getAccountMeta("policy", accounts.policy),
+      getAccountMeta("authPolicy", accounts.authPolicy),
       getAccountMeta("mint", accounts.mint),
-      getAccountMeta("buyerToken", accounts.buyerToken),
+      getAccountMeta("vault", accounts.vault),
       getAccountMeta("deal", accounts.deal),
+      getAccountMeta("dealVault", accounts.dealVault),
       getAccountMeta("sellerRep", accounts.sellerRep),
       getAccountMeta("repPair", accounts.repPair),
       getAccountMeta("listing", accounts.listing),
       getAccountMeta("link", accounts.link),
       getAccountMeta("registry", accounts.registry),
-      getAccountMeta("vault", accounts.vault),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("associatedTokenProgram", accounts.associatedTokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
+      getAccountMeta("dealProgram", accounts.dealProgram),
     ],
-    data: getCreateDealInstructionDataEncoder().encode(
-      args as CreateDealInstructionDataArgs,
+    data: getAgentOpenDealInstructionDataEncoder().encode(
+      args as AgentOpenDealInstructionDataArgs,
     ),
     programAddress,
-  } as CreateDealInstruction<
+  } as AgentOpenDealInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountBuyer,
-      InstructionAccountInputAddress<TAccountBuyer>
+      TAccountAgent,
+      InstructionAccountInputAddress<TAccountAgent>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMission,
+      InstructionAccountInputAddress<TAccountMission>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMandate,
+      InstructionAccountInputAddress<TAccountMandate>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMissionAuth,
+      InstructionAccountInputAddress<TAccountMissionAuth>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSeller,
       InstructionAccountInputAddress<TAccountSeller>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountApprover,
-      InstructionAccountInputAddress<TAccountApprover>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountPolicy,
-      InstructionAccountInputAddress<TAccountPolicy>
+      TAccountAuthPolicy,
+      InstructionAccountInputAddress<TAccountAuthPolicy>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
       InstructionAccountInputAddress<TAccountMint>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountBuyerToken,
-      InstructionAccountInputAddress<TAccountBuyerToken>
+      TAccountVault,
+      InstructionAccountInputAddress<TAccountVault>
     >,
     ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountDealVault,
+      InstructionAccountInputAddress<TAccountDealVault>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSellerRep,
@@ -954,10 +1055,6 @@ export function getCreateDealInstruction<
       InstructionAccountInputAddress<TAccountRegistry>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountVault,
-      InstructionAccountInputAddress<TAccountVault>
-    >,
-    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >,
@@ -968,54 +1065,57 @@ export function getCreateDealInstruction<
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
       InstructionAccountInputAddress<TAccountSystemProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountDealProgram,
+      InstructionAccountInputAddress<TAccountDealProgram>
     >
   >);
 }
 
-export type ParsedCreateDealInstruction<
+export type ParsedAgentOpenDealInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    buyer: TAccountMetas[0];
-    /** tokens into its own token account. */
-    seller: TAccountMetas[1];
-    /** Required only when the amount is above the policy's approval threshold. */
-    approver?: TAccountMetas[2] | undefined;
-    policy: TAccountMetas[3];
-    mint: TAccountMetas[4];
-    buyerToken: TAccountMetas[5];
-    deal: TAccountMetas[6];
-    sellerRep: TAccountMetas[7];
-    repPair: TAccountMetas[8];
-    /** Present only when the deal is opened from a listing. */
-    listing?: TAccountMetas[9] | undefined;
-    link?: TAccountMetas[10] | undefined;
-    /** Required with a listing: its assessor must still be registered. */
-    registry?: TAccountMetas[11] | undefined;
-    vault: TAccountMetas[12];
-    tokenProgram: TAccountMetas[13];
-    associatedTokenProgram: TAccountMetas[14];
-    systemProgram: TAccountMetas[15];
+    agent: TAccountMetas[0];
+    mission: TAccountMetas[1];
+    mandate: TAccountMetas[2];
+    missionAuth: TAccountMetas[3];
+    seller: TAccountMetas[4];
+    authPolicy: TAccountMetas[5];
+    mint: TAccountMetas[6];
+    vault: TAccountMetas[7];
+    deal: TAccountMetas[8];
+    dealVault: TAccountMetas[9];
+    sellerRep: TAccountMetas[10];
+    repPair: TAccountMetas[11];
+    listing?: TAccountMetas[12] | undefined;
+    link?: TAccountMetas[13] | undefined;
+    registry?: TAccountMetas[14] | undefined;
+    tokenProgram: TAccountMetas[15];
+    associatedTokenProgram: TAccountMetas[16];
+    systemProgram: TAccountMetas[17];
+    dealProgram: TAccountMetas[18];
   };
-  data: CreateDealInstructionData;
+  data: AgentOpenDealInstructionData;
 };
 
-export function parseCreateDealInstruction<
+export function parseAgentOpenDealInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedCreateDealInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 16) {
+): ParsedAgentOpenDealInstruction<TProgram, TAccountMetas> {
+  if (instruction.accounts.length < 19) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 16,
+        expectedAccountMetas: 19,
       },
     );
   }
@@ -1034,23 +1134,26 @@ export function parseCreateDealInstruction<
   return {
     programAddress: instruction.programAddress,
     accounts: {
-      buyer: getNextAccount(),
+      agent: getNextAccount(),
+      mission: getNextAccount(),
+      mandate: getNextAccount(),
+      missionAuth: getNextAccount(),
       seller: getNextAccount(),
-      approver: getNextOptionalAccount(),
-      policy: getNextAccount(),
+      authPolicy: getNextAccount(),
       mint: getNextAccount(),
-      buyerToken: getNextAccount(),
+      vault: getNextAccount(),
       deal: getNextAccount(),
+      dealVault: getNextAccount(),
       sellerRep: getNextAccount(),
       repPair: getNextAccount(),
       listing: getNextOptionalAccount(),
       link: getNextOptionalAccount(),
       registry: getNextOptionalAccount(),
-      vault: getNextAccount(),
       tokenProgram: getNextAccount(),
       associatedTokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),
+      dealProgram: getNextAccount(),
     },
-    data: getCreateDealInstructionDataDecoder().decode(instruction.data),
+    data: getAgentOpenDealInstructionDataDecoder().decode(instruction.data),
   };
 }

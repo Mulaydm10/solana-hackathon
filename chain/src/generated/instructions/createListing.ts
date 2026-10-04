@@ -45,7 +45,7 @@ import {
   type ResolvedInstructionAccount,
   type ResolvedInstructionAccountMeta,
 } from "@solana/program-client-core";
-import { findListingPda } from "../pdas";
+import { findListingPda, findRegistryPda } from "../pdas";
 import { DEAL_ESCROW_PROGRAM_ADDRESS } from "../programs";
 import {
   getListingKindDecoder,
@@ -69,6 +69,7 @@ export type CreateListingInstruction<
   TAccountSeller extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountListing extends string | AccountMeta<string> = string,
+  TAccountRegistry extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends string | AccountMeta<string> =
     "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -86,6 +87,9 @@ export type CreateListingInstruction<
       TAccountListing extends string
         ? WritableAccount<TAccountListing>
         : TAccountListing,
+      TAccountRegistry extends string
+        ? ReadonlyAccount<TAccountRegistry>
+        : TAccountRegistry,
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
@@ -157,12 +161,14 @@ export type CreateListingAsyncInput<
   TAccountSeller extends InstructionSignerInput = InstructionSignerInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput =
     InstructionAccountInput,
 > = {
   seller: TAccountSeller;
   mint: TAccountMint;
   listing?: TAccountListing;
+  registry?: TAccountRegistry;
   systemProgram?: TAccountSystemProgram;
   listingId: CreateListingInstructionDataArgs["listingId"];
   kind: CreateListingInstructionDataArgs["kind"];
@@ -177,6 +183,7 @@ export async function getCreateListingInstructionAsync<
   TAccountSeller extends InstructionSignerInput,
   TAccountMint extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
@@ -184,6 +191,7 @@ export async function getCreateListingInstructionAsync<
     TAccountSeller,
     TAccountMint,
     TAccountListing,
+    TAccountRegistry,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -201,6 +209,10 @@ export async function getCreateListingInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountListing,
       InstructionAccountInputAddress<TAccountListing>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
@@ -222,6 +234,11 @@ export async function getCreateListingInstructionAsync<
       value: input.listing ?? null,
       isSigner: false,
       isWritable: true,
+    },
+    registry: {
+      value: input.registry ?? null,
+      isSigner: false,
+      isWritable: false,
     },
     systemProgram: {
       value: input.systemProgram ?? null,
@@ -253,6 +270,9 @@ export async function getCreateListingInstructionAsync<
       { programAddress },
     );
   }
+  if (!accounts.registry.value) {
+    accounts.registry.value = await findRegistryPda({ programAddress });
+  }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =
       "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
@@ -263,6 +283,7 @@ export async function getCreateListingInstructionAsync<
       getAccountMeta("seller", accounts.seller),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("listing", accounts.listing),
+      getAccountMeta("registry", accounts.registry),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getCreateListingInstructionDataEncoder().encode(
@@ -284,6 +305,10 @@ export async function getCreateListingInstructionAsync<
       InstructionAccountInputAddress<TAccountListing>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
       InstructionAccountInputAddress<TAccountSystemProgram>
     >
@@ -294,12 +319,14 @@ export type CreateListingInput<
   TAccountSeller extends InstructionSignerInput = InstructionSignerInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput =
     InstructionAccountInput,
 > = {
   seller: TAccountSeller;
   mint: TAccountMint;
   listing: TAccountListing;
+  registry: TAccountRegistry;
   systemProgram?: TAccountSystemProgram;
   listingId: CreateListingInstructionDataArgs["listingId"];
   kind: CreateListingInstructionDataArgs["kind"];
@@ -314,6 +341,7 @@ export function getCreateListingInstruction<
   TAccountSeller extends InstructionSignerInput,
   TAccountMint extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
@@ -321,6 +349,7 @@ export function getCreateListingInstruction<
     TAccountSeller,
     TAccountMint,
     TAccountListing,
+    TAccountRegistry,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -337,6 +366,10 @@ export function getCreateListingInstruction<
   ResolvedInstructionAccountMeta<
     TAccountListing,
     InstructionAccountInputAddress<TAccountListing>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountRegistry,
+    InstructionAccountInputAddress<TAccountRegistry>
   >,
   ResolvedInstructionAccountMeta<
     TAccountSystemProgram,
@@ -357,6 +390,11 @@ export function getCreateListingInstruction<
       value: input.listing ?? null,
       isSigner: false,
       isWritable: true,
+    },
+    registry: {
+      value: input.registry ?? null,
+      isSigner: false,
+      isWritable: false,
     },
     systemProgram: {
       value: input.systemProgram ?? null,
@@ -383,6 +421,7 @@ export function getCreateListingInstruction<
       getAccountMeta("seller", accounts.seller),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("listing", accounts.listing),
+      getAccountMeta("registry", accounts.registry),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getCreateListingInstructionDataEncoder().encode(
@@ -404,6 +443,10 @@ export function getCreateListingInstruction<
       InstructionAccountInputAddress<TAccountListing>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
       InstructionAccountInputAddress<TAccountSystemProgram>
     >
@@ -419,7 +462,8 @@ export type ParsedCreateListingInstruction<
     seller: TAccountMetas[0];
     mint: TAccountMetas[1];
     listing: TAccountMetas[2];
-    systemProgram: TAccountMetas[3];
+    registry: TAccountMetas[3];
+    systemProgram: TAccountMetas[4];
   };
   data: CreateListingInstructionData;
 };
@@ -432,12 +476,12 @@ export function parseCreateListingInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedCreateListingInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 4) {
+  if (instruction.accounts.length < 5) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 4,
+        expectedAccountMetas: 5,
       },
     );
   }
@@ -453,6 +497,7 @@ export function parseCreateListingInstruction<
       seller: getNextAccount(),
       mint: getNextAccount(),
       listing: getNextAccount(),
+      registry: getNextAccount(),
       systemProgram: getNextAccount(),
     },
     data: getCreateListingInstructionDataDecoder().decode(instruction.data),

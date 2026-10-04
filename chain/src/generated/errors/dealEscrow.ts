@@ -88,15 +88,53 @@ export const DEAL_ESCROW_ERROR__LISTING_NOT_ATTESTED = 0x1792; // 6034
 export const DEAL_ESCROW_ERROR__LISTING_MISMATCH = 0x1793; // 6035
 /** NotListedContent: Delivery is not the listed content */
 export const DEAL_ESCROW_ERROR__NOT_LISTED_CONTENT = 0x1794; // 6036
+/** BadMission: Invalid mission parameters */
+export const DEAL_ESCROW_ERROR__BAD_MISSION = 0x1795; // 6037
+/** BadMandate: Invalid mandate parameters */
+export const DEAL_ESCROW_ERROR__BAD_MANDATE = 0x1796; // 6038
+/** MissionClosed: Mission is closed */
+export const DEAL_ESCROW_ERROR__MISSION_CLOSED = 0x1797; // 6039
+/** MissionExpired: Mission has expired */
+export const DEAL_ESCROW_ERROR__MISSION_EXPIRED = 0x1798; // 6040
+/** MandatesLocked: Mandates can no longer change once the first stage is approved */
+export const DEAL_ESCROW_ERROR__MANDATES_LOCKED = 0x1799; // 6041
+/** MandatesChanged: The mandate set is not the one the approval names */
+export const DEAL_ESCROW_ERROR__MANDATES_CHANGED = 0x179a; // 6042
+/** BadStage: Stage cannot be approved now */
+export const DEAL_ESCROW_ERROR__BAD_STAGE = 0x179b; // 6043
+/** StageNotApproved: The current stage has not been approved by the buyer */
+export const DEAL_ESCROW_ERROR__STAGE_NOT_APPROVED = 0x179c; // 6044
+/** MandateRevoked: Mandate has been revoked */
+export const DEAL_ESCROW_ERROR__MANDATE_REVOKED = 0x179d; // 6045
+/** MandateExpired: Mandate has expired */
+export const DEAL_ESCROW_ERROR__MANDATE_EXPIRED = 0x179e; // 6046
+/** OverPerTxCap: Amount is above the mandate's per-payment cap */
+export const DEAL_ESCROW_ERROR__OVER_PER_TX_CAP = 0x179f; // 6047
+/** OverMandateCap: Amount would exceed the mandate's cap */
+export const DEAL_ESCROW_ERROR__OVER_MANDATE_CAP = 0x17a0; // 6048
+/** OverStageCap: Amount would exceed the stage's cap */
+export const DEAL_ESCROW_ERROR__OVER_STAGE_CAP = 0x17a1; // 6049
+/** OverMissionBudget: Amount would exceed the mission budget */
+export const DEAL_ESCROW_ERROR__OVER_MISSION_BUDGET = 0x17a2; // 6050
+/** PayeeNotAllowed: Payee is not allowed by the mandate */
+export const DEAL_ESCROW_ERROR__PAYEE_NOT_ALLOWED = 0x17a3; // 6051
+/** NotThisStage: This agent does not work in the current stage */
+export const DEAL_ESCROW_ERROR__NOT_THIS_STAGE = 0x17a4; // 6052
+/** AssessorNotRegistered: The assessor is not on the registry of assessors */
+export const DEAL_ESCROW_ERROR__ASSESSOR_NOT_REGISTERED = 0x17a5; // 6053
 
 export type DealEscrowError =
   | typeof DEAL_ESCROW_ERROR__APPROVAL_REQUIRED
   | typeof DEAL_ESCROW_ERROR__ASSESSOR_NOT_INDEPENDENT
+  | typeof DEAL_ESCROW_ERROR__ASSESSOR_NOT_REGISTERED
   | typeof DEAL_ESCROW_ERROR__BAD_BOND
   | typeof DEAL_ESCROW_ERROR__BAD_LISTING
+  | typeof DEAL_ESCROW_ERROR__BAD_MANDATE
+  | typeof DEAL_ESCROW_ERROR__BAD_MISSION
   | typeof DEAL_ESCROW_ERROR__BAD_POLICY
   | typeof DEAL_ESCROW_ERROR__BAD_RESOLVE_WINDOW
   | typeof DEAL_ESCROW_ERROR__BAD_REVIEW_WINDOW
+  | typeof DEAL_ESCROW_ERROR__BAD_STAGE
   | typeof DEAL_ESCROW_ERROR__BAD_TOLERANCE
   | typeof DEAL_ESCROW_ERROR__CONSERVATION
   | typeof DEAL_ESCROW_ERROR__DEADLINE_IN_PAST
@@ -109,13 +147,25 @@ export type DealEscrowError =
   | typeof DEAL_ESCROW_ERROR__LISTING_INACTIVE
   | typeof DEAL_ESCROW_ERROR__LISTING_MISMATCH
   | typeof DEAL_ESCROW_ERROR__LISTING_NOT_ATTESTED
+  | typeof DEAL_ESCROW_ERROR__MANDATE_EXPIRED
+  | typeof DEAL_ESCROW_ERROR__MANDATE_REVOKED
+  | typeof DEAL_ESCROW_ERROR__MANDATES_CHANGED
+  | typeof DEAL_ESCROW_ERROR__MANDATES_LOCKED
   | typeof DEAL_ESCROW_ERROR__MATH_OVERFLOW
+  | typeof DEAL_ESCROW_ERROR__MISSION_CLOSED
+  | typeof DEAL_ESCROW_ERROR__MISSION_EXPIRED
   | typeof DEAL_ESCROW_ERROR__NOT_ASSESSOR
   | typeof DEAL_ESCROW_ERROR__NOT_LISTED_CONTENT
+  | typeof DEAL_ESCROW_ERROR__NOT_THIS_STAGE
   | typeof DEAL_ESCROW_ERROR__NOT_VERIFIER
   | typeof DEAL_ESCROW_ERROR__NO_VERIFIER
+  | typeof DEAL_ESCROW_ERROR__OVER_MANDATE_CAP
   | typeof DEAL_ESCROW_ERROR__OVER_MAX_PRICE
+  | typeof DEAL_ESCROW_ERROR__OVER_MISSION_BUDGET
   | typeof DEAL_ESCROW_ERROR__OVER_PERIOD_BUDGET
+  | typeof DEAL_ESCROW_ERROR__OVER_PER_TX_CAP
+  | typeof DEAL_ESCROW_ERROR__OVER_STAGE_CAP
+  | typeof DEAL_ESCROW_ERROR__PAYEE_NOT_ALLOWED
   | typeof DEAL_ESCROW_ERROR__POLICY_MINT_MISMATCH
   | typeof DEAL_ESCROW_ERROR__RESOLVE_WINDOW_CLOSED
   | typeof DEAL_ESCROW_ERROR__RESOLVE_WINDOW_OPEN
@@ -123,6 +173,7 @@ export type DealEscrowError =
   | typeof DEAL_ESCROW_ERROR__REVIEW_WINDOW_OPEN
   | typeof DEAL_ESCROW_ERROR__SELF_DEAL
   | typeof DEAL_ESCROW_ERROR__SELLER_NOT_ALLOWED
+  | typeof DEAL_ESCROW_ERROR__STAGE_NOT_APPROVED
   | typeof DEAL_ESCROW_ERROR__UNAUTHORIZED
   | typeof DEAL_ESCROW_ERROR__VERIFIER_NOT_INDEPENDENT
   | typeof DEAL_ESCROW_ERROR__WRONG_STATUS
@@ -133,11 +184,15 @@ if (process.env["NODE_ENV"] !== "production") {
   dealEscrowErrorMessages = {
     [DEAL_ESCROW_ERROR__APPROVAL_REQUIRED]: `Amount is above the approval threshold and the approver did not sign`,
     [DEAL_ESCROW_ERROR__ASSESSOR_NOT_INDEPENDENT]: `The assessor must be set and must not be the seller`,
+    [DEAL_ESCROW_ERROR__ASSESSOR_NOT_REGISTERED]: `The assessor is not on the registry of assessors`,
     [DEAL_ESCROW_ERROR__BAD_BOND]: `Challenge bond must be at most 50%`,
     [DEAL_ESCROW_ERROR__BAD_LISTING]: `Invalid listing parameters`,
+    [DEAL_ESCROW_ERROR__BAD_MANDATE]: `Invalid mandate parameters`,
+    [DEAL_ESCROW_ERROR__BAD_MISSION]: `Invalid mission parameters`,
     [DEAL_ESCROW_ERROR__BAD_POLICY]: `Invalid policy parameters`,
     [DEAL_ESCROW_ERROR__BAD_RESOLVE_WINDOW]: `Resolve window must be between 60 seconds and 30 days`,
     [DEAL_ESCROW_ERROR__BAD_REVIEW_WINDOW]: `Review window must be between 0 and 30 days`,
+    [DEAL_ESCROW_ERROR__BAD_STAGE]: `Stage cannot be approved now`,
     [DEAL_ESCROW_ERROR__BAD_TOLERANCE]: `Invoice tolerance must be at most 20%`,
     [DEAL_ESCROW_ERROR__CONSERVATION]: `Payout does not equal what the vault holds for this deal`,
     [DEAL_ESCROW_ERROR__DEADLINE_IN_PAST]: `Deadline must be in the future`,
@@ -150,13 +205,25 @@ if (process.env["NODE_ENV"] !== "production") {
     [DEAL_ESCROW_ERROR__LISTING_INACTIVE]: `Listing is not active`,
     [DEAL_ESCROW_ERROR__LISTING_MISMATCH]: `Deal does not match its listing`,
     [DEAL_ESCROW_ERROR__LISTING_NOT_ATTESTED]: `Listing has not been attested by its assessor`,
+    [DEAL_ESCROW_ERROR__MANDATE_EXPIRED]: `Mandate has expired`,
+    [DEAL_ESCROW_ERROR__MANDATE_REVOKED]: `Mandate has been revoked`,
+    [DEAL_ESCROW_ERROR__MANDATES_CHANGED]: `The mandate set is not the one the approval names`,
+    [DEAL_ESCROW_ERROR__MANDATES_LOCKED]: `Mandates can no longer change once the first stage is approved`,
     [DEAL_ESCROW_ERROR__MATH_OVERFLOW]: `Arithmetic overflow`,
+    [DEAL_ESCROW_ERROR__MISSION_CLOSED]: `Mission is closed`,
+    [DEAL_ESCROW_ERROR__MISSION_EXPIRED]: `Mission has expired`,
     [DEAL_ESCROW_ERROR__NOT_ASSESSOR]: `Only the listing's assessor can attest it`,
     [DEAL_ESCROW_ERROR__NOT_LISTED_CONTENT]: `Delivery is not the listed content`,
+    [DEAL_ESCROW_ERROR__NOT_THIS_STAGE]: `This agent does not work in the current stage`,
     [DEAL_ESCROW_ERROR__NOT_VERIFIER]: `Only the deal's verifier can resolve`,
     [DEAL_ESCROW_ERROR__NO_VERIFIER]: `This deal has no verifier, so it cannot be challenged`,
+    [DEAL_ESCROW_ERROR__OVER_MANDATE_CAP]: `Amount would exceed the mandate's cap`,
     [DEAL_ESCROW_ERROR__OVER_MAX_PRICE]: `Amount is above the buyer's max price`,
+    [DEAL_ESCROW_ERROR__OVER_MISSION_BUDGET]: `Amount would exceed the mission budget`,
     [DEAL_ESCROW_ERROR__OVER_PERIOD_BUDGET]: `Amount would exceed the buyer's budget for this period`,
+    [DEAL_ESCROW_ERROR__OVER_PER_TX_CAP]: `Amount is above the mandate's per-payment cap`,
+    [DEAL_ESCROW_ERROR__OVER_STAGE_CAP]: `Amount would exceed the stage's cap`,
+    [DEAL_ESCROW_ERROR__PAYEE_NOT_ALLOWED]: `Payee is not allowed by the mandate`,
     [DEAL_ESCROW_ERROR__POLICY_MINT_MISMATCH]: `Policy is for a different token`,
     [DEAL_ESCROW_ERROR__RESOLVE_WINDOW_CLOSED]: `Resolve window has closed`,
     [DEAL_ESCROW_ERROR__RESOLVE_WINDOW_OPEN]: `Resolve window is still open`,
@@ -164,6 +231,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [DEAL_ESCROW_ERROR__REVIEW_WINDOW_OPEN]: `Buyer review window is still open`,
     [DEAL_ESCROW_ERROR__SELF_DEAL]: `Buyer and seller must differ`,
     [DEAL_ESCROW_ERROR__SELLER_NOT_ALLOWED]: `Seller is not on the buyer's allowlist`,
+    [DEAL_ESCROW_ERROR__STAGE_NOT_APPROVED]: `The current stage has not been approved by the buyer`,
     [DEAL_ESCROW_ERROR__UNAUTHORIZED]: `Signer is not a party to this deal`,
     [DEAL_ESCROW_ERROR__VERIFIER_NOT_INDEPENDENT]: `The verifier must be neither buyer nor seller`,
     [DEAL_ESCROW_ERROR__WRONG_STATUS]: `Deal is not in the right status for this action`,
