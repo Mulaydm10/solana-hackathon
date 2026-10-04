@@ -6,6 +6,7 @@ import { signer as signerPlugin } from "@solana/kit-plugin-signer";
 import { fetchMaybeToken, findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import {
   DEAL_ESCROW_PROGRAM_ADDRESS,
+  DealStatus,
   STATUS_NAMES,
   dealAddress,
   fetchMaybeDeal,
@@ -17,6 +18,7 @@ import {
 } from "@deal/chain";
 import type { DeskConfig } from "./keys.ts";
 import { loadSigner } from "./keys.ts";
+import { isRateLimited, withRetry } from "./retry.ts";
 
 export type LockInput = {
   dealId: bigint;
@@ -63,6 +65,9 @@ export type DeskStatus = {
   sellers: number;
 };
 
+/** How long to wait for a confirmation before checking the chain directly. */
+const CONFIRM_TIMEOUT_MS = 45_000;
+
 const hex = (b: ArrayLike<number>) => Buffer.from(Uint8Array.from(b)).toString("hex");
 
 export async function createDesk(cfg: DeskConfig): Promise<Desk> {
@@ -74,12 +79,45 @@ export async function createDesk(cfg: DeskConfig): Promise<Desk> {
   const mint = cfg.mint as Address;
   const ata = async (owner: Address) =>
     (await findAssociatedTokenPda({ owner, mint, tokenProgram: TOKEN_PROGRAM_ADDRESS }))[0];
-  const send = async (ix: Parameters<typeof client.sendTransaction>[0]) => {
-    const result = await client.sendTransaction(ix);
-    return String(result.context.signature);
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  /**
+   * Send once, safely. A 429 can arrive *after* the transaction landed (while confirming), and the
+   * websocket confirmation can stall even though the transaction is finalized. So after a 429 or a
+   * confirmation timeout we read the deal account: if the action already took effect we return its
+   * latest signature; otherwise we resend (a resend of something that did land fails on chain and is
+   * then caught by the same state check, so nothing happens twice).
+   */
+  const send = async (deal: Address, landed: (status: number) => boolean, build: () => Promise<Parameters<typeof client.sendTransaction>[0]>) => {
+    let sawRateLimit = false;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const sent = client.sendTransaction(await build());
+        sent.catch(() => {}); // may be abandoned on timeout
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Object.assign(new Error("confirmation timed out"), { confirmTimeout: true })), CONFIRM_TIMEOUT_MS),
+        );
+        const result = await Promise.race([sent, timeout]);
+        return String(result.context.signature);
+      } catch (e) {
+        const timedOut = (e as { confirmTimeout?: boolean }).confirmTimeout === true;
+        if (isRateLimited(e) || timedOut) sawRateLimit = true;
+        if (sawRateLimit) {
+          await sleep(1500);
+          const d = await withRetry(() => fetchMaybeDeal(client.rpc, deal));
+          if (d.exists && landed(d.data.status)) {
+            const [last] = await withRetry(() => client.rpc.getSignaturesForAddress(deal, { limit: 1 }).send());
+            return String(last?.signature ?? "landed");
+          }
+        }
+        if (!(isRateLimited(e) || timedOut) || attempt >= 6) throw e;
+        const wait = 800 * 2 ** (attempt - 1);
+        console.warn(`rpc rate-limited (429), resend ${attempt}/5 in ${wait}ms`);
+        await sleep(wait);
+      }
+    }
   };
   const sellerOf = async (deal: Address) => {
-    const d = await fetchMaybeDeal(client.rpc, deal);
+    const d = await withRetry(() => fetchMaybeDeal(client.rpc, deal));
     if (!d.exists) throw new Error(`no deal at ${deal}`);
     const s = byAddress.get(d.data.seller);
     if (!s) throw new Error(`no demo key for seller ${d.data.seller}`);
@@ -90,32 +128,39 @@ export async function createDesk(cfg: DeskConfig): Promise<Desk> {
     buyer: buyerSigner.address,
     sellerFor: (serviceId) => sellers.get(serviceId)?.address,
     async lock(input) {
-      const signature = await send([
+      const deal = await dealAddress(buyerSigner.address, input.dealId);
+      const signature = await send(deal, () => true, async () => [
         await getCreateDealInstructionAsync({
           buyer: buyerSigner, seller: input.seller, mint, buyerToken: await ata(buyerSigner.address),
           dealId: input.dealId, amount: input.price, deadline: BigInt(input.deadline),
           reviewSecs: BigInt(input.reviewSecs), termsHash: input.termsHash,
         }),
       ]);
-      return { deal: await dealAddress(buyerSigner.address, input.dealId), signature };
+      return { deal, signature };
     },
     async deliver(deal, deliveryHash) {
       const { signer } = await sellerOf(deal);
-      return send([getSubmitDeliveryInstruction({ seller: signer, deal, deliveryHash })]);
+      return send(deal, (st) => st !== DealStatus.Funded, async () => [getSubmitDeliveryInstruction({ seller: signer, deal, deliveryHash })]);
     },
     async release(deal) {
       const { data } = await sellerOf(deal);
-      return send([await getReleaseInstructionAsync({ buyer: buyerSigner, deal, mint, sellerToken: await ata(data.seller) })]);
+      return send(deal, (st) => st === DealStatus.Released, async () => [
+        await getReleaseInstructionAsync({ buyer: buyerSigner, deal, mint, sellerToken: await ata(data.seller) }),
+      ]);
     },
     async refund(deal) {
-      return send([await getRefundInstructionAsync({ deal, mint, buyerToken: await ata(buyerSigner.address) })]);
+      return send(deal, (st) => st === DealStatus.Refunded, async () => [
+        await getRefundInstructionAsync({ deal, mint, buyerToken: await ata(buyerSigner.address) }),
+      ]);
     },
     async claim(deal) {
       const { signer } = await sellerOf(deal);
-      return send([await getClaimInstructionAsync({ seller: signer, deal, mint, sellerToken: await ata(signer.address) })]);
+      return send(deal, (st) => st === DealStatus.Claimed, async () => [
+        await getClaimInstructionAsync({ seller: signer, deal, mint, sellerToken: await ata(signer.address) }),
+      ]);
     },
     async get(deal) {
-      const d = await fetchMaybeDeal(client.rpc, deal);
+      const d = await withRetry(() => fetchMaybeDeal(client.rpc, deal));
       if (!d.exists) return null;
       const x = d.data;
       return {
@@ -125,11 +170,11 @@ export async function createDesk(cfg: DeskConfig): Promise<Desk> {
       };
     },
     async status() {
-      const [program, sol, token] = await Promise.all([
+      const [program, sol, token] = await withRetry(() => Promise.all([
         client.rpc.getAccountInfo(DEAL_ESCROW_PROGRAM_ADDRESS, { encoding: "base64" }).send(),
         client.rpc.getBalance(buyerSigner.address).send(),
-        fetchMaybeToken(client.rpc, await ata(buyerSigner.address)),
-      ]);
+        ata(buyerSigner.address).then((a) => fetchMaybeToken(client.rpc, a)),
+      ]));
       return {
         program: DEAL_ESCROW_PROGRAM_ADDRESS, programDeployed: Boolean(program.value?.executable),
         buyerSol: Number(sol.value) / 1e9, buyerTokens: token.exists ? token.data.amount.toString() : "0",
