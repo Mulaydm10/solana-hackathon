@@ -5,3 +5,4 @@ chain: npm test --prefix chain
 surface: npm test --prefix surface
 web: npm test --prefix web
 mcp: npm test --prefix mcp
+agents: npm test --prefix agents

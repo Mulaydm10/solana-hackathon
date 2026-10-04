@@ -22,10 +22,11 @@ design: Mulaydm10
 | `lane:core` | `core/` | chain-agnostic deal terms: validation, terms hash, plain-language summary; no network or chain code | `contracts/core.md` |
 | `lane:web` | `web/` | public site on Vercel: marketplace UI where buyers sign with their own wallet; server routes for drafting and the verifier | `contracts/web.md` |
 | `lane:mcp` | `mcp/` | npm package run with `npx`: MCP server giving AI agents deal tools, signing with the agent's own local key | `contracts/mcp.md` |
+| `lane:agents` | `agents/` | Node runtime for agents: seller listing chain, encrypted custody, capability broker + egress proxy, per-agent VM runner, team orchestrator, prompt-injection corpus (PLAN §4–§7) | `contracts/agents.md` |
 <!-- bootstrap.sh appends one row per lane you pass it; design edits after that. A lane may be a nested path (`src/01_ingest`); no lane may be a prefix of another. -->
 
 ## Verify environment
-`docs/setup.sh` (design-owned; CI runs the copy on `main`; changing it needs a canary like any workflow change). Python + `requirements-dev.txt` for the canary only; TypeScript/Node per lane (`npm test --prefix <lane>`, lanes core chain surface web mcp; a lane without `package.json` is skipped at install and gets one in its first PR). Workers run the same script once per worktree.
+`docs/setup.sh` (design-owned; CI runs the copy on `main`; changing it needs a canary like any workflow change). Python + `requirements-dev.txt` for the canary only; TypeScript/Node per lane (`npm test --prefix <lane>`, lanes core chain surface web mcp agents; a lane without `package.json` is skipped at install and gets one in its first PR). Workers run the same script once per worktree.
 <!-- change both this line and requirements-dev.txt / docs/verify.txt if the project is not Python -->
 
 ## Decisions
@@ -49,3 +50,4 @@ design: Mulaydm10
 - 2026-10-04: direction set to the AI procurement layer (pay-on-delivery escrow program). On Dhruv's instruction the design session also builds the first lane tasks (deviation from "design never claims lane tasks"); vedant059 reviews.
 - 2026-10-04: lanes `web` (Vercel site) and `mcp` (npx MCP package) added as infrastructure only; no product code yet. Shared code must stay browser-safe (core, chain).
 - 2026-10-04: plan for v3 onward is `docs/PLAN.md` (#57). vedant059 back online: worker handshake issue opened; from now on design and the worker both claim lane issues (Dhruv's instruction), reviews go both ways, merges need a non-author review naming the head sha.
+- 2026-10-04: lane `agents` added (#64). It has no package.json until its first claim PR, which must add one (setup.sh skips a lane without a manifest).
