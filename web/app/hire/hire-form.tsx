@@ -3,12 +3,13 @@
 // and shown by its wallet; the server never holds the buyer's key.
 import { useState } from "react";
 import { createNoopSigner, createSolanaRpc, type Address, type Instruction } from "@solana/kit";
-import { fetchMaybeBuyerPolicy, findMandatePda, getAddMandateInstruction, getInitPolicyInstructionAsync, policyAddress } from "@deal/chain";
+import { findMandatePda, getAddMandateInstruction, getInitPolicyInstructionAsync } from "@deal/chain";
 import { useWallet } from "../wallet";
 import { sendWithWallet } from "../../lib/wallet-tx";
 import { PUBLIC_MINT, PUBLIC_RPC } from "../../lib/public-config";
 import { approveStageIx, createMissionIx, describePlan, feeDealIx, hexToBytes, randomDealId, type CreateWire } from "../../lib/mission-flow";
-import { missionLink, saveMission } from "../../lib/inbox";
+import { listMissions, missionLink, saveMission } from "../../lib/inbox";
+import { fundError, missingMandates, readFundState, rpcExists, type FundStep } from "./fund-steps";
 
 /** A Team listing as the hire page offers it; price in token base units as a decimal string. */
 export type TeamOption = { listing: string; name: string; description: string; roles: string[]; seller: string; price: string; contentHash: string };
@@ -34,6 +35,7 @@ export function HireForm({ teams }: { teams: TeamOption[] }) {
   const [feeDeal, setFeeDeal] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   async function send(ixs: Instruction[]) {
     if (!connected) throw new Error("connect your wallet first");
@@ -66,40 +68,53 @@ export function HireForm({ teams }: { teams: TeamOption[] }) {
     if (!prep || !connected) return;
     setBusy(true);
     setMsg(null);
+    let stage: FundStep = "policy";
     try {
       const buyer = createNoopSigner(connected.account.address as Address);
       const rpc = createSolanaRpc(PUBLIC_RPC);
+      // Read what is already on chain, so a retry resumes after a failed transaction instead of repeating one.
+      const state = await readFundState(rpcExists(rpc), buyer.address, prep.mission as Address, prep.roles.map((r) => r.agent));
       // A spending policy is required once per buyer; create a permissive one if missing (the mission's own
       // mandates and stage gates bound the agents).
-      if (!(await fetchMaybeBuyerPolicy(rpc, await policyAddress(buyer.address))).exists) {
+      if (!state.policy) {
         await send([await getInitPolicyInstructionAsync({
           buyer, mint: PUBLIC_MINT as Address,
           params: { periodSecs: 86_400, periodBudget: 100_000_000n, maxPrice: 50_000_000n, approvalThreshold: 10n ** 15n, approver: buyer.address, allowAnySeller: true, allowedSellers: [] },
         })]);
       }
-      // The mission's budget and the team's fee deal in ONE transaction: both are funded, or neither is.
-      const option = teams.find((t) => t.listing === team)!;
-      const fee = await feeDealIx(buyer, {
-        listing: { address: option.listing, seller: option.seller, price: BigInt(option.price), contentHash: option.contentHash },
-        mint: PUBLIC_MINT as Address, termsHash: prep.terms.hash, verifier: prep.createParams.verifier as Address,
-        deadline: BigInt(prep.createParams.expiresAt), dealId: randomDealId(),
-      });
-      await send([await createMissionIx(buyer, PUBLIC_MINT as Address, team as Address, prep.createParams), fee.ix]);
-      setFeeDeal(fee.deal);
-      saveMission({ mission: prep.mission, feeDeal: fee.deal, team, at: Date.now() });
-      const mandates = await Promise.all(prep.roles.map(async (r) => {
-        const [mandate] = await findMandatePda({ mission: prep.mission as Address, agent: r.agent as Address });
-        const m = r.mandate;
-        return getAddMandateInstruction({
-          buyer, mission: prep.mission as Address, mandate, agent: m.agent as Address, roleHash: hexToBytes(m.roleHash), cap: BigInt(m.cap),
-          perTxCap: BigInt(m.perTxCap), payees: m.payees as Address[], stageMask: m.stageMask, expiresAt: BigInt(m.expiresAt),
+      let deal = feeDeal ?? listMissions().find((x) => x.mission === prep.mission)?.feeDeal ?? null;
+      if (!state.mission) {
+        stage = "mission";
+        // The mission's budget and the team's fee deal in ONE transaction: both are funded, or neither is.
+        const option = teams.find((t) => t.listing === team)!;
+        const fee = await feeDealIx(buyer, {
+          listing: { address: option.listing, seller: option.seller, price: BigInt(option.price), contentHash: option.contentHash },
+          mint: PUBLIC_MINT as Address, termsHash: prep.terms.hash, verifier: prep.createParams.verifier as Address,
+          deadline: BigInt(prep.createParams.expiresAt), dealId: randomDealId(),
         });
-      }));
-      await send(mandates);
-      await fetch(`/api/missions/${prep.mission}/start`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ feeDeal: fee.deal }) });
+        await send([await createMissionIx(buyer, PUBLIC_MINT as Address, team as Address, prep.createParams), fee.ix]);
+        deal = fee.deal;
+        setFeeDeal(fee.deal);
+        saveMission({ mission: prep.mission, feeDeal: fee.deal, team, at: Date.now() });
+      }
+      const missing = missingMandates(prep.roles, state);
+      if (missing.length > 0) {
+        stage = "mandates";
+        await send(await Promise.all(missing.map(async (r) => {
+          const [mandate] = await findMandatePda({ mission: prep.mission as Address, agent: r.agent as Address });
+          const m = r.mandate;
+          return getAddMandateInstruction({
+            buyer, mission: prep.mission as Address, mandate, agent: m.agent as Address, roleHash: hexToBytes(m.roleHash), cap: BigInt(m.cap),
+            perTxCap: BigInt(m.perTxCap), payees: m.payees as Address[], stageMask: m.stageMask, expiresAt: BigInt(m.expiresAt),
+          });
+        })));
+      }
+      await fetch(`/api/missions/${prep.mission}/start`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(deal ? { feeDeal: deal } : {}) });
+      setFailed(false);
       setStep("funded");
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
+      setFailed(true);
+      setMsg(fundError(stage, e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }
@@ -153,7 +168,14 @@ export function HireForm({ teams }: { teams: TeamOption[] }) {
             ))}</tbody>
           </table>
           <ol>{prep.plans.map((p) => <li key={p.stage}>Stage {p.stage + 1}: {describePlan(p.plan)}, plan <code>{p.planHash.slice(0, 16)}…</code></li>)}</ol>
-          {step === "review" && <button type="button" disabled={busy} onClick={() => void fund()}>Fund the mission and the team fee, give the agents their mandates (wallet)</button>}
+          {step === "review" && (
+            <>
+              <p>Your wallet asks you to sign up to three transactions: your budget policy (only the first time), the mission
+                budget with the team fee, then the agents&apos; mandates.</p>
+              <button type="button" disabled={busy} onClick={() => void fund()}>
+                {failed ? "Retry: send only what is still missing (wallet)" : "Fund the mission and the team fee, give the agents their mandates (wallet)"}</button>
+            </>
+          )}
           {step === "funded" && <button type="button" disabled={busy} onClick={() => void approveFirst()}>Approve stage 1&apos;s plan (wallet)</button>}
           {step === "started" && <p>Stage 1 approved. Follow it on <a href={missionLink({ mission: prep.mission, feeDeal })}>your mission page</a>.</p>}
         </div>
