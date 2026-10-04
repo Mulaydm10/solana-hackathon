@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { registryNote } from "../lib/site-registry";
 import { NAV } from "./nav";
 import { WalletButton, WalletProvider } from "./wallet";
 
@@ -24,7 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <WalletButton />
         </header>
         <div style={{ padding: 24, maxWidth: 960, margin: "0 auto" }}>{children}</div>
-        <footer style={{ padding: "12px 24px", fontSize: 12, color: "#666" }}>Solana devnet only. Test tokens have no value. Listings shown are demo data until the registry is on chain.</footer>
+        <footer style={{ padding: "12px 24px", fontSize: 12, color: "#666" }}>Solana devnet only. Test tokens have no value. {registryNote()}</footer>
         </WalletProvider>
       </body>
     </html>
