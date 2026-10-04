@@ -1,0 +1,30 @@
+{
+  "name": "@deal/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server for the procurement layer: AI agents find services and run escrowed deals on Solana.",
+  "bin": {
+    "deal-mcp": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && node --import tsx --test test/*.test.ts && node scripts/build.mjs && node --test test/smoke.test.mjs"
+  },
+  "dependencies": {
+    "@deal/chain": "file:../chain",
+    "@deal/core": "file:../core",
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
