@@ -71,7 +71,14 @@ test("every navigation page renders with the shell (nav and wallet slot)", async
     assert.equal(p.status, 200, n.href);
     for (const m of NAV) assert.ok(p.html.includes(`>${m.label.replace("&", "&amp;")}</a>`), `${n.href} lacks nav link ${m.label}`);
     assert.match(p.html, /Solana devnet only/);
+    assert.ok(p.html.includes("max-width: 100%") && p.html.includes("overflow-wrap: anywhere"), `${n.href} lacks the no-overflow rules`);
   }
+});
+
+test("favicon: /favicon.ico is served (no 404 in the console on first load)", async () => {
+  const r = await fetch(`${base}/favicon.ico`);
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get("content-type") ?? "", /icon/);
 });
 
 test("catalogue: lists every fixture, filters by query string, never shows the seller's own grade claim as a grade", async () => {
@@ -82,6 +89,11 @@ test("catalogue: lists every fixture, filters by query string, never shows the s
   assert.ok(svc.html.includes("Invoice OCR") && !svc.html.includes("Trip planner"));
   const flagged = await page("/?hideFlagged=1");
   assert.ok(!flagged.html.includes("B2B leads, DACH"));
+  // The form's max price is USDC (#134): the listing's own USDC price keeps it in the results.
+  const power = FIXTURES.find((l) => l.meta.name === "EU day-ahead power prices 2025")!;
+  const usdcMax = await page(`/?maxUsdc=${Number(power.price) / 1e6}`);
+  assert.ok(usdcMax.html.includes(power.meta.name) && usdcMax.html.includes('placeholder="Max price (USDC)"'));
+  assert.ok(!(await page(`/?maxUsdc=${Number(power.price - 1n) / 1e6}`)).html.includes(power.meta.name));
   const junk = await page("/?kind=Admin&maxPrice=1e99&minGrade=Z");
   assert.equal(junk.status, 200);
 });

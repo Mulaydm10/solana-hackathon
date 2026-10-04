@@ -1,15 +1,29 @@
 import Link from "next/link";
-import { describeRep } from "@deal/core";
+import { describeRep, formatAmount } from "@deal/core";
 import { categories, parseQuery, search } from "../lib/catalogue";
 import { demand } from "../lib/demand";
-import { siteRegistry } from "../lib/site-registry";
+import { RegistryUnavailable, siteRegistry } from "../lib/site-registry";
 import { usdc } from "./format";
 
 export const dynamic = "force-dynamic";
 
 export default async function Catalogue({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const query = parseQuery(await searchParams);
-  const all = await siteRegistry().list();
+  const params = await searchParams;
+  const query = parseQuery(params);
+  let all;
+  try {
+    all = await siteRegistry().list();
+  } catch (e) {
+    if (!(e instanceof RegistryUnavailable)) throw e;
+    return (
+      <main>
+        <h1>Catalogue</h1>
+        <p role="alert" data-testid="registry-unavailable">
+          The listing registry is temporarily unavailable (the devnet RPC did not answer). <a href={`/?${new URLSearchParams(Object.entries(params).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : [])))}`}>Try again</a> in a few seconds.
+        </p>
+      </main>
+    );
+  }
   const results = search(all, query);
   if (results.length === 0) demand.record({ q: query.q, category: query.category, kind: query.kind, budget: query.maxPrice });
   return (
@@ -32,7 +46,7 @@ export default async function Catalogue({ searchParams }: { searchParams: Promis
           <option value="">Any grade</option>
           {["A", "B", "C", "D"].map((g) => <option key={g} value={g}>Grade {g} or better</option>)}
         </select>
-        <input name="maxPrice" placeholder="Max price (base units)" defaultValue={query.maxPrice?.toString() ?? ""} aria-label="Maximum price in base units" />
+        <input name="maxUsdc" inputMode="decimal" placeholder="Max price (USDC)" defaultValue={query.maxPrice === undefined ? "" : formatAmount(query.maxPrice, 6)} aria-label="Maximum price in USDC" />
         <label><input type="checkbox" name="hideFlagged" value="1" defaultChecked={query.hideFlagged} /> Hide flagged sellers</label>
         <label><input type="checkbox" name="attestedOnly" value="1" defaultChecked={query.attestedOnly} /> Assessed only</label>
         <button type="submit">Search</button>
