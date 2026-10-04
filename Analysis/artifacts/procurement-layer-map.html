@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Procurement Layer Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;650;750&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a single reading column with a facts strip, two diagrams, then features grouped by what they protect. */
+  :root {
+    --bg: #f5f7f8; --surface: #ffffff; --ink: #14212b; --muted: #556672; --line: #dbe3e7;
+    --accent: #0b7f74; --accent-soft: #e1f2ef; --chip: #edf1f3;
+    --live: #157347; --live-soft: #e3f3ea; --built: #24598f; --built-soft: #e5eef8; --next: #8a5a00; --next-soft: #fbf0d9;
+    --display: "Sora", "Avenir Next", "Segoe UI", sans-serif;
+    --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f171c; --surface: #16212a; --ink: #e6eef2; --muted: #9aaab4; --line: #26343e;
+      --accent: #4cc7b8; --accent-soft: #143430; --chip: #1d2b35;
+      --live: #57c98d; --live-soft: #15301f; --built: #7fb2ea; --built-soft: #182a3d; --next: #f0c060; --next-soft: #33290f;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f171c; --surface: #16212a; --ink: #e6eef2; --muted: #9aaab4; --line: #26343e;
+    --accent: #4cc7b8; --accent-soft: #143430; --chip: #1d2b35;
+    --live: #57c98d; --live-soft: #15301f; --built: #7fb2ea; --built-soft: #182a3d; --next: #f0c060; --next-soft: #33290f;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.6 var(--body); }
+  .wrap { max-width: 980px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: grid; gap: 44px; }
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+  h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 750; line-height: 1.1; }
+  h2 { font-size: 23px; font-weight: 650; }
+  h3 { font-size: 15.5px; font-weight: 650; }
+  p { margin: 0; max-width: 68ch; }
+  .eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+  .lede { font-size: 17px; color: var(--muted); }
+  header { display: grid; gap: 14px; }
+  .thesis { font-family: var(--display); font-size: 19px; font-weight: 500; }
+  .thesis b { color: var(--accent); font-weight: 650; }
+  code, .mono { font-family: var(--mono); font-size: 0.86em; }
+  code { background: var(--chip); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .fact { background: var(--surface); padding: 14px 16px; display: grid; gap: 4px; min-width: 0; }
+  .fact .k { font: 500 11.5px/1.2 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .fact .v { font-family: var(--display); font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .fact .s { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+
+  section { display: grid; gap: 16px; }
+  .diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; overflow-x: auto; }
+  .diagram pre.mermaid { margin: 0; background: transparent; min-width: 640px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+
+  .states { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .states th, .states td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .states th { font: 500 11.5px/1.2 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .states td:first-child { font-family: var(--mono); white-space: nowrap; }
+  .table-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+
+  .groups { display: grid; gap: 28px; }
+  .group { display: grid; gap: 10px; }
+  .group > p { color: var(--muted); }
+  .features { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+  .feature { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+  .feature .top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .feature .what { font-size: 14px; color: var(--muted); }
+  .feature .from { font: 400 12px/1.4 var(--mono); color: var(--muted); }
+  .pill { font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 7px; border-radius: 99px; white-space: nowrap; }
+  .pill.live { background: var(--live-soft); color: var(--live); }
+  .pill.built { background: var(--built-soft); color: var(--built); }
+  .pill.next { background: var(--next-soft); color: var(--next); }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .filters button { font: 500 13px/1 var(--body); padding: 8px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+  .filters button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+  footer { font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
+  @media (max-width: 520px) { .wrap { padding-block: 28px 56px; } .fact .v { font-size: 18px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">WHU Solana hackathon · state on 4 Oct 2026</div>
+    <h1>Procurement Layer</h1>
+    <p class="thesis">An AI turns a request into deal terms. <b>A Solana program holds the money and enforces them.</b></p>
+    <p class="lede">A buyer, a person or an AI agent, says what it needs. The AI picks a listed service and fills in an audited deal template. The escrow program on Solana checks the buyer's spending policy, holds the payment, takes a stake from the seller, and pays only for a delivery that matches the terms. Missed deadlines, bad deliveries and silence all have a rule, and the program applies it.</p>
+  </header>
+
+  <div class="facts" aria-label="Key facts">
+    <div class="fact"><span class="k">Network</span><span class="v">Solana devnet</span><span class="s">program v2, upgraded 4 Oct</span></div>
+    <div class="fact"><span class="k">Escrow program</span><span class="v mono" style="font-size:15px">CfD43…VGSV</span><span class="s"><a href="https://explorer.solana.com/address/CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV?cluster=devnet" target="_blank" rel="noopener">open in Explorer</a></span></div>
+    <div class="fact"><span class="k">Deployed = repo</span><span class="v">byte-for-byte</span><span class="s">sha256 5a77c887… on chain and in git</span></div>
+    <div class="fact"><span class="k">Live proof</span><span class="v">11 checks</span><span class="s">run on chain from the demo page</span></div>
+    <div class="fact"><span class="k">Automated tests</span><span class="v">96</span><span class="s">core 17 · chain 41 · surface 21 · web 6 · mcp 11</span></div>
+    <div class="fact"><span class="k">Attack search</span><span class="v">0 violations</span><span class="s">60 random runs, all 11 outcomes reached</span></div>
+  </div>
+
+  <section aria-labelledby="tech">
+    <div class="eyebrow">Technical diagram</div>
+    <h2 id="tech">How the parts fit together</h2>
+    <p>Three ways in (the demo page, AI agents over MCP, and the future public site) share one deal library. The library is the only code that talks to the chain, and the program is the only thing that moves money.</p>
+    <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  subgraph Clients["Ways in"]
+    Page["Demo page<br/>(surface/public)"]
+    Agent["AI agent<br/>via MCP (npx)"]
+    Site["Public site on Vercel<br/>(web, not deployed)"]
+  end
+  subgraph Server["Demo server · surface/"]
+    API["HTTP API<br/>token · rate limits · CSP"]
+    Draft["Drafting<br/>Claude or rules"]
+    Verifier["Independent verifier<br/>own key"]
+  end
+  subgraph Shared["Shared code"]
+    Core["core/<br/>terms · checks · hash"]
+    Lib["chain/ deal library<br/>actions + safeSend"]
+  end
+  subgraph Solana["Solana devnet"]
+    Program["deal_escrow program v2"]
+    Policy[("BuyerPolicy PDA")]
+    Deal[("Deal PDA")]
+    Vault[("Vault token account")]
+    Token["SPL Token program"]
+  end
+  Page --> API
+  Site -. planned .-> Lib
+  Agent -. planned tools .-> Lib
+  API --> Draft
+  API --> Core
+  API --> Lib
+  Verifier --> Lib
+  Lib --> Program
+  Program --> Policy
+  Program --> Deal
+  Program --> Vault
+  Program --> Token
+</pre>
+    </div>
+    <div class="legend"><span>Solid arrows: running today.</span><span>Dashed arrows: infrastructure built, features next.</span></div>
+  </section>
+
+  <section aria-labelledby="flow">
+    <div class="eyebrow">Flow diagram</div>
+    <h2 id="flow">A deal from request to settlement</h2>
+    <p>Every branch below is enforced by the program. Refusals are normal answers with a reason code, and no money moves when something is refused.</p>
+    <div class="diagram">
+<pre class="mermaid">
+flowchart TD
+  Ask["Buyer asks in plain words"] --> Find["AI finds a listed service<br/>and drafts the terms"]
+  Find --> Check{"Terms within budget?"}
+  Check -- "no" --> R1["Refused: OVER_BUDGET<br/>nothing moves"]
+  Check -- "yes" --> Lock["Lock: program checks the buyer policy<br/>and escrows the order"]
+  Lock -- "policy fails" --> R2["Refused by Solana:<br/>OverMaxPrice · SellerNotAllowed ·<br/>OverPeriodBudget · ApprovalRequired"]
+  Lock --> Open(["Open"])
+  Open -- "buyer cancels" --> Cancelled(["Cancelled · full refund"])
+  Open -- "seller accepts, posts stake" --> Funded(["Funded"])
+  Funded -- "deadline passes" --> Slash1(["Refunded · stake slashed to buyer"])
+  Funded -- "seller submits hash + invoice<br/>(invoice within tolerance)" --> Delivered(["Delivered"])
+  Delivered -- "buyer releases that exact delivery" --> Released(["Released · seller paid, stake back"])
+  Delivered -- "buyer silent past review window" --> Claimed(["Claimed · seller paid"])
+  Delivered -- "buyer challenges, posts bond" --> Challenged(["Challenged"])
+  Challenged -- "verifier: delivery OK" --> Pass(["VerifiedPass · seller paid + bond"])
+  Challenged -- "verifier: delivery fails" --> Fail(["VerifiedFail · buyer refunded + stake"])
+  Challenged -- "no verdict in time" --> NoVerdict(["NoVerdict · buyer refunded, stake back"])
+</pre>
+    </div>
+  </section>
+
+  <section aria-labelledby="states">
+    <div class="eyebrow">Outcomes</div>
+    <h2 id="states">Who gets what in each final state</h2>
+    <div class="table-scroll">
+      <table class="states">
+        <thead><tr><th>Final state</th><th>Seller receives</th><th>Buyer receives</th></tr></thead>
+        <tbody>
+          <tr><td>Released</td><td>the invoice (capped at the order) + its stake</td><td>the unbilled rest of the order + any bond</td></tr>
+          <tr><td>Claimed</td><td>the invoice + its stake</td><td>the unbilled rest of the order</td></tr>
+          <tr><td>VerifiedPass</td><td>the invoice + its stake + the buyer's bond</td><td>the unbilled rest of the order</td></tr>
+          <tr><td>VerifiedFail</td><td>nothing (stake slashed)</td><td>the order + its bond + the seller's stake</td></tr>
+          <tr><td>NoVerdict</td><td>its stake back</td><td>the order + its bond</td></tr>
+          <tr><td>Refunded</td><td>nothing (stake slashed, if it had accepted)</td><td>the order + the seller's stake</td></tr>
+          <tr><td>Cancelled</td><td>nothing</td><td>the order (budget credited back)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="features">
+    <div class="eyebrow">Features</div>
+    <h2 id="features">Everything the project does</h2>
+    <p>Grouped by what each feature protects. Many mechanisms are taken from ETHOnline 2026 projects we studied in their code; the source is named on each card.</p>
+    <div class="filters" role="group" aria-label="Filter features by status">
+      <button type="button" id="f-all" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" id="f-live" data-filter="live" aria-pressed="false">Live on devnet</button>
+      <button type="button" id="f-built" data-filter="built" aria-pressed="false">Built, not public yet</button>
+      <button type="button" id="f-next" data-filter="next" aria-pressed="false">Next</button>
+    </div>
+    <div class="groups" id="groups"></div>
+  </section>
+
+  <footer>
+    <span>Repository: <code>Mulaydm10/solana-hackathon</code> · lanes <code>core</code> <code>chain</code> <code>surface</code> <code>web</code> <code>mcp</code>.</span>
+    <span>"USDC" on devnet is a test token we mint; it has no value. Sellers and deliveries in the demo are simulated; every payment, stake, refusal and verdict is a real devnet transaction.</span>
+  </footer>
+</div>
+
+<script>
+const GROUPS = [
+  { title: "Money held and released by Solana", note: "The escrow program, not a server, decides when funds move.", items: [
+    ["Pay-on-delivery escrow", "The order amount sits in a vault owned by the deal account until delivery or refund.", "live", "our design"],
+    ["Hash-bound release", "The buyer's release names the delivery hash it approves; any other delivery is refused.", "live", "AutoVoyage"],
+    ["Invoice match on chain", "The seller's invoice must be within the order ± an agreed tolerance; the seller is paid the invoice and the buyer gets the rest back.", "live", "Procure (done on chain here; theirs was off chain)"],
+    ["Single settlement path", "Every payout goes through one function that must pay out exactly what the vault holds for that deal, only to the deal's own parties.", "live", "our design"],
+    ["Terms hash on chain", "The sha256 of the terms the buyer approved is stored with the deal, so anyone can check what was agreed.", "live", "our design"],
+  ]},
+  { title: "Buyer controls", note: "A spending policy the program checks before any deal opens.", items: [
+    ["On-chain buyer policy", "Budget per period, maximum price per deal and an approved-seller list, enforced when a deal opens.", "live", "LedgerMind, NotYet"],
+    ["Approval above a threshold", "Above a set amount a second key, the approver, must co-sign the deal.", "live", "NotYet, Harness"],
+    ["Fail-closed seller list", "An unlisted seller is refused unless the buyer explicitly allows any seller.", "live", "LeekWallet (refuse by default)"],
+    ["Cancel before acceptance", "The buyer can withdraw an offer the seller has not accepted; budget is credited back.", "live", "our design"],
+    ["Budget guard before signing", "Requests over the stated budget are refused before anything is signed.", "live", "payOrRefuse"],
+  ]},
+  { title: "Seller accountability", note: "Sellers commit money of their own before they start.", items: [
+    ["Seller accept + stake", "The seller accepts the terms and posts a stake (10% in the demo) before work begins.", "live", "Pact"],
+    ["Slashing from chain time only", "A missed deadline or a failed verification slashes the stake to the buyer; only the program decides, from on-chain time and state.", "live", "Pact; avoids Xenia's open slash"],
+    ["Buyer silence = acceptance", "After the review window anyone can trigger payment to the seller, so a silent buyer cannot hold funds.", "live", "Reckn, Held"],
+    ["Seller reputation", "Track record built from settled deals, resistant to self-dealing.", "next", "Assay"],
+  ]},
+  { title: "Delivery checks and disputes", note: "What happens when the buyer does not like the delivery.", items: [
+    ["Challenge with a bond", "Inside the review window the buyer can challenge, posting a bond so challenges are not free.", "live", "Reckn, Recourse"],
+    ["Independent verifier", "A key fixed when the deal opens, never buyer or seller, decides the challenge.", "live", "Clawback, OpenBook, Reckn"],
+    ["Verifier judges the exact bytes", "The verifier fails any delivery whose bytes do not hash to the on-chain delivery hash, then checks length, junk and topic.", "live", "our design"],
+    ["No stuck deals", "If no verdict arrives in time, anyone can refund the buyer and the seller gets its stake back.", "live", "fixes PROVE and Clawback"],
+    ["Key-for-payment delivery", "The seller reveals the decryption key in the same transaction that pays it.", "next", "DEADMAN"],
+  ]},
+  { title: "AI and marketplace", note: "How a request becomes a deal.", items: [
+    ["Plain-English request", "Buyers describe what they need, with a deadline and budget.", "live", "our design"],
+    ["Drafting with Claude or rules", "Claude picks a listed service and fills the template; a rule-based parser takes over without an API key.", "built", "Claude needs ANTHROPIC_API_KEY"],
+    ["Listed prices only", "The AI never invents a price or writes contract code; it only fills a template.", "live", "our design"],
+    ["Service catalog", "Five demo sellers: translation, research, data, design, security audit.", "live", "demo data"],
+    ["Real deliverables", "With a Claude key, seller agents produce the actual work and its hash goes on chain.", "built", "needs ANTHROPIC_API_KEY"],
+  ]},
+  { title: "Reliability and security", note: "Lessons taken from running live on devnet.", items: [
+    ["Never act twice", "After a rate limit, a network blip or a failed confirmation, the chain decides whether the action already landed before anything is resent.", "live", "found and fixed live on devnet"],
+    ["Locked-down demo API", "Writes need a token, rate limits per client and per hour, loopback or Tailscale-only binding, security headers.", "live", "Cordon, Batas"],
+    ["Refusals are values", "Every refusal is a normal answer with a reason code; servers never crash on bad input.", "live", "payOrRefuse"],
+    ["Mainnet refused", "Configs refuse mainnet until the program is audited and its upgrade key is settled.", "live", "our design"],
+  ]},
+  { title: "Proof anyone can check", note: "Evidence judges and users can re-run.", items: [
+    ["Live proof panel", "One button runs 11 scenarios on chain and links every transaction.", "live", "our design"],
+    ["Attack search", "Random instruction sequences from random signers, checked after every step against an independent model.", "live", "Cordon G4"],
+    ["Deployed equals repo", "A script reads the deployed program from devnet and compares it byte-for-byte with the binary in git.", "live", "our design"],
+    ["Docs checked against the chain", "A test confirms every address and transaction cited in the docs exists on devnet.", "live", "Batas"],
+    ["Reproducible build", "Rebuild the program from source in Docker and match the deployed hash.", "next", "needs a container runtime"],
+    ["Remove the upgrade key", "Make the program immutable once the design settles.", "next", "Cordon"],
+  ]},
+  { title: "Infrastructure for new features", note: "Built so the next feature lands in one place.", items: [
+    ["Shared deal library", "Every chain action written once, used by the demo server, the site and the MCP package.", "live", "our design"],
+    ["MCP package", "One file per tool, bundled into a single self-contained binary; tested with a real MCP handshake.", "built", "OnchainRouter, Cordon"],
+    ["Vercel site skeleton", "Next.js app with schema-checked secrets and a health route; buyers will sign with their own wallet.", "built", "not deployed"],
+    ["Browser-safe shared code", "Terms hashing and the chain client run in browsers and bundles.", "built", "our design"],
+    ["Lanes, CI and canaries", "Five lanes with typecheck, tests and build in CI; workflow changes are proven by canary runs.", "live", "agent-bus protocol"],
+  ]},
+];
+
+const LABEL = { live: "Live", built: "Built", next: "Next" };
+const groupsEl = document.getElementById("groups");
+function render(filter) {
+  groupsEl.innerHTML = "";
+  for (const g of GROUPS) {
+    const items = g.items.filter((i) => filter === "all" || i[2] === filter);
+    if (!items.length) continue;
+    const sec = document.createElement("div");
+    sec.className = "group";
+    sec.innerHTML = `<h3></h3><p></p><ul class="features"></ul>`;
+    sec.querySelector("h3").textContent = g.title;
+    sec.querySelector("p").textContent = g.note;
+    const ul = sec.querySelector("ul");
+    for (const [name, what, status, from] of items) {
+      const li = document.createElement("li");
+      li.className = "feature";
+      li.innerHTML = `<div class="top"><strong></strong><span class="pill ${status}">${LABEL[status]}</span></div><span class="what"></span><span class="from"></span>`;
+      li.querySelector("strong").textContent = name;
+      li.querySelector(".what").textContent = what;
+      li.querySelector(".from").textContent = "from: " + from;
+      ul.append(li);
+    }
+    groupsEl.append(sec);
+  }
+}
+document.querySelectorAll(".filters button").forEach((b) => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".filters button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    render(b.dataset.filter);
+  });
+});
+render("all");
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default" });</script>
+</body>
+</html>
