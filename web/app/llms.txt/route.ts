@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   const site = new URL(req.url).origin;
   const items = search(await siteRegistry().list(), {}).map((l) => catalogueItem(l, site));
   const lines = [
-    "# Deal Desk",
+    "# Fiducia",
     "",
     "> A marketplace for data, services and agent teams. Payment is held in escrow by a Solana program (devnet)",
     "> and released on delivery. Grades come from registered assessors and reputation from on-chain records,",
