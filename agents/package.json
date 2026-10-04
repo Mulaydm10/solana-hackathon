@@ -9,7 +9,8 @@
   "scripts": {
     "test": "tsc --noEmit && node --import tsx --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "spike:x402": "node --import tsx scripts/x402-spike.ts"
+    "spike:x402": "node --import tsx scripts/x402-spike.ts",
+    "serve:missions": "node --import tsx scripts/serve-missions.ts"
   },
   "dependencies": {
     "@deal/chain": "file:../chain",
