@@ -11,6 +11,7 @@ import { POST as faucetRoute } from "../app/api/faucet/route.ts";
 import { createDemandStore } from "../lib/demand.ts";
 import { connectedSellerHref, sellerView } from "../lib/dashboard.ts";
 import { createFaucet, FAUCET } from "../lib/faucet.ts";
+import { sentSignature } from "../lib/faucet-send.ts";
 import { FIXTURES } from "../lib/registry.ts";
 
 type Item = { address: string; seller: string; kind: string; name: string; grade: string | null; price: string; url: string };
@@ -119,6 +120,11 @@ test("faucet: per wallet and per client once a day, a daily cap, and a failed se
   const g = createFaucet(async () => (await new Promise((r) => setTimeout(r, 10)), { ok: true, signature: "s" }), { now: () => t });
   const both = await Promise.all([g(W[2]!, "a"), g(W[2]!, "b")]);
   assert.deepEqual(both.map((r) => r.ok).sort(), [false, true]);
+});
+
+test("faucet sender reports the transaction signature from Kit's plan result, never [object Object]", () => {
+  const signature = "5xRbAge3KAzc31nDxeTRyPsETjcgQLfi5VUrikb2FTgVE6sWFyEnfv2LDdmJTi2H4q2cKdcSJU8B8STRSFkoU9T6";
+  assert.equal(sentSignature({ kind: "single", status: "successful", context: { signature } } as never), signature);
 });
 
 test("/api/faucet: NOT_CONFIGURED without the server key; the key never appears in a reply", async () => {
