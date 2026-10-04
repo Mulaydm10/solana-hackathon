@@ -7,8 +7,11 @@
  *   - the role is the one the buyer approved on chain (its hash equals the mandate's `role_hash`);
  *   - the mandate is live (not revoked, not expired, mission open) and the current stage is approved
  *     for this agent - checked at grant time AND again on every call, so a revoke stops a running agent;
- *   - an elevated action also needs the buyer's own signature over the exact request;
- *   - a provider's answer that contains the credential is refused, never returned.
+ *   - an elevated action also needs the buyer's own signature over the exact request, valid once and
+ *     only until its `notAfter` (so one human click is one grant, never a standing permission);
+ *   - a provider's answer or error that contains the credential, plain or encoded, is refused.
+ * Known limit: egress (egress.ts) still lets an agent send data TO an allowed provider host; the
+ * quarantined reader (#71) is what keeps injected instructions from steering it.
  * Results, never throws (contract rule).
  */
 import { randomBytes } from "node:crypto";
@@ -43,7 +46,10 @@ export type MandateSource = (mission: string, agent: string) => Promise<MandateS
 
 export type Provider = {
   id: string;
-  /** Hosts this provider talks to; opened in the egress allowlist only while a capability for it is live. */
+  /**
+   * `host:port` endpoints this provider talks to (a bare host means port 443); opened in the egress
+   * allowlist only while a capability for it is live. Ports matter: an allowed host's other services stay closed.
+   */
   hosts: string[];
   /** Actions that need the buyer's signature (e.g. anything that spends outside the mission vault). */
   elevated?: string[];
@@ -53,17 +59,28 @@ export type Provider = {
 export type GrantRequest = Omit<Capability, "expiresAt"> & {
   /** Seconds; capped by the broker's maximum. */
   ttlSecs?: number;
-  /** For elevated actions: the buyer's ed25519 signature (hex) over `approvalBytes(request)`. */
-  approval?: string;
+  /** For elevated actions: the buyer's ed25519 signature over `approvalBytes(request, notAfter, nonce)`. */
+  approval?: Approval;
 };
+
+export type Approval = {
+  /** Hex ed25519 signature. */
+  sig: string;
+  /** Unix seconds; the approval is refused after this, and at most `MAX_APPROVAL_SECS` ahead. */
+  notAfter: number;
+  /** Random, single use (hex, 16-64 chars). */
+  nonce: string;
+};
+
+export const MAX_APPROVAL_SECS = 900;
 
 export type Broker = {
   /** The orchestrator registers a mission's blueprint and which agent plays which role. */
   registerMission(mission: string, m: { buyer: string; blueprint: Blueprint; agents: Record<string, string> }): void;
   grant(req: GrantRequest): Promise<Ok<{ token: string; expiresAt: number }> | Refused>;
   call(token: string, action: string, args?: unknown): Promise<Ok<{ result: unknown }> | Refused>;
-  /** For the egress proxy: may the holder of `token` open a connection to `host` right now? */
-  egressAllowed(token: string, host: string): Promise<boolean>;
+  /** For the egress proxy: may the holder of `token` open a connection to `host:port` right now? */
+  egressAllowed(token: string, host: string, port: number): Promise<boolean>;
   /** Drops every token of a mission (or of one agent). */
   revokeTokens(mission: string, agent?: string): void;
 };
@@ -80,11 +97,31 @@ export type BrokerOptions = {
 
 const DOMAIN = "deal-broker-approval-v1\n";
 
-/** The exact bytes a buyer signs to approve an elevated capability. */
-export function approvalBytes(req: Omit<GrantRequest, "approval" | "ttlSecs">): Uint8Array {
-  const body = { provider: req.provider, resource: req.resource, actions: [...req.actions].sort(), mission: req.mission, agent: req.agent };
+/** The exact bytes a buyer signs to approve an elevated capability, once, until `notAfter`. */
+export function approvalBytes(req: Omit<GrantRequest, "approval" | "ttlSecs">, notAfter: number, nonce: string): Uint8Array {
+  const body = {
+    provider: req.provider, resource: req.resource, actions: [...req.actions].sort(), mission: req.mission, agent: req.agent,
+    notAfter, nonce,
+  };
   return new TextEncoder().encode(DOMAIN + canonicalize(body as unknown as Json));
 }
+
+/** "host:port", lowercased, with 443 for a bare host. */
+export function endpoint(hostPort: string): string {
+  const h = hostPort.toLowerCase();
+  return /:\d+$/.test(h) ? h : `${h}:443`;
+}
+
+/** The credential as it could appear in an answer: plain, base64, base64url, hex, URL-encoded. */
+function encodings(secret: string): string[] {
+  const b = Buffer.from(secret, "utf8");
+  const forms = [secret, b.toString("base64"), b.toString("base64url"), b.toString("hex"), encodeURIComponent(secret)];
+  // Base64 without padding, and the upper-case hex some providers print.
+  forms.push(b.toString("base64").replace(/=+$/, ""), b.toString("hex").toUpperCase());
+  return [...new Set(forms)].filter((f) => f.length >= 4);
+}
+
+const contains = (text: string, secret: string) => encodings(secret).some((f) => text.includes(f));
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 
@@ -94,6 +131,8 @@ export function createBroker(o: BrokerOptions): Broker {
   const providers = new Map(o.providers.map((p) => [p.id, p]));
   const missions = new Map<string, { buyer: string; blueprint: Blueprint; agents: Record<string, string> }>();
   const tokens = new Map<string, Capability>();
+  /** Used approval nonces until their notAfter (then they are expired anyway). */
+  const usedNonces = new Map<string, number>();
 
   const liveCheck = async (mission: string, agent: string): Promise<Refused | null> => {
     const s = await o.mandates(mission, agent).catch(() => null);
@@ -130,14 +169,23 @@ export function createBroker(o: BrokerOptions): Broker {
       if (dead) return dead;
       const elevated = req.actions.filter((a) => p.elevated?.includes(a));
       if (elevated.length > 0) {
+        const a = req.approval;
+        if (!a) return refuse("ELEVATED_NEEDS_APPROVAL", `${elevated.join(", ")} needs the buyer's signature over this exact request`);
+        const t = now();
+        for (const [n, until] of usedNonces) if (until < t) usedNonces.delete(n);
+        if (!Number.isSafeInteger(a.notAfter) || a.notAfter < t) return refuse("APPROVAL_EXPIRED", "the buyer's approval has expired");
+        if (a.notAfter > t + MAX_APPROVAL_SECS) return refuse("APPROVAL_TOO_LONG", `an approval may be valid for at most ${MAX_APPROVAL_SECS} s`);
+        if (typeof a.nonce !== "string" || !/^[0-9a-f]{16,64}$/.test(a.nonce)) return refuse("ELEVATED_NEEDS_APPROVAL", "the approval needs a random nonce");
+        if (usedNonces.has(a.nonce)) return refuse("APPROVAL_USED", "this approval was already used; each one grants once");
         const pub = base58Decode(m.buyer);
         let ok = false;
         try {
-          ok = !!req.approval && !!pub && ed25519.verify(Buffer.from(req.approval, "hex"), approvalBytes(req), pub);
+          ok = !!pub && ed25519.verify(Buffer.from(a.sig, "hex"), approvalBytes(req, a.notAfter, a.nonce), pub);
         } catch {
           ok = false;
         }
         if (!ok) return refuse("ELEVATED_NEEDS_APPROVAL", `${elevated.join(", ")} needs the buyer's signature over this exact request`);
+        usedNonces.set(a.nonce, a.notAfter);
       }
       const expiresAt = now() + Math.min(Math.max(1, req.ttlSecs ?? maxTtl), maxTtl);
       const token = randomBytes(32).toString("hex");
@@ -164,12 +212,12 @@ export function createBroker(o: BrokerOptions): Broker {
         try {
           const result = await p.call(action, cap.resource, args, secret);
           const text = JSON.stringify(result ?? null);
-          if (secret.length >= 4 && text.includes(secret)) return { leak: true as const };
+          if (contains(text, secret)) return { leak: true as const };
           return { result };
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          // Never echo a provider error that carries the credential.
-          return { error: secret.length >= 4 && msg.includes(secret) ? "provider error (redacted)" : msg };
+          // Never echo a provider error that carries the credential, in any encoding.
+          return { error: contains(msg, secret) ? "provider error (redacted)" : msg };
         }
       });
       if (!r.ok) return refuse(r.reason, "the provider credential is missing or does not open");
@@ -179,11 +227,11 @@ export function createBroker(o: BrokerOptions): Broker {
       return { ok: true, result: v.result };
     },
 
-    async egressAllowed(token, host) {
+    async egressAllowed(token, host, port) {
       const cap = tokens.get(token);
       if (!cap || now() >= cap.expiresAt) return false;
       const p = providers.get(cap.provider);
-      if (!p || !p.hosts.includes(host.toLowerCase())) return false;
+      if (!p || !Number.isInteger(port) || !p.hosts.map(endpoint).includes(`${host.toLowerCase()}:${port}`)) return false;
       return (await liveCheck(cap.mission, cap.agent)) === null;
     },
 

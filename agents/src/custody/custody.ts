@@ -134,8 +134,41 @@ export type Custody = {
   releaseKey(r: KeyRelease): Promise<Ok<{ sealedKey: Uint8Array }> | Refused>;
 };
 
-export function createCustody(o: { readDeal: ReadDeal }): Custody {
-  const keys = new Map<string, { key: Uint8Array; contentHash: Uint8Array }>();
+/** Where per-listing keys live. Default: memory. `sealedKeyStore` persists them encrypted under a master key. */
+export type KeyEntry = { key: Uint8Array; contentHash: Uint8Array };
+export type KeyStore = { get(listing: string): KeyEntry | undefined; set(listing: string, e: KeyEntry): void };
+
+export function memoryKeyStore(): KeyStore {
+  const m = new Map<string, KeyEntry>();
+  return { get: (l) => m.get(l), set: (l, e) => void m.set(l, e) };
+}
+
+/**
+ * Keys persisted as one JSON document of AES-256-GCM boxes under `masterKey` (the broker's
+ * BROKER_MASTER_KEY, same pattern as broker/seal.ts). Each box is bound to its listing as associated data,
+ * so a box copied to another listing does not open. `backing` is a file or blob in production.
+ */
+export function sealedKeyStore(masterKey: Uint8Array, backing: { read(): string | null; write(doc: string): void }): KeyStore {
+  if (masterKey.length !== KEY) throw new TypeError("master key must be 32 bytes");
+  const aad = (listing: string) => new TextEncoder().encode(`deal-custody-store-v1\n${listing}`);
+  const load = (): Record<string, string> => JSON.parse(backing.read() ?? "{}") as Record<string, string>;
+  return {
+    get(listing) {
+      const box = load()[listing];
+      if (!box) return undefined;
+      const plain = gcmDecrypt(masterKey, Buffer.from(box, "base64"), aad(listing));
+      return plain && plain.length === KEY + 32 ? { key: plain.slice(0, KEY), contentHash: plain.slice(KEY) } : undefined;
+    },
+    set(listing, e) {
+      const doc = load();
+      doc[listing] = Buffer.from(gcmEncrypt(masterKey, new Uint8Array(Buffer.concat([e.key, e.contentHash])), aad(listing))).toString("base64");
+      backing.write(JSON.stringify(doc));
+    },
+  };
+}
+
+export function createCustody(o: { readDeal: ReadDeal; keys?: KeyStore }): Custody {
+  const keys = o.keys ?? memoryKeyStore();
   return {
     store(listing, data) {
       const s = seal(data);
