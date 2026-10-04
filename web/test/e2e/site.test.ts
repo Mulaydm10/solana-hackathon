@@ -19,7 +19,9 @@ const CANARY_KEY = `canary-anthropic-${randomBytes(12).toString("hex")}`;
 const CANARY_BYTES = Array.from(randomBytes(64));
 const CANARY_VERIFIER = JSON.stringify(CANARY_BYTES);
 const CANARY_MISSION_TOKEN = `canary-mission-${randomBytes(24).toString("hex")}`;
-const env = { ...process.env, DEAL_CLUSTER: "devnet", ANTHROPIC_API_KEY: CANARY_KEY, DEAL_VERIFIER_KEY: CANARY_VERIFIER, MISSION_SERVICE_URL: "http://127.0.0.1:9", MISSION_SERVICE_TOKEN: CANARY_MISSION_TOKEN, NEXT_TELEMETRY_DISABLED: "1" };
+const CANARY_FAUCET_BYTES = Array.from(randomBytes(64));
+const CANARY_FAUCET = JSON.stringify(CANARY_FAUCET_BYTES);
+const env = { ...process.env, DEAL_CLUSTER: "devnet", ANTHROPIC_API_KEY: CANARY_KEY, DEAL_VERIFIER_KEY: CANARY_VERIFIER, MISSION_SERVICE_URL: "http://127.0.0.1:9", MISSION_SERVICE_TOKEN: CANARY_MISSION_TOKEN, DEAL_FAUCET_KEY: CANARY_FAUCET, NEXT_TELEMETRY_DISABLED: "1" };
 
 let server: ChildProcess | undefined;
 let base = "";
@@ -95,8 +97,8 @@ function files(dir: string): string[] {
 
 test("no server secret, secret name or server-only module text reaches the browser", async () => {
   const forbidden = [
-    CANARY_KEY, CANARY_VERIFIER, CANARY_BYTES.slice(0, 16).join(","), CANARY_MISSION_TOKEN,
-    "ANTHROPIC_API_KEY", "DEAL_VERIFIER_KEY", "MISSION_SERVICE_TOKEN",
+    CANARY_KEY, CANARY_VERIFIER, CANARY_BYTES.slice(0, 16).join(","), CANARY_MISSION_TOKEN, CANARY_FAUCET, CANARY_FAUCET_BYTES.slice(0, 16).join(","),
+    "ANTHROPIC_API_KEY", "DEAL_VERIFIER_KEY", "MISSION_SERVICE_TOKEN", "DEAL_FAUCET_KEY",
     "must be a JSON array of 64 bytes", // lib/env.ts is server-only
   ];
   const client = files(join(WEB, ".next", "static")).filter((f) => /\.(js|css|json|txt|html)$/.test(f));
@@ -111,5 +113,5 @@ test("no server secret, secret name or server-only module text reaches the brows
   }
   // Health says the capabilities exist, without their values.
   const h = (await (await fetch(`${base}/api/health`)).json()) as { capabilities: Record<string, boolean> };
-  assert.deepEqual(h.capabilities, { drafting: true, verifier: true, missions: true });
+  assert.deepEqual(h.capabilities, { drafting: true, verifier: true, missions: true, faucet: true });
 });
