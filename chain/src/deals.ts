@@ -153,11 +153,14 @@ export async function safeSend(
       // not: the transaction may have landed, so the chain decides before any resend.
       const transient = timedOut || (programErrorName(e) === undefined && isTransient(e));
       if (transient) uncertain = true;
-      if (uncertain) {
+      // Any failure that is not the program's own refusal may have happened AFTER the transaction
+      // was sent (e.g. the confirmation websocket failed), so the chain is asked before reporting.
+      const programRefused = programErrorName(e) !== undefined;
+      if (uncertain || !programRefused) {
         await sleep(1_500);
         if (await readWithRetry(ctx, landed)) return { ok: true, signature: await latestSignature(ctx, watch) };
       }
-      if (!transient) return toRefusal(e);
+      if (!transient) return toRefusal(e); // unknown errors: reported, never resent
       if (attempt >= attempts) {
         return timedOut
           ? refuse("CONFIRMATION_TIMEOUT", "No confirmation and the chain does not show the action; check the deal before retrying.")

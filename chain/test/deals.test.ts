@@ -158,3 +158,20 @@ test("isTransient: program errors and plain bugs are not transient", async () =>
   assert.equal(isTransient(new Error("Cannot read properties of undefined")), false);
   assert.equal(isTransient(http429()), true);
 });
+
+test("safeSend: confirmation websocket fails after the tx landed -> ok (seen live)", async () => {
+  const ws = () => new Error("Failed to send transaction (4hw2...): WebSocket failed to connect");
+  const f = fake([async () => { throw ws(); }]);
+  assert.deepEqual(await safeSend(ctxOf(f.client), DEAL, async () => true, async () => []), { ok: true, signature: "SIG_FROM_CHAIN" });
+  assert.equal(f.sends(), 1);
+});
+
+test("safeSend: an unknown error -> chain checked; landed = ok, otherwise reported and never resent", async () => {
+  const weird = () => new Error("something nobody anticipated");
+  const landedF = fake([async () => { throw weird(); }]);
+  assert.equal((await safeSend(ctxOf(landedF.client), DEAL, async () => true, async () => [])).ok, true);
+  const notF = fake([async () => { throw weird(); }]);
+  const r = await safeSend(ctxOf(notF.client), DEAL, async () => false, async () => []);
+  assert.deepEqual([r.ok, !r.ok && r.reason], [false, "CHAIN_ERROR"]);
+  assert.equal(notF.sends(), 1);
+});
