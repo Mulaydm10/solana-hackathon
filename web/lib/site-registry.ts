@@ -90,3 +90,6 @@ export function siteRegistry(): Registry {
 }
 
 export const registryMode = () => (process.env.DEAL_REGISTRY === "chain" ? "chain" : "demo");
+/** The footer line about where listings come from (#132): only demo mode calls them demo data. */
+export const registryNote = () =>
+  registryMode() === "chain" ? "Listings are read from the on-chain registry." : "Listings shown are demo data until the registry is on chain.";
