@@ -534,6 +534,28 @@
           "optional": true
         },
         {
+          "name": "registry",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  115,
+                  115,
+                  101,
+                  115,
+                  115,
+                  111,
+                  114,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program"
         },
         {
@@ -940,6 +962,31 @@
           "optional": true
         },
         {
+          "name": "registry",
+          "docs": [
+            "Required with a listing: its assessor must be registered."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  115,
+                  115,
+                  101,
+                  115,
+                  115,
+                  111,
+                  114,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program"
         }
       ],
@@ -1064,6 +1111,27 @@
         {
           "name": "listing",
           "writable": true
+        },
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  115,
+                  115,
+                  101,
+                  115,
+                  115,
+                  111,
+                  114,
+                  115
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -1995,6 +2063,31 @@
           }
         },
         {
+          "name": "registry",
+          "docs": [
+            "Required with a listing: its assessor must still be registered."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  115,
+                  115,
+                  101,
+                  115,
+                  115,
+                  111,
+                  114,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "vault",
           "writable": true,
           "pda": {
@@ -2127,6 +2220,27 @@
               {
                 "kind": "arg",
                 "path": "listing_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  115,
+                  115,
+                  101,
+                  115,
+                  115,
+                  111,
+                  114,
+                  115
+                ]
               }
             ]
           }
@@ -3156,6 +3270,70 @@
       "args": []
     },
     {
+      "name": "set_assessors",
+      "docs": [
+        "The program's upgrade authority sets the list of assessors whose attestations count.",
+        "Replacing the list is immediate: deals and agent payments re-check it every time."
+      ],
+      "discriminator": [
+        120,
+        68,
+        133,
+        43,
+        98,
+        114,
+        242,
+        173
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "program_data",
+          "docs": [
+            "read from its header in `set_assessors`): proves `authority` is the upgrade authority."
+          ]
+        },
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  115,
+                  115,
+                  101,
+                  115,
+                  115,
+                  111,
+                  114,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "assessors",
+          "type": {
+            "vec": "pubkey"
+          }
+        }
+      ]
+    },
+    {
       "name": "submit_delivery",
       "docs": [
         "Seller records the delivery hash and invoices. The invoice must match the order amount",
@@ -3540,6 +3718,19 @@
     }
   ],
   "accounts": [
+    {
+      "name": "AssessorRegistry",
+      "discriminator": [
+        123,
+        183,
+        152,
+        209,
+        212,
+        33,
+        210,
+        241
+      ]
+    },
     {
       "name": "BuyerPolicy",
       "discriminator": [
@@ -3938,9 +4129,39 @@
       "code": 6052,
       "name": "NotThisStage",
       "msg": "This agent does not work in the current stage"
+    },
+    {
+      "code": 6053,
+      "name": "AssessorNotRegistered",
+      "msg": "The assessor is not on the registry of assessors"
     }
   ],
   "types": [
+    {
+      "name": "AssessorRegistry",
+      "docs": [
+        "Assessors whose attestations count, kept by the program's upgrade authority."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "assessors",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
     {
       "name": "BuyerPolicy",
       "type": {
@@ -4174,6 +4395,13 @@
             }
           },
           {
+            "name": "listing_created_at",
+            "docs": [
+              "Which incarnation of the listing PDA (a closed and recreated listing has a new created_at)."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -4219,6 +4447,18 @@
           },
           {
             "name": "terms_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "listing_content_hash",
+            "docs": [
+              "When opening from a listing: the listing content hash the buyer saw (ignored otherwise)."
+            ],
             "type": {
               "array": [
                 "u8",

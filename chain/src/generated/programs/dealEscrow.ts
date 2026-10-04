@@ -34,6 +34,7 @@ import {
   type SelfPlanAndSendFunctions,
 } from "@solana/program-client-core";
 import {
+  getAssessorRegistryCodec,
   getBuyerPolicyCodec,
   getDealCodec,
   getDealLinkCodec,
@@ -42,6 +43,8 @@ import {
   getMissionCodec,
   getRepPairCodec,
   getSellerRepCodec,
+  type AssessorRegistry,
+  type AssessorRegistryArgs,
   type BuyerPolicy,
   type BuyerPolicyArgs,
   type Deal,
@@ -67,7 +70,7 @@ import {
   getAgentReleaseInstructionAsync,
   getAgentSpendInstructionAsync,
   getApproveStageInstructionAsync,
-  getAttestListingInstruction,
+  getAttestListingInstructionAsync,
   getCancelInstructionAsync,
   getChallengeInstructionAsync,
   getClaimInstructionAsync,
@@ -81,6 +84,7 @@ import {
   getReleaseInstructionAsync,
   getResolveInstructionAsync,
   getRevokeMandateInstruction,
+  getSetAssessorsInstructionAsync,
   getSubmitDeliveryInstructionAsync,
   getTimeoutRefundInstructionAsync,
   getUpdateListingInstruction,
@@ -106,6 +110,7 @@ import {
   parseReleaseInstruction,
   parseResolveInstruction,
   parseRevokeMandateInstruction,
+  parseSetAssessorsInstruction,
   parseSubmitDeliveryInstruction,
   parseTimeoutRefundInstruction,
   parseUpdateListingInstruction,
@@ -117,7 +122,7 @@ import {
   type AgentReleaseAsyncInput,
   type AgentSpendAsyncInput,
   type ApproveStageAsyncInput,
-  type AttestListingInput,
+  type AttestListingAsyncInput,
   type CancelAsyncInput,
   type ChallengeAsyncInput,
   type ClaimAsyncInput,
@@ -148,6 +153,7 @@ import {
   type ParsedReleaseInstruction,
   type ParsedResolveInstruction,
   type ParsedRevokeMandateInstruction,
+  type ParsedSetAssessorsInstruction,
   type ParsedSubmitDeliveryInstruction,
   type ParsedTimeoutRefundInstruction,
   type ParsedUpdateListingInstruction,
@@ -156,6 +162,7 @@ import {
   type ReleaseAsyncInput,
   type ResolveAsyncInput,
   type RevokeMandateInput,
+  type SetAssessorsAsyncInput,
   type SubmitDeliveryAsyncInput,
   type TimeoutRefundAsyncInput,
   type UpdateListingInput,
@@ -170,6 +177,7 @@ import {
   findMissionAuthPda,
   findMissionPda,
   findPolicyPda,
+  findRegistryPda,
   findRepPairPda,
   findSellerRepPda,
 } from "../pdas";
@@ -178,6 +186,7 @@ export const DEAL_ESCROW_PROGRAM_ADDRESS =
   "CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV" as Address<"CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV">;
 
 export enum DealEscrowAccount {
+  AssessorRegistry,
   BuyerPolicy,
   Deal,
   DealLink,
@@ -192,6 +201,17 @@ export function identifyDealEscrowAccount(
   account: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): DealEscrowAccount {
   const data = "data" in account ? account.data : account;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([123, 183, 152, 209, 212, 33, 210, 241]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowAccount.AssessorRegistry;
+  }
   if (
     containsBytes(
       data,
@@ -344,6 +364,7 @@ export enum DealEscrowInstruction {
   Release,
   Resolve,
   RevokeMandate,
+  SetAssessors,
   SubmitDelivery,
   TimeoutRefund,
   UpdateListing,
@@ -589,6 +610,17 @@ export function identifyDealEscrowInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([120, 68, 133, 43, 98, 114, 242, 173]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.SetAssessors;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([217, 177, 33, 54, 136, 185, 123, 96]),
       ),
       0,
@@ -701,6 +733,9 @@ export type ParsedDealEscrowInstruction<
   | ({
       instructionType: DealEscrowInstruction.RevokeMandate;
     } & ParsedRevokeMandateInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.SetAssessors;
+    } & ParsedSetAssessorsInstruction<TProgram>)
   | ({
       instructionType: DealEscrowInstruction.SubmitDelivery;
     } & ParsedSubmitDeliveryInstruction<TProgram>)
@@ -866,6 +901,13 @@ export function parseDealEscrowInstruction<TProgram extends string>(
         ...parseRevokeMandateInstruction(instruction),
       };
     }
+    case DealEscrowInstruction.SetAssessors: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.SetAssessors,
+        ...parseSetAssessorsInstruction(instruction),
+      };
+    }
     case DealEscrowInstruction.SubmitDelivery: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -915,6 +957,8 @@ export type DealEscrowPlugin = {
 };
 
 export type DealEscrowPluginAccounts = {
+  assessorRegistry: ReturnType<typeof getAssessorRegistryCodec> &
+    SelfFetchFunctions<AssessorRegistryArgs, AssessorRegistry>;
   buyerPolicy: ReturnType<typeof getBuyerPolicyCodec> &
     SelfFetchFunctions<BuyerPolicyArgs, BuyerPolicy>;
   deal: ReturnType<typeof getDealCodec> & SelfFetchFunctions<DealArgs, Deal>;
@@ -960,8 +1004,8 @@ export type DealEscrowPluginInstructions = {
   ) => ReturnType<typeof getApproveStageInstructionAsync> &
     SelfPlanAndSendFunctions;
   attestListing: (
-    input: AttestListingInput,
-  ) => ReturnType<typeof getAttestListingInstruction> &
+    input: AttestListingAsyncInput,
+  ) => ReturnType<typeof getAttestListingInstructionAsync> &
     SelfPlanAndSendFunctions;
   cancel: (
     input: CancelAsyncInput,
@@ -1009,6 +1053,10 @@ export type DealEscrowPluginInstructions = {
     input: RevokeMandateInput,
   ) => ReturnType<typeof getRevokeMandateInstruction> &
     SelfPlanAndSendFunctions;
+  setAssessors: (
+    input: SetAssessorsAsyncInput,
+  ) => ReturnType<typeof getSetAssessorsInstructionAsync> &
+    SelfPlanAndSendFunctions;
   submitDelivery: (
     input: SubmitDeliveryAsyncInput,
   ) => ReturnType<typeof getSubmitDeliveryInstructionAsync> &
@@ -1030,6 +1078,7 @@ export type DealEscrowPluginInstructions = {
 export type DealEscrowPluginPdas = {
   mandate: typeof findMandatePda;
   missionAuth: typeof findMissionAuthPda;
+  registry: typeof findRegistryPda;
   policy: typeof findPolicyPda;
   link: typeof findLinkPda;
   deal: typeof findDealPda;
@@ -1053,6 +1102,10 @@ export function dealEscrowProgram() {
     return extendClient(client, {
       dealEscrow: <DealEscrowPlugin>{
         accounts: {
+          assessorRegistry: addSelfFetchFunctions(
+            client,
+            getAssessorRegistryCodec(),
+          ),
           buyerPolicy: addSelfFetchFunctions(client, getBuyerPolicyCodec()),
           deal: addSelfFetchFunctions(client, getDealCodec()),
           dealLink: addSelfFetchFunctions(client, getDealLinkCodec()),
@@ -1101,7 +1154,7 @@ export function dealEscrowProgram() {
           attestListing: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getAttestListingInstruction(input),
+              getAttestListingInstructionAsync(input),
             ),
           cancel: (input) =>
             addSelfPlanAndSendFunctions(
@@ -1168,6 +1221,11 @@ export function dealEscrowProgram() {
               client,
               getRevokeMandateInstruction(input),
             ),
+          setAssessors: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSetAssessorsInstructionAsync(input),
+            ),
           submitDelivery: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -1192,6 +1250,7 @@ export function dealEscrowProgram() {
         pdas: {
           mandate: findMandatePda,
           missionAuth: findMissionAuthPda,
+          registry: findRegistryPda,
           policy: findPolicyPda,
           link: findLinkPda,
           deal: findDealPda,

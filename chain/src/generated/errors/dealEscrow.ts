@@ -120,10 +120,13 @@ export const DEAL_ESCROW_ERROR__OVER_MISSION_BUDGET = 0x17a2; // 6050
 export const DEAL_ESCROW_ERROR__PAYEE_NOT_ALLOWED = 0x17a3; // 6051
 /** NotThisStage: This agent does not work in the current stage */
 export const DEAL_ESCROW_ERROR__NOT_THIS_STAGE = 0x17a4; // 6052
+/** AssessorNotRegistered: The assessor is not on the registry of assessors */
+export const DEAL_ESCROW_ERROR__ASSESSOR_NOT_REGISTERED = 0x17a5; // 6053
 
 export type DealEscrowError =
   | typeof DEAL_ESCROW_ERROR__APPROVAL_REQUIRED
   | typeof DEAL_ESCROW_ERROR__ASSESSOR_NOT_INDEPENDENT
+  | typeof DEAL_ESCROW_ERROR__ASSESSOR_NOT_REGISTERED
   | typeof DEAL_ESCROW_ERROR__BAD_BOND
   | typeof DEAL_ESCROW_ERROR__BAD_LISTING
   | typeof DEAL_ESCROW_ERROR__BAD_MANDATE
@@ -181,6 +184,7 @@ if (process.env["NODE_ENV"] !== "production") {
   dealEscrowErrorMessages = {
     [DEAL_ESCROW_ERROR__APPROVAL_REQUIRED]: `Amount is above the approval threshold and the approver did not sign`,
     [DEAL_ESCROW_ERROR__ASSESSOR_NOT_INDEPENDENT]: `The assessor must be set and must not be the seller`,
+    [DEAL_ESCROW_ERROR__ASSESSOR_NOT_REGISTERED]: `The assessor is not on the registry of assessors`,
     [DEAL_ESCROW_ERROR__BAD_BOND]: `Challenge bond must be at most 50%`,
     [DEAL_ESCROW_ERROR__BAD_LISTING]: `Invalid listing parameters`,
     [DEAL_ESCROW_ERROR__BAD_MANDATE]: `Invalid mandate parameters`,

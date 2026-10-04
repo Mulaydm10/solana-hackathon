@@ -27,7 +27,7 @@ import {
   getUpdatePolicyInstructionAsync,
   type PolicyParamsArgs,
 } from "./generated/index.ts";
-import { dealAddress, policyAddress, programErrorName, repPairAddress, sellerRepAddress, STATUS_NAMES } from "./index.ts";
+import { dealAddress, policyAddress, programErrorName, registryAddress, repPairAddress, sellerRepAddress, STATUS_NAMES } from "./index.ts";
 import { isRateLimited, isTransient } from "./retry.ts";
 
 /** The parts of a Kit client the library needs. Any plugin client (RPC, LiteSVM, wallet) fits. */
@@ -131,8 +131,10 @@ export type OpenParams = {
   termsHash: Uint8Array;
   /** Required when the amount is above the buyer policy's approval threshold. */
   approver?: TransactionSigner;
-  /** Open from this listing (must be active, attested, same seller, mint and price). */
+  /** Open from this listing (must be active, attested by a registered assessor, same seller, mint and price). */
   listing?: Address;
+  /** With a listing: the content hash the buyer was shown; refused if the listing changed since. */
+  listingContentHash?: Uint8Array;
 };
 
 const hex = (b: ArrayLike<number>) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
@@ -329,6 +331,7 @@ export const deals = {
         resolveSecs: BigInt(p.resolveSecs ?? 600), toleranceBps: p.toleranceBps ?? 0, stakeRequired: p.stakeRequired ?? 0n,
         bondBps: p.bondBps ?? 0, verifier: p.verifier ?? NO_KEY, termsHash: p.termsHash,
         listing: p.listing, link: p.listing ? (await findLinkPda({ deal }))[0] : undefined,
+        registry: p.listing ? await registryAddress() : undefined, listingContentHash: p.listingContentHash ?? new Uint8Array(32),
       }),
     ]);
     return r.ok ? { ...r, deal } : r;

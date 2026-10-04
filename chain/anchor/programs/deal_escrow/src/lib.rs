@@ -23,6 +23,10 @@
 //!   report hash. Changing the content clears the attestation. A deal opened from a Data listing
 //!   must be delivered with exactly the listed content hash (checked through its DealLink).
 //!
+//! - Assessor registry: only assessors on an on-chain list (kept by the program's upgrade
+//!   authority) can be named on a listing or attest one, and deals and agent payments only trust
+//!   attestations from assessors still on the list. A seller cannot attest its own listing through
+//!   a second key it holds.
 //! - Missions and agent mandates (PLAN §2.3; LedgerMind payment intents, Batas mandates, Cordon's
 //!   shared budget): a buyer funds a mission budget, gives each team agent a mandate (caps, payee
 //!   list, expiry, revocable in one transaction) and approves every stage's plan before any agent
@@ -33,7 +37,7 @@
 //! Tokens leave the vault only in `settle`, after every check, and only to the deal's own buyer and
 //! seller token accounts; a refused instruction moves nothing.
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::{instruction::Instruction, program::invoke_signed};
+use anchor_lang::solana_program::{bpf_loader_upgradeable, instruction::Instruction, program::invoke_signed};
 use anchor_lang::{InstructionData, ToAccountMetas};
 use anchor_spl::{
     associated_token::AssociatedToken,
@@ -52,6 +56,8 @@ pub const MISSION_AUTH_SEED: &[u8] = b"mission_auth";
 pub const MANDATE_SEED: &[u8] = b"mandate";
 pub const MAX_STAGES: usize = 8;
 pub const MAX_PAYEES: usize = 8;
+pub const ASSESSORS_SEED: &[u8] = b"assessors";
+pub const MAX_ASSESSORS: usize = 16;
 pub const MAX_WINDOW_SECS: i64 = 30 * 86_400;
 pub const MIN_RESOLVE_SECS: i64 = 60;
 pub const MAX_TOLERANCE_BPS: u16 = 2_000;
@@ -148,10 +154,15 @@ pub mod deal_escrow {
                 require_keys_eq!(listing.seller, seller, DealError::ListingMismatch);
                 require_keys_eq!(listing.mint, ctx.accounts.mint.key(), DealError::ListingMismatch);
                 require!(listing.price == p.amount, DealError::ListingMismatch);
+                // The buyer names the content it saw; a swap racing the purchase is refused.
+                require!(listing.content_hash == p.listing_content_hash, DealError::ListingMismatch);
+                let registry = ctx.accounts.registry.as_ref().ok_or(DealError::AssessorNotRegistered)?;
+                require!(registry.assessors.contains(&listing.assessor), DealError::AssessorNotRegistered);
                 link.set_inner(DealLink {
                     deal: ctx.accounts.deal.key(),
                     listing: listing.key(),
                     expected_delivery_hash: if listing.kind == ListingKind::Data { listing.content_hash } else { [0; 32] },
+                    listing_created_at: listing.created_at,
                     bump: ctx.bumps.link.ok_or(DealError::ListingMismatch)?,
                 });
             }
@@ -197,6 +208,23 @@ pub mod deal_escrow {
         Ok(())
     }
 
+    /// The program's upgrade authority sets the list of assessors whose attestations count.
+    /// Replacing the list is immediate: deals and agent payments re-check it every time.
+    pub fn set_assessors(ctx: Context<SetAssessors>, assessors: Vec<Pubkey>) -> Result<()> {
+        // UpgradeableLoaderState::ProgramData header: u32 tag (3), u64 slot, Option<Pubkey> authority.
+        let data = ctx.accounts.program_data.try_borrow_data()?;
+        require!(data.len() >= 45 && data[0..4] == 3u32.to_le_bytes() && data[12] == 1, DealError::Unauthorized);
+        require!(data[13..45] == ctx.accounts.authority.key().to_bytes(), DealError::Unauthorized);
+        drop(data);
+        require!(assessors.len() <= MAX_ASSESSORS, DealError::BadListing);
+        require!(!assessors.contains(&Pubkey::default()), DealError::BadListing);
+        let r = &mut ctx.accounts.registry;
+        r.authority = ctx.accounts.authority.key();
+        r.assessors = assessors;
+        r.bump = ctx.bumps.registry;
+        Ok(())
+    }
+
     /// Seller lists data, a service or a team blueprint. It starts unattested; deals can only be
     /// opened from it once its assessor (never the seller) has attested a report.
     pub fn create_listing(ctx: Context<CreateListing>, listing_id: u64, p: ListingParams) -> Result<()> {
@@ -204,6 +232,7 @@ pub mod deal_escrow {
         require!(p.price > 0, DealError::ZeroAmount);
         require!(p.content_hash != [0; 32], DealError::BadListing);
         require!(p.assessor != Pubkey::default() && p.assessor != seller, DealError::AssessorNotIndependent);
+        require!(ctx.accounts.registry.assessors.contains(&p.assessor), DealError::AssessorNotRegistered);
         ctx.accounts.listing.set_inner(Listing {
             seller,
             listing_id,
@@ -228,6 +257,7 @@ pub mod deal_escrow {
     pub fn attest_listing(ctx: Context<AttestListing>, content_hash: [u8; 32], report_hash: [u8; 32]) -> Result<()> {
         let l = &mut ctx.accounts.listing;
         require_keys_eq!(ctx.accounts.assessor.key(), l.assessor, DealError::NotAssessor);
+        require!(ctx.accounts.registry.assessors.contains(&l.assessor), DealError::AssessorNotRegistered);
         // Bound to the content the assessor saw, so a swap racing the attestation is refused.
         require!(l.content_hash == content_hash, DealError::ListingMismatch);
         require!(report_hash != [0; 32], DealError::BadListing);
@@ -568,7 +598,7 @@ pub mod deal_escrow {
     pub fn agent_spend(ctx: Context<AgentSpend>, amount: u64, receipt_hash: [u8; 32]) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         let payee = ctx.accounts.payee_token.owner;
-        payee_allowed(&ctx.accounts.mandate, payee, ctx.accounts.listing.as_deref().map(|l| &**l), ctx.accounts.mint.key())?;
+        payee_allowed(&ctx.accounts.mandate, payee, ctx.accounts.listing.as_deref().map(|l| &**l), ctx.accounts.registry.as_deref().map(|r| &**r), ctx.accounts.mint.key())?;
         check_spend(&mut ctx.accounts.mission, &mut ctx.accounts.mandate, amount, now)?;
         let mission_key = ctx.accounts.mission.key();
         let seeds: &[&[u8]] = &[MISSION_AUTH_SEED, mission_key.as_ref(), &[ctx.accounts.mission.auth_bump]];
@@ -596,7 +626,7 @@ pub mod deal_escrow {
     pub fn agent_open_deal(ctx: Context<AgentOpenDeal>, deal_id: u64, p: DealParams, receipt_hash: [u8; 32]) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         let seller = ctx.accounts.seller.key();
-        payee_allowed(&ctx.accounts.mandate, seller, ctx.accounts.listing.as_deref().map(|l| &**l), ctx.accounts.mint.key())?;
+        payee_allowed(&ctx.accounts.mandate, seller, ctx.accounts.listing.as_deref().map(|l| &**l), ctx.accounts.registry.as_deref().map(|r| &**r), ctx.accounts.mint.key())?;
         check_spend(&mut ctx.accounts.mission, &mut ctx.accounts.mandate, p.amount, now)?;
         let a = &ctx.accounts;
         let metas = crate::accounts::CreateDeal {
@@ -611,6 +641,7 @@ pub mod deal_escrow {
             rep_pair: a.rep_pair.key(),
             listing: a.listing.as_ref().map(|l| l.key()),
             link: a.link.as_ref().map(|l| l.key()),
+            registry: a.registry.as_ref().map(|r| r.key()),
             vault: a.deal_vault.key(),
             token_program: a.token_program.key(),
             associated_token_program: a.associated_token_program.key(),
@@ -625,6 +656,7 @@ pub mod deal_escrow {
         ];
         if let Some(l) = &a.listing { infos.push(l.to_account_info()); }
         if let Some(l) = &a.link { infos.push(l.to_account_info()); }
+        if let Some(r) = &a.registry { infos.push(r.to_account_info()); }
         let ix = Instruction { program_id: crate::ID, accounts: metas, data: crate::instruction::CreateDeal { deal_id, p: p.clone() }.data() };
         let mission_key = a.mission.key();
         invoke_signed(&ix, &infos, &[&[MISSION_AUTH_SEED, mission_key.as_ref(), &[a.mission.auth_bump]]])?;
@@ -766,13 +798,14 @@ fn mandate_live(m: &Mission, d: &Mandate, now: i64) -> Result<()> {
 
 /// Only listed payees; with no list, only the seller of an active, attested listing in this mint
 /// (the payee's token-account owner must be that seller; checked by the caller via `payee`).
-fn payee_allowed(d: &Mandate, payee: Pubkey, listing: Option<&Listing>, mint: Pubkey) -> Result<()> {
+fn payee_allowed(d: &Mandate, payee: Pubkey, listing: Option<&Listing>, registry: Option<&AssessorRegistry>, mint: Pubkey) -> Result<()> {
     if !d.payees.is_empty() {
         require!(d.payees.contains(&payee), DealError::PayeeNotAllowed);
         return Ok(());
     }
     let l = listing.ok_or(DealError::PayeeNotAllowed)?;
     require!(l.active && l.assessed_at != 0, DealError::PayeeNotAllowed);
+    require!(registry.is_some_and(|r| r.assessors.contains(&l.assessor)), DealError::PayeeNotAllowed);
     require_keys_eq!(l.seller, payee, DealError::PayeeNotAllowed);
     require_keys_eq!(l.mint, mint, DealError::PayeeNotAllowed);
     Ok(())
@@ -934,7 +967,7 @@ fn settle(a: &mut Settle, bumps: &SettleBumps, to_seller: u64, to_buyer: u64, st
     // open is simply not counted; a wrong listing account is refused.
     if let (Some(link), Some(listing)) = (read_link(&a.link)?, a.listing.as_mut()) {
         require_keys_eq!(listing.key(), link.listing, DealError::ListingMismatch);
-        if matches!(status, DealStatus::Released | DealStatus::Claimed | DealStatus::VerifiedPass) {
+        if listing.created_at == link.listing_created_at && matches!(status, DealStatus::Released | DealStatus::Claimed | DealStatus::VerifiedPass) {
             listing.sales = listing.sales.checked_add(1).ok_or(DealError::MathOverflow)?;
         }
     }
@@ -1034,6 +1067,8 @@ pub struct DealParams {
     pub bond_bps: u16,
     pub verifier: Pubkey,
     pub terms_hash: [u8; 32],
+    /// When opening from a listing: the listing content hash the buyer saw (ignored otherwise).
+    pub listing_content_hash: [u8; 32],
 }
 
 #[account]
@@ -1137,6 +1172,16 @@ pub struct Listing {
     pub bump: u8,
 }
 
+/// Assessors whose attestations count, kept by the program's upgrade authority.
+#[account]
+#[derive(InitSpace)]
+pub struct AssessorRegistry {
+    pub authority: Pubkey,
+    #[max_len(16)]
+    pub assessors: Vec<Pubkey>,
+    pub bump: u8,
+}
+
 /// Binds a deal to the listing it was opened from (Deal itself is unchanged since v2).
 #[account]
 #[derive(InitSpace)]
@@ -1145,6 +1190,8 @@ pub struct DealLink {
     pub listing: Pubkey,
     /// For Data listings, the content hash the delivery must equal; zero = no check.
     pub expected_delivery_hash: [u8; 32],
+    /// Which incarnation of the listing PDA (a closed and recreated listing has a new created_at).
+    pub listing_created_at: i64,
     pub bump: u8,
 }
 
@@ -1340,6 +1387,9 @@ pub struct CreateDeal<'info> {
     pub listing: Option<Box<Account<'info, Listing>>>,
     #[account(init, payer = buyer, space = 8 + DealLink::INIT_SPACE, seeds = [LINK_SEED, deal.key().as_ref()], bump)]
     pub link: Option<Box<Account<'info, DealLink>>>,
+    /// Required with a listing: its assessor must still be registered.
+    #[account(seeds = [ASSESSORS_SEED], bump = registry.bump)]
+    pub registry: Option<Box<Account<'info, AssessorRegistry>>>,
     #[account(
         init,
         payer = buyer,
@@ -1397,6 +1447,21 @@ pub struct CreateListing<'info> {
     pub mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(init, payer = seller, space = 8 + Listing::INIT_SPACE, seeds = [LISTING_SEED, seller.key().as_ref(), &listing_id.to_le_bytes()], bump)]
     pub listing: Box<Account<'info, Listing>>,
+    #[account(seeds = [ASSESSORS_SEED], bump = registry.bump)]
+    pub registry: Box<Account<'info, AssessorRegistry>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct SetAssessors<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    /// CHECK: this program's ProgramData (address and owner checked here, the upgrade authority
+    /// read from its header in `set_assessors`): proves `authority` is the upgrade authority.
+    #[account(address = bpf_loader_upgradeable::get_program_data_address(&crate::ID), owner = bpf_loader_upgradeable::ID)]
+    pub program_data: UncheckedAccount<'info>,
+    #[account(init_if_needed, payer = authority, space = 8 + AssessorRegistry::INIT_SPACE, seeds = [ASSESSORS_SEED], bump)]
+    pub registry: Box<Account<'info, AssessorRegistry>>,
     pub system_program: Program<'info, System>,
 }
 
@@ -1405,6 +1470,8 @@ pub struct AttestListing<'info> {
     pub assessor: Signer<'info>,
     #[account(mut)]
     pub listing: Box<Account<'info, Listing>>,
+    #[account(seeds = [ASSESSORS_SEED], bump = registry.bump)]
+    pub registry: Box<Account<'info, AssessorRegistry>>,
 }
 
 #[derive(Accounts)]
@@ -1488,6 +1555,9 @@ pub struct AgentSpend<'info> {
     pub payee_token: Box<InterfaceAccount<'info, TokenAccount>>,
     /// Required when the mandate has no payee list: the payee must be this listing's seller.
     pub listing: Option<Box<Account<'info, Listing>>>,
+    /// Required with a listing: its assessor must be registered.
+    #[account(seeds = [ASSESSORS_SEED], bump = registry.bump)]
+    pub registry: Option<Box<Account<'info, AssessorRegistry>>>,
     pub token_program: Interface<'info, TokenInterface>,
 }
 
@@ -1524,6 +1594,8 @@ pub struct AgentOpenDeal<'info> {
     /// CHECK: created by create_deal when a listing is given.
     #[account(mut)]
     pub link: Option<UncheckedAccount<'info>>,
+    #[account(seeds = [ASSESSORS_SEED], bump = registry.bump)]
+    pub registry: Option<Box<Account<'info, AssessorRegistry>>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -1763,4 +1835,6 @@ pub enum DealError {
     PayeeNotAllowed,
     #[msg("This agent does not work in the current stage")]
     NotThisStage,
+    #[msg("The assessor is not on the registry of assessors")]
+    AssessorNotRegistered,
 }

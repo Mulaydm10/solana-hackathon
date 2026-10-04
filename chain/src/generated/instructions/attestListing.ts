@@ -26,6 +26,7 @@ import {
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
+  type ReadonlyAccount,
   type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type WritableAccount,
@@ -38,6 +39,7 @@ import {
   type ResolvedInstructionAccount,
   type ResolvedInstructionAccountMeta,
 } from "@solana/program-client-core";
+import { findRegistryPda } from "../pdas";
 import { DEAL_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
 export const ATTEST_LISTING_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -54,6 +56,7 @@ export type AttestListingInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
   TAccountAssessor extends string | AccountMeta<string> = string,
   TAccountListing extends string | AccountMeta<string> = string,
+  TAccountRegistry extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -66,6 +69,9 @@ export type AttestListingInstruction<
       TAccountListing extends string
         ? WritableAccount<TAccountListing>
         : TAccountListing,
+      TAccountRegistry extends string
+        ? ReadonlyAccount<TAccountRegistry>
+        : TAccountRegistry,
       ...TRemainingAccounts,
     ]
   >;
@@ -110,32 +116,45 @@ export function getAttestListingInstructionDataCodec(): FixedSizeCodec<
   );
 }
 
-export type AttestListingInput<
+export type AttestListingAsyncInput<
   TAccountAssessor extends InstructionSignerInput = InstructionSignerInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
 > = {
   assessor: TAccountAssessor;
   listing: TAccountListing;
+  registry?: TAccountRegistry;
   contentHash: AttestListingInstructionDataArgs["contentHash"];
   reportHash: AttestListingInstructionDataArgs["reportHash"];
 };
 
-export function getAttestListingInstruction<
+export async function getAttestListingInstructionAsync<
   TAccountAssessor extends InstructionSignerInput,
   TAccountListing extends InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: AttestListingInput<TAccountAssessor, TAccountListing>,
-  config?: { programAddress?: TProgramAddress },
-): AttestListingInstruction<
-  TProgramAddress,
-  ResolvedInstructionAccountMeta<
+  input: AttestListingAsyncInput<
     TAccountAssessor,
-    InstructionAccountInputAddress<TAccountAssessor>
-  >,
-  ResolvedInstructionAccountMeta<
     TAccountListing,
-    InstructionAccountInputAddress<TAccountListing>
+    TAccountRegistry
+  >,
+  config?: { programAddress?: TProgramAddress },
+): Promise<
+  AttestListingInstruction<
+    TProgramAddress,
+    ResolvedInstructionAccountMeta<
+      TAccountAssessor,
+      InstructionAccountInputAddress<TAccountAssessor>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountListing,
+      InstructionAccountInputAddress<TAccountListing>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
+    >
   >
 > {
   // Program address.
@@ -156,6 +175,11 @@ export function getAttestListingInstruction<
       isSigner: false,
       isWritable: true,
     },
+    registry: {
+      value: input.registry ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -165,10 +189,16 @@ export function getAttestListingInstruction<
   // Original args.
   const args = { ...input };
 
+  // Resolve default values.
+  if (!accounts.registry.value) {
+    accounts.registry.value = await findRegistryPda({ programAddress });
+  }
+
   return Object.freeze({
     accounts: [
       getAccountMeta("assessor", accounts.assessor),
       getAccountMeta("listing", accounts.listing),
+      getAccountMeta("registry", accounts.registry),
     ],
     data: getAttestListingInstructionDataEncoder().encode(
       args as AttestListingInstructionDataArgs,
@@ -183,6 +213,108 @@ export function getAttestListingInstruction<
     ResolvedInstructionAccountMeta<
       TAccountListing,
       InstructionAccountInputAddress<TAccountListing>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
+    >
+  >);
+}
+
+export type AttestListingInput<
+  TAccountAssessor extends InstructionSignerInput = InstructionSignerInput,
+  TAccountListing extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
+> = {
+  assessor: TAccountAssessor;
+  listing: TAccountListing;
+  registry: TAccountRegistry;
+  contentHash: AttestListingInstructionDataArgs["contentHash"];
+  reportHash: AttestListingInstructionDataArgs["reportHash"];
+};
+
+export function getAttestListingInstruction<
+  TAccountAssessor extends InstructionSignerInput,
+  TAccountListing extends InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput,
+  TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
+>(
+  input: AttestListingInput<
+    TAccountAssessor,
+    TAccountListing,
+    TAccountRegistry
+  >,
+  config?: { programAddress?: TProgramAddress },
+): AttestListingInstruction<
+  TProgramAddress,
+  ResolvedInstructionAccountMeta<
+    TAccountAssessor,
+    InstructionAccountInputAddress<TAccountAssessor>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountListing,
+    InstructionAccountInputAddress<TAccountListing>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountRegistry,
+    InstructionAccountInputAddress<TAccountRegistry>
+  >
+> {
+  // Program address.
+  const programAddress = config?.programAddress ?? DEAL_ESCROW_PROGRAM_ADDRESS;
+
+  // Account meta helper.
+  const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
+
+  // Original accounts.
+  const originalAccounts = {
+    assessor: {
+      value: input.assessor ?? null,
+      isSigner: true,
+      isWritable: false,
+    },
+    listing: {
+      value: input.listing ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    registry: {
+      value: input.registry ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
+  };
+  const accounts = originalAccounts as Record<
+    keyof typeof originalAccounts,
+    ResolvedInstructionAccount
+  >;
+
+  // Original args.
+  const args = { ...input };
+
+  return Object.freeze({
+    accounts: [
+      getAccountMeta("assessor", accounts.assessor),
+      getAccountMeta("listing", accounts.listing),
+      getAccountMeta("registry", accounts.registry),
+    ],
+    data: getAttestListingInstructionDataEncoder().encode(
+      args as AttestListingInstructionDataArgs,
+    ),
+    programAddress,
+  } as AttestListingInstruction<
+    TProgramAddress,
+    ResolvedInstructionAccountMeta<
+      TAccountAssessor,
+      InstructionAccountInputAddress<TAccountAssessor>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountListing,
+      InstructionAccountInputAddress<TAccountListing>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
     >
   >);
 }
@@ -195,6 +327,7 @@ export type ParsedAttestListingInstruction<
   accounts: {
     assessor: TAccountMetas[0];
     listing: TAccountMetas[1];
+    registry: TAccountMetas[2];
   };
   data: AttestListingInstructionData;
 };
@@ -207,12 +340,12 @@ export function parseAttestListingInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedAttestListingInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 2) {
+  if (instruction.accounts.length < 3) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 2,
+        expectedAccountMetas: 3,
       },
     );
   }
@@ -224,7 +357,11 @@ export function parseAttestListingInstruction<
   };
   return {
     programAddress: instruction.programAddress,
-    accounts: { assessor: getNextAccount(), listing: getNextAccount() },
+    accounts: {
+      assessor: getNextAccount(),
+      listing: getNextAccount(),
+      registry: getNextAccount(),
+    },
     data: getAttestListingInstructionDataDecoder().decode(instruction.data),
   };
 }

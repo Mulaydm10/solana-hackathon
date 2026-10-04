@@ -80,6 +80,7 @@ export type CreateDealInstruction<
   TAccountRepPair extends string | AccountMeta<string> = string,
   TAccountListing extends string | AccountMeta<string> = string,
   TAccountLink extends string | AccountMeta<string> = string,
+  TAccountRegistry extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -127,6 +128,9 @@ export type CreateDealInstruction<
       TAccountLink extends string
         ? WritableAccount<TAccountLink>
         : TAccountLink,
+      TAccountRegistry extends string
+        ? ReadonlyAccount<TAccountRegistry>
+        : TAccountRegistry,
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
@@ -155,6 +159,8 @@ export type CreateDealInstructionData = {
   bondBps: number;
   verifier: Address;
   termsHash: ReadonlyUint8Array;
+  /** When opening from a listing: the listing content hash the buyer saw (ignored otherwise). */
+  listingContentHash: ReadonlyUint8Array;
 };
 
 export type CreateDealInstructionDataArgs = {
@@ -168,6 +174,8 @@ export type CreateDealInstructionDataArgs = {
   bondBps: number;
   verifier: Address;
   termsHash: ReadonlyUint8Array;
+  /** When opening from a listing: the listing content hash the buyer saw (ignored otherwise). */
+  listingContentHash: ReadonlyUint8Array;
 };
 
 export function getCreateDealInstructionDataEncoder(): FixedSizeEncoder<CreateDealInstructionDataArgs> {
@@ -184,6 +192,7 @@ export function getCreateDealInstructionDataEncoder(): FixedSizeEncoder<CreateDe
       ["bondBps", getU16Encoder()],
       ["verifier", getAddressEncoder()],
       ["termsHash", fixEncoderSize(getBytesEncoder(), 32)],
+      ["listingContentHash", fixEncoderSize(getBytesEncoder(), 32)],
     ]),
     (value) => ({ ...value, discriminator: CREATE_DEAL_DISCRIMINATOR }),
   );
@@ -202,6 +211,7 @@ export function getCreateDealInstructionDataDecoder(): FixedSizeDecoder<CreateDe
     ["bondBps", getU16Decoder()],
     ["verifier", getAddressDecoder()],
     ["termsHash", fixDecoderSize(getBytesDecoder(), 32)],
+    ["listingContentHash", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 
@@ -227,6 +237,7 @@ export type CreateDealAsyncInput<
   TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
   TAccountLink extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
@@ -249,6 +260,8 @@ export type CreateDealAsyncInput<
   /** Present only when the deal is opened from a listing. */
   listing?: TAccountListing;
   link?: TAccountLink;
+  /** Required with a listing: its assessor must still be registered. */
+  registry?: TAccountRegistry;
   vault?: TAccountVault;
   tokenProgram?: TAccountTokenProgram;
   associatedTokenProgram?: TAccountAssociatedTokenProgram;
@@ -263,6 +276,7 @@ export type CreateDealAsyncInput<
   bondBps: CreateDealInstructionDataArgs["bondBps"];
   verifier: CreateDealInstructionDataArgs["verifier"];
   termsHash: CreateDealInstructionDataArgs["termsHash"];
+  listingContentHash: CreateDealInstructionDataArgs["listingContentHash"];
 };
 
 export async function getCreateDealInstructionAsync<
@@ -277,6 +291,7 @@ export async function getCreateDealInstructionAsync<
   TAccountRepPair extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
   TAccountLink extends InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TAccountAssociatedTokenProgram extends InstructionAccountInput,
@@ -295,6 +310,7 @@ export async function getCreateDealInstructionAsync<
     TAccountRepPair,
     TAccountListing,
     TAccountLink,
+    TAccountRegistry,
     TAccountVault,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
@@ -347,6 +363,10 @@ export async function getCreateDealInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountLink,
       InstructionAccountInputAddress<TAccountLink>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
     >,
     ResolvedInstructionAccountMeta<
       TAccountVault,
@@ -405,6 +425,11 @@ export async function getCreateDealInstructionAsync<
       isWritable: false,
     },
     link: { value: input.link ?? null, isSigner: false, isWritable: true },
+    registry: {
+      value: input.registry ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
     tokenProgram: {
       value: input.tokenProgram ?? null,
@@ -534,6 +559,7 @@ export async function getCreateDealInstructionAsync<
       getAccountMeta("repPair", accounts.repPair),
       getAccountMeta("listing", accounts.listing),
       getAccountMeta("link", accounts.link),
+      getAccountMeta("registry", accounts.registry),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("associatedTokenProgram", accounts.associatedTokenProgram),
@@ -590,6 +616,10 @@ export async function getCreateDealInstructionAsync<
       InstructionAccountInputAddress<TAccountLink>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountVault,
       InstructionAccountInputAddress<TAccountVault>
     >,
@@ -620,6 +650,7 @@ export type CreateDealInput<
   TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
   TAccountLink extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
@@ -642,6 +673,8 @@ export type CreateDealInput<
   /** Present only when the deal is opened from a listing. */
   listing?: TAccountListing;
   link?: TAccountLink;
+  /** Required with a listing: its assessor must still be registered. */
+  registry?: TAccountRegistry;
   vault: TAccountVault;
   tokenProgram?: TAccountTokenProgram;
   associatedTokenProgram?: TAccountAssociatedTokenProgram;
@@ -656,6 +689,7 @@ export type CreateDealInput<
   bondBps: CreateDealInstructionDataArgs["bondBps"];
   verifier: CreateDealInstructionDataArgs["verifier"];
   termsHash: CreateDealInstructionDataArgs["termsHash"];
+  listingContentHash: CreateDealInstructionDataArgs["listingContentHash"];
 };
 
 export function getCreateDealInstruction<
@@ -670,6 +704,7 @@ export function getCreateDealInstruction<
   TAccountRepPair extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
   TAccountLink extends InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TAccountAssociatedTokenProgram extends InstructionAccountInput,
@@ -688,6 +723,7 @@ export function getCreateDealInstruction<
     TAccountRepPair,
     TAccountListing,
     TAccountLink,
+    TAccountRegistry,
     TAccountVault,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
@@ -739,6 +775,10 @@ export function getCreateDealInstruction<
   ResolvedInstructionAccountMeta<
     TAccountLink,
     InstructionAccountInputAddress<TAccountLink>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountRegistry,
+    InstructionAccountInputAddress<TAccountRegistry>
   >,
   ResolvedInstructionAccountMeta<
     TAccountVault,
@@ -796,6 +836,11 @@ export function getCreateDealInstruction<
       isWritable: false,
     },
     link: { value: input.link ?? null, isSigner: false, isWritable: true },
+    registry: {
+      value: input.registry ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
     tokenProgram: {
       value: input.tokenProgram ?? null,
@@ -848,6 +893,7 @@ export function getCreateDealInstruction<
       getAccountMeta("repPair", accounts.repPair),
       getAccountMeta("listing", accounts.listing),
       getAccountMeta("link", accounts.link),
+      getAccountMeta("registry", accounts.registry),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("associatedTokenProgram", accounts.associatedTokenProgram),
@@ -904,6 +950,10 @@ export function getCreateDealInstruction<
       InstructionAccountInputAddress<TAccountLink>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountVault,
       InstructionAccountInputAddress<TAccountVault>
     >,
@@ -942,10 +992,12 @@ export type ParsedCreateDealInstruction<
     /** Present only when the deal is opened from a listing. */
     listing?: TAccountMetas[9] | undefined;
     link?: TAccountMetas[10] | undefined;
-    vault: TAccountMetas[11];
-    tokenProgram: TAccountMetas[12];
-    associatedTokenProgram: TAccountMetas[13];
-    systemProgram: TAccountMetas[14];
+    /** Required with a listing: its assessor must still be registered. */
+    registry?: TAccountMetas[11] | undefined;
+    vault: TAccountMetas[12];
+    tokenProgram: TAccountMetas[13];
+    associatedTokenProgram: TAccountMetas[14];
+    systemProgram: TAccountMetas[15];
   };
   data: CreateDealInstructionData;
 };
@@ -958,12 +1010,12 @@ export function parseCreateDealInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedCreateDealInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 15) {
+  if (instruction.accounts.length < 16) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 15,
+        expectedAccountMetas: 16,
       },
     );
   }
@@ -993,6 +1045,7 @@ export function parseCreateDealInstruction<
       repPair: getNextAccount(),
       listing: getNextOptionalAccount(),
       link: getNextOptionalAccount(),
+      registry: getNextOptionalAccount(),
       vault: getNextAccount(),
       tokenProgram: getNextAccount(),
       associatedTokenProgram: getNextAccount(),

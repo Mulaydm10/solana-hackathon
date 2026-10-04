@@ -196,8 +196,9 @@ test("safeSend: an unknown error -> chain checked; landed = ok, otherwise report
 test("library: open from a listing, deliver the listed content, the sale is counted", async () => {
   const { t, ctx, open } = await lib();
   const { generateKeyPairSigner } = await import("@solana/kit");
-  const { ListingKind, fetchListing, findListingPda, getAttestListingInstruction, getCreateListingInstructionAsync } = await import("../src/index.ts");
+  const { ListingKind, fetchListing, findListingPda, getAttestListingInstruction, getCreateListingInstructionAsync, registryAddress } = await import("../src/index.ts");
   const assessor = await generateKeyPairSigner();
+  await t.registerAssessors(assessor.address);
   await t.send([
     await getCreateListingInstructionAsync({
       seller: t.seller, mint: t.mint.address, listingId: 1n, kind: ListingKind.Data, price: 5n * USDC,
@@ -205,8 +206,8 @@ test("library: open from a listing, deliver the listed content, the sale is coun
     }),
   ]);
   const [listing] = await findListingPda({ seller: t.seller.address, listingId: 1n });
-  await t.send([getAttestListingInstruction({ assessor, listing, contentHash: hash(20), reportHash: hash(30) })]);
-  const o = await open({ listing });
+  await t.send([getAttestListingInstruction({ assessor, listing, contentHash: hash(20), reportHash: hash(30), registry: await registryAddress() })]);
+  const o = await open({ listing, listingContentHash: hash(20) });
   assert.ok(o.ok, JSON.stringify(o));
   const deal = (o as { deal: Address }).deal;
   await deals.accept(ctx, t.seller, deal);

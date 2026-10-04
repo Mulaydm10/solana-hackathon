@@ -78,6 +78,7 @@ export type AgentOpenDealInstruction<
   TAccountRepPair extends string | AccountMeta<string> = string,
   TAccountListing extends string | AccountMeta<string> = string,
   TAccountLink extends string | AccountMeta<string> = string,
+  TAccountRegistry extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TAccountAssociatedTokenProgram extends string | AccountMeta<string> =
@@ -134,6 +135,9 @@ export type AgentOpenDealInstruction<
       TAccountLink extends string
         ? WritableAccount<TAccountLink>
         : TAccountLink,
+      TAccountRegistry extends string
+        ? ReadonlyAccount<TAccountRegistry>
+        : TAccountRegistry,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -162,6 +166,8 @@ export type AgentOpenDealInstructionData = {
   bondBps: number;
   verifier: Address;
   termsHash: ReadonlyUint8Array;
+  /** When opening from a listing: the listing content hash the buyer saw (ignored otherwise). */
+  listingContentHash: ReadonlyUint8Array;
   receiptHash: ReadonlyUint8Array;
 };
 
@@ -176,6 +182,8 @@ export type AgentOpenDealInstructionDataArgs = {
   bondBps: number;
   verifier: Address;
   termsHash: ReadonlyUint8Array;
+  /** When opening from a listing: the listing content hash the buyer saw (ignored otherwise). */
+  listingContentHash: ReadonlyUint8Array;
   receiptHash: ReadonlyUint8Array;
 };
 
@@ -193,6 +201,7 @@ export function getAgentOpenDealInstructionDataEncoder(): FixedSizeEncoder<Agent
       ["bondBps", getU16Encoder()],
       ["verifier", getAddressEncoder()],
       ["termsHash", fixEncoderSize(getBytesEncoder(), 32)],
+      ["listingContentHash", fixEncoderSize(getBytesEncoder(), 32)],
       ["receiptHash", fixEncoderSize(getBytesEncoder(), 32)],
     ]),
     (value) => ({ ...value, discriminator: AGENT_OPEN_DEAL_DISCRIMINATOR }),
@@ -212,6 +221,7 @@ export function getAgentOpenDealInstructionDataDecoder(): FixedSizeDecoder<Agent
     ["bondBps", getU16Decoder()],
     ["verifier", getAddressDecoder()],
     ["termsHash", fixDecoderSize(getBytesDecoder(), 32)],
+    ["listingContentHash", fixDecoderSize(getBytesDecoder(), 32)],
     ["receiptHash", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
@@ -241,6 +251,7 @@ export type AgentOpenDealAsyncInput<
   TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
   TAccountLink extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
   TAccountAssociatedTokenProgram extends InstructionAccountInput =
@@ -263,6 +274,7 @@ export type AgentOpenDealAsyncInput<
   repPair: TAccountRepPair;
   listing?: TAccountListing;
   link?: TAccountLink;
+  registry?: TAccountRegistry;
   tokenProgram?: TAccountTokenProgram;
   associatedTokenProgram?: TAccountAssociatedTokenProgram;
   systemProgram?: TAccountSystemProgram;
@@ -277,6 +289,7 @@ export type AgentOpenDealAsyncInput<
   bondBps: AgentOpenDealInstructionDataArgs["bondBps"];
   verifier: AgentOpenDealInstructionDataArgs["verifier"];
   termsHash: AgentOpenDealInstructionDataArgs["termsHash"];
+  listingContentHash: AgentOpenDealInstructionDataArgs["listingContentHash"];
   receiptHash: AgentOpenDealInstructionDataArgs["receiptHash"];
 };
 
@@ -295,6 +308,7 @@ export async function getAgentOpenDealInstructionAsync<
   TAccountRepPair extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
   TAccountLink extends InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TAccountAssociatedTokenProgram extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
@@ -316,6 +330,7 @@ export async function getAgentOpenDealInstructionAsync<
     TAccountRepPair,
     TAccountListing,
     TAccountLink,
+    TAccountRegistry,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram,
@@ -380,6 +395,10 @@ export async function getAgentOpenDealInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountLink,
       InstructionAccountInputAddress<TAccountLink>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
     >,
     ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
@@ -453,6 +472,11 @@ export async function getAgentOpenDealInstructionAsync<
       isWritable: false,
     },
     link: { value: input.link ?? null, isSigner: false, isWritable: true },
+    registry: {
+      value: input.registry ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
     tokenProgram: {
       value: input.tokenProgram ?? null,
       isSigner: false,
@@ -565,6 +589,7 @@ export async function getAgentOpenDealInstructionAsync<
       getAccountMeta("repPair", accounts.repPair),
       getAccountMeta("listing", accounts.listing),
       getAccountMeta("link", accounts.link),
+      getAccountMeta("registry", accounts.registry),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("associatedTokenProgram", accounts.associatedTokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
@@ -633,6 +658,10 @@ export async function getAgentOpenDealInstructionAsync<
       InstructionAccountInputAddress<TAccountLink>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >,
@@ -666,6 +695,7 @@ export type AgentOpenDealInput<
   TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
   TAccountLink extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
   TAccountAssociatedTokenProgram extends InstructionAccountInput =
@@ -688,6 +718,7 @@ export type AgentOpenDealInput<
   repPair: TAccountRepPair;
   listing?: TAccountListing;
   link?: TAccountLink;
+  registry?: TAccountRegistry;
   tokenProgram?: TAccountTokenProgram;
   associatedTokenProgram?: TAccountAssociatedTokenProgram;
   systemProgram?: TAccountSystemProgram;
@@ -702,6 +733,7 @@ export type AgentOpenDealInput<
   bondBps: AgentOpenDealInstructionDataArgs["bondBps"];
   verifier: AgentOpenDealInstructionDataArgs["verifier"];
   termsHash: AgentOpenDealInstructionDataArgs["termsHash"];
+  listingContentHash: AgentOpenDealInstructionDataArgs["listingContentHash"];
   receiptHash: AgentOpenDealInstructionDataArgs["receiptHash"];
 };
 
@@ -720,6 +752,7 @@ export function getAgentOpenDealInstruction<
   TAccountRepPair extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
   TAccountLink extends InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TAccountAssociatedTokenProgram extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
@@ -741,6 +774,7 @@ export function getAgentOpenDealInstruction<
     TAccountRepPair,
     TAccountListing,
     TAccountLink,
+    TAccountRegistry,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram,
@@ -804,6 +838,10 @@ export function getAgentOpenDealInstruction<
   ResolvedInstructionAccountMeta<
     TAccountLink,
     InstructionAccountInputAddress<TAccountLink>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountRegistry,
+    InstructionAccountInputAddress<TAccountRegistry>
   >,
   ResolvedInstructionAccountMeta<
     TAccountTokenProgram,
@@ -876,6 +914,11 @@ export function getAgentOpenDealInstruction<
       isWritable: false,
     },
     link: { value: input.link ?? null, isSigner: false, isWritable: true },
+    registry: {
+      value: input.registry ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
     tokenProgram: {
       value: input.tokenProgram ?? null,
       isSigner: false,
@@ -939,6 +982,7 @@ export function getAgentOpenDealInstruction<
       getAccountMeta("repPair", accounts.repPair),
       getAccountMeta("listing", accounts.listing),
       getAccountMeta("link", accounts.link),
+      getAccountMeta("registry", accounts.registry),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("associatedTokenProgram", accounts.associatedTokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
@@ -1007,6 +1051,10 @@ export function getAgentOpenDealInstruction<
       InstructionAccountInputAddress<TAccountLink>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >,
@@ -1045,10 +1093,11 @@ export type ParsedAgentOpenDealInstruction<
     repPair: TAccountMetas[11];
     listing?: TAccountMetas[12] | undefined;
     link?: TAccountMetas[13] | undefined;
-    tokenProgram: TAccountMetas[14];
-    associatedTokenProgram: TAccountMetas[15];
-    systemProgram: TAccountMetas[16];
-    dealProgram: TAccountMetas[17];
+    registry?: TAccountMetas[14] | undefined;
+    tokenProgram: TAccountMetas[15];
+    associatedTokenProgram: TAccountMetas[16];
+    systemProgram: TAccountMetas[17];
+    dealProgram: TAccountMetas[18];
   };
   data: AgentOpenDealInstructionData;
 };
@@ -1061,12 +1110,12 @@ export function parseAgentOpenDealInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedAgentOpenDealInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 18) {
+  if (instruction.accounts.length < 19) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 18,
+        expectedAccountMetas: 19,
       },
     );
   }
@@ -1099,6 +1148,7 @@ export function parseAgentOpenDealInstruction<
       repPair: getNextAccount(),
       listing: getNextOptionalAccount(),
       link: getNextOptionalAccount(),
+      registry: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
       associatedTokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),

@@ -31,6 +31,7 @@ import {
   getCreateMissionInstructionAsync,
   getRevokeMandateInstruction,
   policyAddress,
+  registryAddress,
   repPairAddress,
   sellerRepAddress,
 } from "../src/index.ts";
@@ -91,10 +92,11 @@ async function kit(budget = 30n * USDC, stageCaps = [20n * USDC, 20n * USDC]) {
   };
   const approve = async (stage: number, d: Uint8Array = digest, approver?: KeyPairSigner) =>
     t.send([await getApproveStageInstructionAsync({ buyer: t.buyer, approver, mission, stage, planHash: hash(70 + stage), mandatesDigest: d })]);
-  const spend = async (agent: KeyPairSigner, amount: bigint, payee: Address = t.seller.address, listing?: Address) =>
+  const spend = async (agent: KeyPairSigner, amount: bigint, payee: Address = t.seller.address, listing?: Address, withRegistry = true) =>
     t.send([
       await getAgentSpendInstructionAsync({
         agent, mission, mint: t.mint.address, payeeToken: await t.ata(payee), listing, amount, receiptHash: hash(80),
+        registry: listing && withRegistry ? await registryAddress() : undefined,
       }),
     ]);
   let nextDeal = 1n;
@@ -108,6 +110,7 @@ async function kit(budget = 30n * USDC, stageCaps = [20n * USDC, 20n * USDC]) {
         dealVault: (await findAssociatedTokenPda({ owner: deal, mint: t.mint.address, tokenProgram: TOKEN_PROGRAM_ADDRESS }))[0],
         sellerRep: await sellerRepAddress(seller, t.mint.address), repPair: await repPairAddress(seller, auth, t.mint.address),
         listing: o.listing, link: o.listing ? (await findLinkPda({ deal }))[0] : undefined,
+        registry: o.listing ? await registryAddress() : undefined, listingContentHash: new Uint8Array(32),
         dealId, amount, deadline: t.now() + HOUR, reviewSecs: 600n, resolveSecs: 600n, toleranceBps: 500, stakeRequired: 0n,
         bondBps: o.bondBps ?? 0, verifier: t.verifier.address, termsHash: hash(7), receiptHash: hash(81),
       }),
@@ -250,6 +253,7 @@ test("empty payee list: only the seller of an active, attested listing in this m
   const a = await k.addMandate({ payees: [] });
   await k.approve(0);
   const assessor = await generateKeyPairSigner();
+  await k.t.registerAssessors(assessor.address);
   await k.t.send([
     await getCreateListingInstructionAsync({
       seller: k.t.seller, mint: k.t.mint.address, listingId: 1n, kind: ListingKind.Service, price: 1n * USDC,
@@ -259,8 +263,9 @@ test("empty payee list: only the seller of an active, attested listing in this m
   const [listing] = await findListingPda({ seller: k.t.seller.address, listingId: 1n });
   assert.equal(await errOf(k.spend(a, 1n * USDC)), code("PayeeNotAllowed")); // no listing given
   assert.equal(await errOf(k.spend(a, 1n * USDC, k.t.seller.address, listing)), code("PayeeNotAllowed")); // not attested
-  await k.t.send([getAttestListingInstruction({ assessor, listing, contentHash: hash(20), reportHash: hash(30) })]);
+  await k.t.send([getAttestListingInstruction({ assessor, listing, contentHash: hash(20), reportHash: hash(30), registry: await registryAddress() })]);
   assert.equal(await errOf(k.spend(a, 1n * USDC, k.t.stranger.address, listing)), code("PayeeNotAllowed")); // payee is not the seller
+  assert.equal(await errOf(k.spend(a, 1n * USDC, k.t.seller.address, listing, false)), code("PayeeNotAllowed")); // no registry, no trust
   await k.spend(a, 1n * USDC, k.t.seller.address, listing);
   assert.equal((await k.state()).spent, 1n * USDC);
 });

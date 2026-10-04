@@ -65,6 +65,7 @@ export type AgentSpendInstruction<
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPayeeToken extends string | AccountMeta<string> = string,
   TAccountListing extends string | AccountMeta<string> = string,
+  TAccountRegistry extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -97,6 +98,9 @@ export type AgentSpendInstruction<
       TAccountListing extends string
         ? ReadonlyAccount<TAccountListing>
         : TAccountListing,
+      TAccountRegistry extends string
+        ? ReadonlyAccount<TAccountRegistry>
+        : TAccountRegistry,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -153,6 +157,7 @@ export type AgentSpendAsyncInput<
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountPayeeToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
 > = {
@@ -165,6 +170,8 @@ export type AgentSpendAsyncInput<
   payeeToken: TAccountPayeeToken;
   /** Required when the mandate has no payee list: the payee must be this listing's seller. */
   listing?: TAccountListing;
+  /** Required with a listing: its assessor must be registered. */
+  registry?: TAccountRegistry;
   tokenProgram?: TAccountTokenProgram;
   amount: AgentSpendInstructionDataArgs["amount"];
   receiptHash: AgentSpendInstructionDataArgs["receiptHash"];
@@ -179,6 +186,7 @@ export async function getAgentSpendInstructionAsync<
   TAccountVault extends InstructionAccountInput,
   TAccountPayeeToken extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
@@ -191,6 +199,7 @@ export async function getAgentSpendInstructionAsync<
     TAccountVault,
     TAccountPayeeToken,
     TAccountListing,
+    TAccountRegistry,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -228,6 +237,10 @@ export async function getAgentSpendInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountListing,
       InstructionAccountInputAddress<TAccountListing>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
     >,
     ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
@@ -268,6 +281,11 @@ export async function getAgentSpendInstructionAsync<
     },
     listing: {
       value: input.listing ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
+    registry: {
+      value: input.registry ?? null,
       isSigner: false,
       isWritable: false,
     },
@@ -350,6 +368,7 @@ export async function getAgentSpendInstructionAsync<
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("payeeToken", accounts.payeeToken),
       getAccountMeta("listing", accounts.listing),
+      getAccountMeta("registry", accounts.registry),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getAgentSpendInstructionDataEncoder().encode(
@@ -391,6 +410,10 @@ export async function getAgentSpendInstructionAsync<
       InstructionAccountInputAddress<TAccountListing>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >
@@ -406,6 +429,7 @@ export type AgentSpendInput<
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountPayeeToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
 > = {
@@ -418,6 +442,8 @@ export type AgentSpendInput<
   payeeToken: TAccountPayeeToken;
   /** Required when the mandate has no payee list: the payee must be this listing's seller. */
   listing?: TAccountListing;
+  /** Required with a listing: its assessor must be registered. */
+  registry?: TAccountRegistry;
   tokenProgram?: TAccountTokenProgram;
   amount: AgentSpendInstructionDataArgs["amount"];
   receiptHash: AgentSpendInstructionDataArgs["receiptHash"];
@@ -432,6 +458,7 @@ export function getAgentSpendInstruction<
   TAccountVault extends InstructionAccountInput,
   TAccountPayeeToken extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
+  TAccountRegistry extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
@@ -444,6 +471,7 @@ export function getAgentSpendInstruction<
     TAccountVault,
     TAccountPayeeToken,
     TAccountListing,
+    TAccountRegistry,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -480,6 +508,10 @@ export function getAgentSpendInstruction<
   ResolvedInstructionAccountMeta<
     TAccountListing,
     InstructionAccountInputAddress<TAccountListing>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountRegistry,
+    InstructionAccountInputAddress<TAccountRegistry>
   >,
   ResolvedInstructionAccountMeta<
     TAccountTokenProgram,
@@ -522,6 +554,11 @@ export function getAgentSpendInstruction<
       isSigner: false,
       isWritable: false,
     },
+    registry: {
+      value: input.registry ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
     tokenProgram: {
       value: input.tokenProgram ?? null,
       isSigner: false,
@@ -552,6 +589,7 @@ export function getAgentSpendInstruction<
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("payeeToken", accounts.payeeToken),
       getAccountMeta("listing", accounts.listing),
+      getAccountMeta("registry", accounts.registry),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getAgentSpendInstructionDataEncoder().encode(
@@ -593,6 +631,10 @@ export function getAgentSpendInstruction<
       InstructionAccountInputAddress<TAccountListing>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountRegistry,
+      InstructionAccountInputAddress<TAccountRegistry>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
     >
@@ -614,7 +656,9 @@ export type ParsedAgentSpendInstruction<
     payeeToken: TAccountMetas[6];
     /** Required when the mandate has no payee list: the payee must be this listing's seller. */
     listing?: TAccountMetas[7] | undefined;
-    tokenProgram: TAccountMetas[8];
+    /** Required with a listing: its assessor must be registered. */
+    registry?: TAccountMetas[8] | undefined;
+    tokenProgram: TAccountMetas[9];
   };
   data: AgentSpendInstructionData;
 };
@@ -627,12 +671,12 @@ export function parseAgentSpendInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedAgentSpendInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 9) {
+  if (instruction.accounts.length < 10) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 9,
+        expectedAccountMetas: 10,
       },
     );
   }
@@ -659,6 +703,7 @@ export function parseAgentSpendInstruction<
       vault: getNextAccount(),
       payeeToken: getNextAccount(),
       listing: getNextOptionalAccount(),
+      registry: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
     },
     data: getAgentSpendInstructionDataDecoder().decode(instruction.data),

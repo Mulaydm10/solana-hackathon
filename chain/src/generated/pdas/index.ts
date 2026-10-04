@@ -14,5 +14,6 @@ export * from "./mandate";
 export * from "./mission";
 export * from "./missionAuth";
 export * from "./policy";
+export * from "./registry";
 export * from "./repPair";
 export * from "./sellerRep";

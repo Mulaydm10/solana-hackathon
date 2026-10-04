@@ -27,6 +27,7 @@ export * from "./refund";
 export * from "./release";
 export * from "./resolve";
 export * from "./revokeMandate";
+export * from "./setAssessors";
 export * from "./submitDelivery";
 export * from "./timeoutRefund";
 export * from "./updateListing";

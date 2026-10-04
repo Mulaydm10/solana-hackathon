@@ -6,6 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./assessorRegistry";
 export * from "./buyerPolicy";
 export * from "./deal";
 export * from "./dealLink";
