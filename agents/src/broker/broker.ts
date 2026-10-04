@@ -10,8 +10,10 @@
  *   - an elevated action also needs the buyer's own signature over the exact request, valid once and
  *     only until its `notAfter` (so one human click is one grant, never a standing permission);
  *   - a provider's answer or error that contains the credential, plain or encoded, is refused.
- * Known limit: egress (egress.ts) still lets an agent send data TO an allowed provider host; the
- * quarantined reader (#71) is what keeps injected instructions from steering it.
+ * Known limits: egress (egress.ts) still lets an agent send data TO an allowed provider host, and the leak
+ * check does not see a credential embedded inside a larger encoded blob (e.g. `Basic base64(user:secret)`) or
+ * escaped by JSON; the quarantined reader (#71) is what keeps injected instructions from steering either.
+ * Used approval nonces live in memory: a broker restart forgets them (the approval window is at most 15 min).
  * Results, never throws (contract rule).
  */
 import { randomBytes } from "node:crypto";
@@ -78,7 +80,11 @@ export type Broker = {
   /** The orchestrator registers a mission's blueprint and which agent plays which role. */
   registerMission(mission: string, m: { buyer: string; blueprint: Blueprint; agents: Record<string, string> }): void;
   grant(req: GrantRequest): Promise<Ok<{ token: string; expiresAt: number }> | Refused>;
-  call(token: string, action: string, args?: unknown): Promise<Ok<{ result: unknown }> | Refused>;
+  /**
+   * `presenter`: the agent presenting the token (the runner passes its own agent). Capability tokens are bearer
+   * secrets; binding them to their agent means a token leaked to another agent is useless to it.
+   */
+  call(token: string, action: string, args?: unknown, presenter?: string): Promise<Ok<{ result: unknown }> | Refused>;
   /** For the egress proxy: may the holder of `token` open a connection to `host:port` right now? */
   egressAllowed(token: string, host: string, port: number): Promise<boolean>;
   /** Drops every token of a mission (or of one agent). */
@@ -193,9 +199,10 @@ export function createBroker(o: BrokerOptions): Broker {
       return { ok: true, token, expiresAt };
     },
 
-    async call(token, action, args) {
+    async call(token, action, args, presenter) {
       const cap = tokens.get(token);
       if (!cap) return refuse("BAD_TOKEN", "unknown or revoked capability");
+      if (presenter !== undefined && presenter !== cap.agent) return refuse("WRONG_AGENT", "this capability was granted to another agent");
       if (now() >= cap.expiresAt) {
         tokens.delete(token);
         return refuse("EXPIRED", "the capability has expired");
