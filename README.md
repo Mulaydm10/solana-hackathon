@@ -67,6 +67,8 @@ Fiducia makes the rules part of the chain, so agents can spend and you keep cont
 
 ## ⛓️ Solana integration
 
+<p align="center"><img src="docs/assets/fiducia-flow.svg" alt="How a deal flows on Solana: attested, budget, escrow, sealed key, released" width="100%"></p>
+
 Everything that matters lives in **one Anchor program**, [`deal_escrow`](https://explorer.solana.com/address/CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV?cluster=devnet) (`CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV`, devnet). Every account is a PDA.
 
 ```mermaid
