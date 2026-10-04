@@ -3,12 +3,13 @@
 import express, { type Request, type Response } from "express";
 import type { Address } from "@solana/kit";
 import { canonicalJson, describeTerms, termsHash, validateTerms, type DealTerms } from "@deal/core";
-import { programErrorName } from "@deal/chain";
+import type { Sent } from "@deal/chain";
 import type { Service } from "./catalog.ts";
 import type { Desk } from "./desk.ts";
 import type { Drafter } from "./draft.ts";
 import { sha256, type Producer } from "./deliver.ts";
 import { guardWrites, securityHeaders, type GuardConfig } from "./guard.ts";
+import { judge } from "./verifier.ts";
 
 export type AppDeps = {
   desk: Desk;
@@ -29,6 +30,10 @@ export type AppDeps = {
 
 type Record_ = { terms: DealTerms; serviceId: string; delivery?: string; log: { step: string; signature: string }[] };
 
+/** Deal shape for the demo (v2): seller stake 10% of the price, buyer challenge bond 10%,
+ * invoice tolerance 5%, verifier has 2 minutes to decide a challenge. */
+export const DEAL_SHAPE = { stakeBps: 1000n, bondBps: 1000, toleranceBps: 500, resolveSecs: 120 } as const;
+
 /** Terms travel as JSON; price is a decimal string there. */
 type TermsJson = Omit<DealTerms, "price"> & { price: string };
 const toJson = (t: DealTerms): TermsJson => ({ ...t, price: t.price.toString() });
@@ -48,24 +53,24 @@ export function createApp(deps: AppDeps) {
 
   const explorer = (sig: string) => `https://explorer.solana.com/tx/${sig}?cluster=${cluster}`;
   const refuse = (res: Response, reason: string, message: string) => res.json({ ok: false, reason, message });
-  /** Program errors become refusals; anything else is a real failure. */
-  const chainCall = async (res: Response, fn: () => Promise<object>) => {
-    try {
-      res.json({ ok: true, ...(await fn()) });
-    } catch (e) {
-      const reason = programErrorName(e);
-      if (reason) return refuse(res, reason, `Solana program refused: ${reason}`);
-      console.error(e);
-      res.status(502).json({ ok: false, reason: "CHAIN_ERROR", message: (e as Error).message });
-    }
+  /** Library results -> JSON. Refusals are normal results; only infrastructure failures are 502. */
+  const respond = (res: Response, r: Sent, rec: Record_ | undefined, step: string, extra: object = {}) => {
+    if (!r.ok) return res.status(r.reason === "CHAIN_ERROR" ? 502 : 200).json(r);
+    rec?.log.push({ step, signature: r.signature });
+    res.json({ ok: true, signature: r.signature, explorer: explorer(r.signature), ...extra });
   };
+  const record = (deal: string) => deals.get(deal);
 
   app.get("/api/config", (_req, res) => {
     res.json({ buyer: deps.desk.buyer, symbol: deps.symbol, decimals: deps.decimals, cluster, defaultBudgetUsdc: deps.defaultBudgetUsdc });
   });
 
-  app.get("/api/status", async (_req, res) => {
-    await chainCall(res, async () => ({ ...(await deps.desk.status()), drafting: deps.drafting ?? "rules", cluster }));
+  app.get("/api/status", async (_req, res, next) => {
+    try {
+      res.json({ ok: true, ...(await deps.desk.status()), drafting: deps.drafting ?? "rules", cluster });
+    } catch (e) {
+      next(e);
+    }
   });
 
   app.get("/api/services", (_req, res) => {
@@ -116,49 +121,74 @@ export function createApp(deps: AppDeps) {
     const budget = units(Number(req.body.budgetUsdc ?? deps.defaultBudgetUsdc));
     const checked = validateTerms(terms, { now: now(), budgetRemaining: budget });
     if (!checked.ok) return refuse(res, checked.reason, `Terms refused before any money moved: ${checked.reason}`);
-    await chainCall(res, async () => {
-      const { deal, signature } = await deps.desk.lock({
-        dealId: BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000)),
-        seller: terms.seller as Address, price: terms.price, deadline: terms.deadline,
-        reviewSecs: terms.reviewSecs, termsHash: termsHash(terms),
-      });
-      deals.set(deal, { terms, serviceId: terms.serviceId, log: [{ step: "lock", signature }] });
-      return { deal, signature, explorer: explorer(signature), termsJson: canonicalJson(terms) };
+    const r = await deps.desk.lock({
+      dealId: BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000)),
+      seller: terms.seller as Address, price: terms.price, deadline: terms.deadline, reviewSecs: terms.reviewSecs,
+      termsHash: termsHash(terms), stake: (terms.price * DEAL_SHAPE.stakeBps) / 10_000n, bondBps: DEAL_SHAPE.bondBps,
+      toleranceBps: DEAL_SHAPE.toleranceBps, resolveSecs: DEAL_SHAPE.resolveSecs,
     });
+    if (!r.ok) return respond(res, r, undefined, "lock");
+    const rec: Record_ = { terms, serviceId: terms.serviceId, log: [] };
+    deals.set(r.deal, rec);
+    respond(res, r, rec, "lock", { deal: r.deal, termsJson: canonicalJson(terms) });
   });
 
+  /** The seller agent accepts the terms and posts its stake. */
+  app.post("/api/deals/:deal/accept", async (req, res) => {
+    const deal = req.params.deal as Address;
+    respond(res, await deps.desk.accept(deal), record(deal), "accept");
+  });
+
+  /** The seller agent produces the work and submits its hash + invoice. quality=junk simulates a bad seller. */
   app.post("/api/deals/:deal/deliver", async (req, res) => {
     const deal = req.params.deal as Address;
-    const rec = deals.get(deal);
+    const rec = record(deal);
     if (!rec) return refuse(res, "UNKNOWN_DEAL", "This server did not open that deal.");
     const service = deps.services.find((s) => s.id === rec.serviceId)!;
-    await chainCall(res, async () => {
-      const content = await deps.produce(service, rec.terms.task);
-      const signature = await deps.desk.deliver(deal, sha256(content));
-      rec.delivery = content;
-      rec.log.push({ step: "deliver", signature });
-      return { signature, explorer: explorer(signature), delivery: content };
-    });
+    const content = req.body?.quality === "junk"
+      ? `[junk] ${service.name} placeholder output, not the requested work.`
+      : await deps.produce(service, rec.terms.task);
+    const r = await deps.desk.deliver(deal, sha256(content), rec.terms.price);
+    if (r.ok) rec.delivery = content;
+    respond(res, r, rec, "deliver", { delivery: content });
   });
 
-  for (const step of ["release", "refund", "claim"] as const) {
-    app.post(`/api/deals/:deal/${step}`, async (req, res) => {
+  /** Buyer releases payment for exactly the delivery it received (hash-bound approval). */
+  app.post("/api/deals/:deal/release", async (req, res) => {
+    const deal = req.params.deal as Address;
+    const rec = record(deal);
+    if (!rec?.delivery) return refuse(res, "NO_DELIVERY", "Nothing has been delivered to this buyer yet.");
+    respond(res, await deps.desk.release(deal, sha256(rec.delivery)), rec, "release");
+  });
+
+  /** The independent verifier judges a challenged delivery and records its verdict on chain. */
+  app.post("/api/deals/:deal/verify", async (req, res) => {
+    const deal = req.params.deal as Address;
+    const rec = record(deal);
+    const onChain = await deps.desk.get(deal);
+    if (!rec?.delivery || !onChain) return refuse(res, "UNKNOWN_DEAL", "No delivery on record for that deal.");
+    if (onChain.status !== "Challenged") return refuse(res, "WrongStatus", `Deal is ${onChain.status}, not Challenged.`);
+    const verdict = judge(rec.terms.task, rec.delivery, onChain.deliveryHash);
+    respond(res, await deps.desk.resolve(deal, verdict.ok), rec, verdict.ok ? "verify: pass" : "verify: fail", { verdict });
+  });
+
+  const simple = { challenge: "challenge", timeout: "timeoutRefund", refund: "refund", claim: "claim", cancel: "cancel" } as const;
+  for (const [path, method] of Object.entries(simple)) {
+    app.post(`/api/deals/:deal/${path}`, async (req, res) => {
       const deal = req.params.deal as Address;
-      await chainCall(res, async () => {
-        const signature = await deps.desk[step](deal);
-        deals.get(deal)?.log.push({ step, signature });
-        return { signature, explorer: explorer(signature) };
-      });
+      respond(res, await deps.desk[method](deal), record(deal), path);
     });
   }
 
-  app.get("/api/deals/:deal", async (req, res) => {
-    const deal = req.params.deal as Address;
-    await chainCall(res, async () => {
+  app.get("/api/deals/:deal", async (req, res, next) => {
+    try {
+      const deal = req.params.deal as Address;
       const onChain = await deps.desk.get(deal);
-      const rec = deals.get(deal);
-      return { onChain, delivery: rec?.delivery ?? null, log: rec?.log.map((l) => ({ ...l, explorer: explorer(l.signature) })) ?? [] };
-    });
+      const rec = record(deal);
+      res.json({ ok: true, onChain, delivery: rec?.delivery ?? null, log: rec?.log.map((l) => ({ ...l, explorer: explorer(l.signature) })) ?? [] });
+    } catch (e) {
+      next(e);
+    }
   });
 
   // Fail closed: anything unexpected is a refusal with a reason code, never an HTML stack trace.

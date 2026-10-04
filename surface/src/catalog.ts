@@ -28,6 +28,11 @@ export const SERVICES: Service[] = [
     keywords: ["data", "dataset", "csv", "price list", "prices", "scrape", "table"],
   },
   {
+    id: "audit", name: "SecureScan", description: "Smart-contract security audits with a written report",
+    priceUsdc: 60, turnaroundMins: 480, rating: 4.9, deliveries: 88,
+    keywords: ["audit", "security", "smart contract", "vulnerab"],
+  },
+  {
     id: "design", name: "PixelForge", description: "Logos, banners and social images",
     priceUsdc: 8, turnaroundMins: 120, rating: 4.7, deliveries: 540,
     keywords: ["logo", "design", "image", "banner", "graphic"],
