@@ -17,7 +17,7 @@ python3 -m pip install -q -r /tmp/requirements-dev.txt
 # BASE. A PR can introduce the dependency it is judged with. Accepted knowingly: repo is public but
 # only write collaborators (Mulaydm10, vedant059) can open lane PRs (forks are rejected by CI) and
 # the human reviews before merge. Pinning to BASE would make every lane's first PR red.
-for lane in core chain surface; do
+for lane in core chain surface web mcp; do
   if [ -f "$lane/package.json" ]; then
     if [ -f "$lane/package-lock.json" ]; then npm ci --prefix "$lane" --no-audit --no-fund
     else npm install --prefix "$lane" --no-audit --no-fund; fi

@@ -3,3 +3,5 @@ canary: python3 -m pytest tests/canary -q
 core: npm test --prefix core
 chain: npm test --prefix chain
 surface: npm test --prefix surface
+web: npm test --prefix web
+mcp: npm test --prefix mcp
