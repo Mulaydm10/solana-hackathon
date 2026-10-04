@@ -136,7 +136,8 @@ test("broker: a legitimate capability opens only its provider's hosts; exfiltrat
   const { broker } = brokerUnderTest();
   const g = await broker.grant({ provider: "market", resource: "prices", actions: ["read"], mission: MISSION, agent: AGENT });
   assert.ok(g.ok);
-  assert.equal(await broker.egressAllowed(g.token, "market.example"), true);
-  for (const h of EXFIL_HOSTS) assert.equal(await broker.egressAllowed(g.token, h), false, h);
-  assert.equal(await broker.egressAllowed("f".repeat(64), "market.example"), false);
+  assert.equal(await broker.egressAllowed(g.token, "market.example", 443), true);
+  assert.equal(await broker.egressAllowed(g.token, "market.example", 22), false); // same host, other port (#92)
+  for (const h of EXFIL_HOSTS) assert.equal(await broker.egressAllowed(g.token, h, 443), false, h);
+  assert.equal(await broker.egressAllowed("f".repeat(64), "market.example", 443), false);
 });
