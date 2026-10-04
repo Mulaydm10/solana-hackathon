@@ -156,3 +156,35 @@ test("market views: unknown accounts read as null; a spend without a mandate is 
   const c = await missions.close(ctx, t.buyer, nobody);
   assert.deepEqual(!c.ok && c.reason, "MISSION_NOT_FOUND");
 });
+
+test("missions.openDeal defaults to the mission's own rules; concurrent spends of the same amount both land", async () => {
+  const { t, ctx } = await market();
+  const expiresAt = t.now() + 2n * HOUR;
+  const mission = ((await missions.create(ctx, t.buyer, {
+    missionId: 9n, budget: 30n * USDC, termsHash: hash(50), stageCaps: [20n * USDC], expiresAt, rentLamports: 100_000_000n,
+    verifier: t.verifier.address, minStakeBps: 1000,
+  })) as { mission: Address }).mission;
+  const agent = await generateKeyPairSigner();
+  t.client.svm.airdrop(agent.address, lamports(1_000_000_000n));
+  const mandate: MandateInput = {
+    agent: agent.address, roleHash: hash(60), cap: 15n * USDC, perTxCap: 6n * USDC, payees: [t.seller.address], stageMask: 1, expiresAt,
+  };
+  await missions.addMandate(ctx, t.buyer, mission, mandate);
+  await missions.approveStage(ctx, t.buyer, mission, 0, hash(70), mandatesDigest([mandate]));
+
+  // No verifier, windows, tolerance, bond or stake given: the mission's own rules are used, so it is accepted.
+  const d = await missions.openDeal(ctx, agent, mission, { seller: t.seller.address, dealId: 1n, amount: 5n * USDC, deadline: t.now() + HOUR, termsHash: hash(7) }, hash(81));
+  assert.ok(d.ok, JSON.stringify(d));
+  const deal = await getDeal(ctx, (d as { deal: Address }).deal);
+  assert.equal(deal?.verifier, t.verifier.address);
+  assert.equal(deal?.stakeRequired, String(500_000n)); // 10% of 5 USDC
+
+  // Two spends of the same amount at once: serialized per mandate, both land, both counted.
+  const fresh = { ...ctx, client: { ...ctx.client, sendTransaction: (ixs: Parameters<DealClient["sendTransaction"]>[0]) => { t.client.svm.expireBlockhash(); return ctx.client.sendTransaction(ixs); } } };
+  const [r1, r2] = await Promise.all([
+    missions.spend(fresh, agent, mission, t.seller.address, 1n * USDC, hash(82)),
+    missions.spend(fresh, agent, mission, t.seller.address, 1n * USDC, hash(83)),
+  ]);
+  assert.ok(r1.ok && r2.ok);
+  assert.equal((await getMandate(ctx, mission, agent.address))!.spent, String(7n * USDC));
+});
