@@ -7,7 +7,7 @@ import { createNoopSigner, type Address } from "@solana/kit";
 import { useWallet } from "../wallet";
 import { confirmSignature, sendWithWallet } from "../../lib/wallet-tx";
 import { PUBLIC_MINT, PUBLIC_RPC } from "../../lib/public-config";
-import { createListingIxs, MAX_UPLOAD_BYTES, readReply, toBase64, tooLarge, type DraftedListing } from "../../lib/sell-tx";
+import { createListingIxs, MAX_UPLOAD_BYTES, readReply, reportLines, toBase64, tooLarge, type DraftedListing } from "../../lib/sell-tx";
 
 type Step = { step: string; [k: string]: unknown };
 type Draft = { ok: true; steps: Step[]; meta: Record<string, unknown>; needsConfirmation: boolean; listing: DraftedListing } | { ok: false; reason: string; message: string; steps?: Step[] };
@@ -171,7 +171,17 @@ export function SellForm() {
         <label style={{ display: "block" }}>Tags (comma separated) <input value={desc.tags} onChange={(e) => setDesc({ ...desc, tags: e.target.value })} /></label>
         <button type="submit" disabled={busy}>Run the seller chain</button>
       </form>
-      {steps.length > 0 && <ol data-testid="sell-steps">{steps.slice(0, shown).map((s, i) => <li key={i}>{describeStep(s)}</li>)}</ol>}
+      {steps.length > 0 && <ol data-testid="sell-steps">{steps.slice(0, shown).map((s, i) => (
+        <li key={i}>
+          {describeStep(s)}
+          {s.step === "assess" && (
+            <details data-testid="sell-report" open>
+              <summary>Assessment report{s.reportHash ? <> (hash <code>{String(s.reportHash).slice(0, 16)}…</code>)</> : null}</summary>
+              <ul>{reportLines(s.report as Parameters<typeof reportLines>[0]).map((l, j) => <li key={j}>{l}</li>)}</ul>
+            </details>
+          )}
+        </li>
+      ))}</ol>}
       {draft?.ok && shown >= steps.length && !done && (
         <div data-testid="sell-review">
           <p>Reasons for the price: {(steps.find((s) => s.step === "price")?.reasons as string[] | undefined)?.join("; ")}</p>

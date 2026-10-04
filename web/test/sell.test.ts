@@ -15,7 +15,7 @@ import { DEAL_ESCROW_PROGRAM_ADDRESS, getListing, listingAddress, getSetAssessor
 import { PROGRAM_SO } from "@deal/chain/node";
 import { metaHash, sha256Hex, type ListingMeta } from "@deal/core";
 import { acceptCustody, assessAndAttest, attestLimiter, draftListing, type AssessDeps } from "../lib/sell.ts";
-import { createListingIxs, type DraftedListing } from "../lib/sell-tx.ts";
+import { createListingIxs, reportLines, type DraftedListing } from "../lib/sell-tx.ts";
 import { docStore, fileBlobs, keyVault, vercelBlobs, type BlobApi, type Blobs } from "../lib/storage.ts";
 import { chainRegistry, type ChainListing, type ChainSource } from "../lib/chain-registry.ts";
 import { POST as draftRoute } from "../app/api/sell/draft/route.ts";
@@ -245,6 +245,15 @@ test("custody reads at confirmed commitment and waits for a listing that is stil
   const r = await acceptCustody({ ...c.deps, ctx: { ...c.ctx, client: { ...c.ctx.client, rpc: spy }, sleep } }, { listing, seller: c.seller.address, data: b64(CSV) });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.ok(landed && commitments.length >= 2 && commitments.every((x) => x === "confirmed"), String(commitments));
+});
+
+test("the draft's assessment step carries its report, and the form shows it as lines (#140)", async () => {
+  const c = await chain();
+  const d = await drafted(c);
+  const lines = reportLines((d.steps.find((s) => s.step === "assess") as { report?: Parameters<typeof reportLines>[0] }).report);
+  assert.ok(lines.some((l) => l.startsWith("Quality: 4 rows, 3 columns")), lines.join("\n"));
+  assert.ok(lines.some((l) => l.startsWith("Personal data: none; secrets: none")), lines.join("\n"));
+  assert.ok(lines.some((l) => l.startsWith("Newest data: 2026-10-01")), lines.join("\n"));
 });
 
 test("/api/sell/* answer NOT_CONFIGURED without the assessor key and the custody master key", async () => {
