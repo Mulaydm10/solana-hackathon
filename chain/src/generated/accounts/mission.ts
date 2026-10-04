@@ -27,6 +27,8 @@ import {
   getI64Encoder,
   getStructDecoder,
   getStructEncoder,
+  getU16Decoder,
+  getU16Encoder,
   getU32Decoder,
   getU32Encoder,
   getU64Decoder,
@@ -83,6 +85,10 @@ export type Mission = {
   expiresAt: bigint;
   createdAt: bigint;
   closed: boolean;
+  verifier: Address;
+  minReviewSecs: bigint;
+  minResolveSecs: bigint;
+  maxToleranceBps: number;
   authBump: number;
   bump: number;
 };
@@ -108,6 +114,10 @@ export type MissionArgs = {
   expiresAt: number | bigint;
   createdAt: number | bigint;
   closed: boolean;
+  verifier: Address;
+  minReviewSecs: number | bigint;
+  minResolveSecs: number | bigint;
+  maxToleranceBps: number;
   authBump: number;
   bump: number;
 };
@@ -133,6 +143,10 @@ export function getMissionEncoder(): Encoder<MissionArgs> {
       ["expiresAt", getI64Encoder()],
       ["createdAt", getI64Encoder()],
       ["closed", getBooleanEncoder()],
+      ["verifier", getAddressEncoder()],
+      ["minReviewSecs", getI64Encoder()],
+      ["minResolveSecs", getI64Encoder()],
+      ["maxToleranceBps", getU16Encoder()],
       ["authBump", getU8Encoder()],
       ["bump", getU8Encoder()],
     ]),
@@ -160,6 +174,10 @@ export function getMissionDecoder(): Decoder<Mission> {
     ["expiresAt", getI64Decoder()],
     ["createdAt", getI64Decoder()],
     ["closed", getBooleanDecoder()],
+    ["verifier", getAddressDecoder()],
+    ["minReviewSecs", getI64Decoder()],
+    ["minResolveSecs", getI64Decoder()],
+    ["maxToleranceBps", getU16Decoder()],
     ["authBump", getU8Decoder()],
     ["bump", getU8Decoder()],
   ]);

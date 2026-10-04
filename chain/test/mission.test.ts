@@ -71,6 +71,7 @@ async function kit(budget = 30n * USDC, stageCaps = [20n * USDC, 20n * USDC]) {
     await getCreateMissionInstructionAsync({
       buyer: t.buyer, approver: budget > 40n * USDC ? t.approver : undefined, mint: t.mint.address,
       buyerToken: await t.ata(t.buyer.address), missionId, budget, termsHash: hash(50), teamListing: t.stranger.address, stageCaps, expiresAt, rentLamports: 100_000_000n,
+      verifier: t.verifier.address, minReviewSecs: 600n, minResolveSecs: 600n, maxToleranceBps: 500,
     }),
   ]);
   let digest: Uint8Array = new Uint8Array(32);
@@ -100,7 +101,7 @@ async function kit(budget = 30n * USDC, stageCaps = [20n * USDC, 20n * USDC]) {
       }),
     ]);
   let nextDeal = 1n;
-  const openDeal = async (agent: KeyPairSigner, amount: bigint, o: { seller?: Address; bondBps?: number; listing?: Address } = {}) => {
+  const openDeal = async (agent: KeyPairSigner, amount: bigint, o: { seller?: Address; bondBps?: number; listing?: Address; reviewSecs?: bigint; verifier?: Address; toleranceBps?: number } = {}) => {
     const dealId = nextDeal++;
     const seller = o.seller ?? t.seller.address;
     const deal = await dealAddress(auth, dealId);
@@ -111,8 +112,8 @@ async function kit(budget = 30n * USDC, stageCaps = [20n * USDC, 20n * USDC]) {
         sellerRep: await sellerRepAddress(seller, t.mint.address), repPair: await repPairAddress(seller, auth, t.mint.address),
         listing: o.listing, link: o.listing ? (await findLinkPda({ deal }))[0] : undefined,
         registry: o.listing ? await registryAddress() : undefined, listingContentHash: new Uint8Array(32),
-        dealId, amount, deadline: t.now() + HOUR, reviewSecs: 600n, resolveSecs: 600n, toleranceBps: 500, stakeRequired: 0n,
-        bondBps: o.bondBps ?? 0, verifier: t.verifier.address, termsHash: hash(7), receiptHash: hash(81),
+        dealId, amount, deadline: t.now() + HOUR, reviewSecs: o.reviewSecs ?? 600n, resolveSecs: 600n, toleranceBps: o.toleranceBps ?? 500, stakeRequired: 0n,
+        bondBps: o.bondBps ?? 0, verifier: o.verifier ?? t.verifier.address, termsHash: hash(7), receiptHash: hash(81),
       }),
     ]);
     return deal;
@@ -122,14 +123,19 @@ async function kit(budget = 30n * USDC, stageCaps = [20n * USDC, 20n * USDC]) {
     const d = (await fetchDeal(t.client.rpc, deal)).data;
     return t.send([
       await getAgentReleaseInstructionAsync({
-        agent, mission, deal, authPolicy, mint: t.mint.address, dealVault: await dealVault(deal), sellerToken: await t.ata(d.seller),
+        agent, mission, mandate: agent.address === t.buyer.address ? undefined : (await findMandatePda({ mission, agent: agent.address }))[0], deal, authPolicy, mint: t.mint.address, dealVault: await dealVault(deal), sellerToken: await t.ata(d.seller),
         sellerRep: await sellerRepAddress(d.seller, t.mint.address), repPair: await repPairAddress(d.seller, auth, t.mint.address),
         link: (await findLinkPda({ deal }))[0], expectedDeliveryHash: h,
       }),
     ]);
   };
   const challenge = async (agent: KeyPairSigner, deal: Address) =>
-    t.send([await getAgentChallengeInstructionAsync({ agent, mission, deal, mint: t.mint.address, dealVault: await dealVault(deal) })]);
+    t.send([
+      await getAgentChallengeInstructionAsync({
+        agent, mission, mandate: agent.address === t.buyer.address ? undefined : (await findMandatePda({ mission, agent: agent.address }))[0],
+        deal, mint: t.mint.address, dealVault: await dealVault(deal),
+      }),
+    ]);
   const revoke = async (agent: KeyPairSigner, by = t.buyer) =>
     t.send([getRevokeMandateInstruction({ buyer: by, mission, mandate: (await findMandatePda({ mission, agent: agent.address }))[0] })]);
   const close = async (by: KeyPairSigner = t.buyer) =>
@@ -166,6 +172,7 @@ test("create_mission: approver above the threshold, valid stages and expiry", as
         buyer: t.buyer, approver: o.approver, mint: t.mint.address, buyerToken: await t.ata(t.buyer.address), missionId,
         budget: o.budget ?? 20n * USDC, termsHash: hash(50), teamListing: t.stranger.address, stageCaps: o.stageCaps ?? [10n * USDC],
         expiresAt: o.expiresAt ?? t.now() + HOUR, rentLamports: 0n,
+        verifier: t.verifier.address, minReviewSecs: 0n, minResolveSecs: 60n, maxToleranceBps: 500,
       }),
     ]);
   assert.equal(await errOf(mk(1n)), code("ApprovalRequired"));
@@ -361,3 +368,53 @@ test("after expiry anyone may close and sweep a deal refund that arrives later",
   await k.close(k.t.stranger);
   assert.equal((await k.t.balance(k.t.buyer.address)) - tokens0, 5n * USDC);
 });
+
+test("agents cannot weaken a deal's protections: verifier, review window and tolerance are the buyer's", async () => {
+  const k = await kit();
+  const a = await k.addMandate({ cap: 10n * USDC, perTx: 8n * USDC });
+  await k.approve(0);
+  assert.equal(await errOf(k.openDeal(a, 1n * USDC, { reviewSecs: 0n })), code("DealTermsNotAllowed")); // seller could claim at once
+  assert.equal(await errOf(k.openDeal(a, 1n * USDC, { verifier: k.t.seller.address })), code("DealTermsNotAllowed")); // seller's own judge
+  assert.equal(await errOf(k.openDeal(a, 1n * USDC, { toleranceBps: 2_000 })), code("DealTermsNotAllowed"));
+  assert.equal((await k.state()).spent, 0n); // nothing was charged by the refused attempts
+  await k.openDeal(a, 1n * USDC);
+});
+
+test("only the agent that opened a deal (or the buyer) may release or challenge it", async () => {
+  const k = await kit();
+  const opener = await k.addMandate({ cap: 10n * USDC, perTx: 8n * USDC });
+  const rogue = await k.addMandate({ cap: 10n * USDC, perTx: 8n * USDC });
+  await k.approve(0);
+  const deal = await k.openDeal(opener, 5n * USDC, { bondBps: 1000 });
+  await k.t.accept(deal);
+  await k.t.deliver(deal, 5n * USDC, k.t.seller, hash(9));
+  assert.equal(await errOf(k.release(rogue, deal, hash(9))), code("NotDealOpener"));
+  assert.equal(await errOf(k.challenge(rogue, deal)), code("NotDealOpener"));
+  await k.challenge(opener, deal);
+  assert.equal((await fetchDeal(k.t.client.rpc, deal)).data.status, 3); // Challenged
+});
+
+test("the buyer can still challenge after revoking the agent and closing the mission", async () => {
+  const k = await kit();
+  const a = await k.addMandate({ cap: 10n * USDC, perTx: 8n * USDC });
+  await k.approve(0);
+  const deal = await k.openDeal(a, 5n * USDC, { bondBps: 1000 });
+  const other = await k.openDeal(a, 2n * USDC);
+  for (const d of [deal, other]) {
+    await k.t.accept(d);
+    await k.t.deliver(d, (await fetchDeal(k.t.client.rpc, d)).data.amount, k.t.seller, hash(9));
+  }
+  await k.revoke(a); // the buyer saw something wrong
+  assert.equal(await errOf(k.challenge(a, deal)), code("MandateRevoked"));
+  // The vault still holds 25; the buyer challenges as itself; the bond is charged to the mission.
+  await k.challenge(k.t.buyer as KeyPairSigner, deal);
+  assert.equal((await fetchDeal(k.t.client.rpc, deal)).data.status, 3);
+  assert.equal((await k.state()).spent, 7_500_000n); // 5 + 2 opened, plus the 0.5 bond
+  // The buyer closes the mission; the other delivered deal can still be released by the buyer.
+  await k.close();
+  const before = await k.t.balance(k.t.seller.address);
+  await k.release(k.t.buyer as KeyPairSigner, other, hash(9));
+  assert.equal((await k.t.balance(k.t.seller.address)) - before, 2n * USDC);
+  assert.equal(await errOf(k.release(a, other, hash(9))), code("MissionClosed")); // closed is checked first
+});
+

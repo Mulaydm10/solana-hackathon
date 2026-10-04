@@ -57,4 +57,5 @@ export function programErrorName(e: unknown): ProgramErrorName | undefined {
 }
 
 export * from "./deals.ts";
+export * from "./market.ts";
 export { isRateLimited, isTransient } from "./retry.ts";

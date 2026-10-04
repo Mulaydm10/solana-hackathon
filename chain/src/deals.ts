@@ -139,7 +139,7 @@ export type OpenParams = {
 
 const hex = (b: ArrayLike<number>) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-const refuse = (reason: string, message: string): Refusal => ({ ok: false, reason, message });
+export const refuse = (reason: string, message: string): Refusal => ({ ok: false, reason, message });
 
 /** Turn a failed send into a refusal: program errors by name, everything else as CHAIN_ERROR. */
 export function toRefusal(e: unknown): Refusal {
@@ -207,7 +207,8 @@ export async function safeSend(
 }
 
 /** Reads are idempotent: retry them on any transient failure. */
-async function readWithRetry<T>(ctx: DealContext, read: () => Promise<T>): Promise<T> {
+/** Reads retry on rate limits and transient RPC errors (shared by the market actions). */
+export async function readWithRetry<T>(ctx: DealContext, read: () => Promise<T>): Promise<T> {
   const sleep = ctx.sleep ?? defaultSleep;
   for (let i = 1; ; i++) {
     try {
@@ -224,7 +225,8 @@ async function latestSignature(ctx: DealContext, address: Address): Promise<stri
   return String(last?.signature ?? "landed");
 }
 
-async function ata(ctx: DealContext, owner: Address): Promise<Address> {
+/** The owner's token account for the context's mint. */
+export async function ata(ctx: DealContext, owner: Address): Promise<Address> {
   return (await findAssociatedTokenPda({ owner, mint: ctx.mint, tokenProgram: TOKEN_PROGRAM_ADDRESS }))[0];
 }
 

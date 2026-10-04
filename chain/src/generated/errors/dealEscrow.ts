@@ -122,6 +122,10 @@ export const DEAL_ESCROW_ERROR__PAYEE_NOT_ALLOWED = 0x17a3; // 6051
 export const DEAL_ESCROW_ERROR__NOT_THIS_STAGE = 0x17a4; // 6052
 /** AssessorNotRegistered: The assessor is not on the registry of assessors */
 export const DEAL_ESCROW_ERROR__ASSESSOR_NOT_REGISTERED = 0x17a5; // 6053
+/** DealTermsNotAllowed: An agent's deal must use the mission's verifier and at least its review and resolve windows */
+export const DEAL_ESCROW_ERROR__DEAL_TERMS_NOT_ALLOWED = 0x17a6; // 6054
+/** NotDealOpener: Only the agent that opened this deal (or the buyer) may act on it */
+export const DEAL_ESCROW_ERROR__NOT_DEAL_OPENER = 0x17a7; // 6055
 
 export type DealEscrowError =
   | typeof DEAL_ESCROW_ERROR__APPROVAL_REQUIRED
@@ -141,6 +145,7 @@ export type DealEscrowError =
   | typeof DEAL_ESCROW_ERROR__DEADLINE_NOT_REACHED
   | typeof DEAL_ESCROW_ERROR__DEADLINE_PASSED
   | typeof DEAL_ESCROW_ERROR__DEADLINE_TOO_FAR
+  | typeof DEAL_ESCROW_ERROR__DEAL_TERMS_NOT_ALLOWED
   | typeof DEAL_ESCROW_ERROR__DELIVERY_MISMATCH
   | typeof DEAL_ESCROW_ERROR__EMPTY_DELIVERY
   | typeof DEAL_ESCROW_ERROR__INVOICE_MISMATCH
@@ -155,6 +160,7 @@ export type DealEscrowError =
   | typeof DEAL_ESCROW_ERROR__MISSION_CLOSED
   | typeof DEAL_ESCROW_ERROR__MISSION_EXPIRED
   | typeof DEAL_ESCROW_ERROR__NOT_ASSESSOR
+  | typeof DEAL_ESCROW_ERROR__NOT_DEAL_OPENER
   | typeof DEAL_ESCROW_ERROR__NOT_LISTED_CONTENT
   | typeof DEAL_ESCROW_ERROR__NOT_THIS_STAGE
   | typeof DEAL_ESCROW_ERROR__NOT_VERIFIER
@@ -199,6 +205,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [DEAL_ESCROW_ERROR__DEADLINE_NOT_REACHED]: `Deadline has not passed yet`,
     [DEAL_ESCROW_ERROR__DEADLINE_PASSED]: `Delivery deadline has passed`,
     [DEAL_ESCROW_ERROR__DEADLINE_TOO_FAR]: `Deadline is more than 30 days away`,
+    [DEAL_ESCROW_ERROR__DEAL_TERMS_NOT_ALLOWED]: `An agent's deal must use the mission's verifier and at least its review and resolve windows`,
     [DEAL_ESCROW_ERROR__DELIVERY_MISMATCH]: `Release names a different delivery than the one submitted`,
     [DEAL_ESCROW_ERROR__EMPTY_DELIVERY]: `Delivery hash must not be empty`,
     [DEAL_ESCROW_ERROR__INVOICE_MISMATCH]: `Invoice does not match the order amount within tolerance`,
@@ -213,6 +220,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [DEAL_ESCROW_ERROR__MISSION_CLOSED]: `Mission is closed`,
     [DEAL_ESCROW_ERROR__MISSION_EXPIRED]: `Mission has expired`,
     [DEAL_ESCROW_ERROR__NOT_ASSESSOR]: `Only the listing's assessor can attest it`,
+    [DEAL_ESCROW_ERROR__NOT_DEAL_OPENER]: `Only the agent that opened this deal (or the buyer) may act on it`,
     [DEAL_ESCROW_ERROR__NOT_LISTED_CONTENT]: `Delivery is not the listed content`,
     [DEAL_ESCROW_ERROR__NOT_THIS_STAGE]: `This agent does not work in the current stage`,
     [DEAL_ESCROW_ERROR__NOT_VERIFIER]: `Only the deal's verifier can resolve`,

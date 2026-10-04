@@ -21,6 +21,8 @@ import {
   getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
+  getU16Decoder,
+  getU16Encoder,
   getU64Decoder,
   getU64Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -146,6 +148,13 @@ export type CreateMissionInstructionData = {
   expiresAt: bigint;
   /** SOL moved to the mission authority to pay rent for the deals agents open. */
   rentLamports: bigint;
+  /** Every deal an agent opens must name this verifier (not the buyer). */
+  verifier: Address;
+  /** Agents' deals give the buyer at least this long to review a delivery, and the verifier this long to rule. */
+  minReviewSecs: bigint;
+  minResolveSecs: bigint;
+  /** Agents' deals accept invoices at most this far from the order. */
+  maxToleranceBps: number;
 };
 
 export type CreateMissionInstructionDataArgs = {
@@ -160,6 +169,13 @@ export type CreateMissionInstructionDataArgs = {
   expiresAt: number | bigint;
   /** SOL moved to the mission authority to pay rent for the deals agents open. */
   rentLamports: number | bigint;
+  /** Every deal an agent opens must name this verifier (not the buyer). */
+  verifier: Address;
+  /** Agents' deals give the buyer at least this long to review a delivery, and the verifier this long to rule. */
+  minReviewSecs: number | bigint;
+  minResolveSecs: number | bigint;
+  /** Agents' deals accept invoices at most this far from the order. */
+  maxToleranceBps: number;
 };
 
 export function getCreateMissionInstructionDataEncoder(): Encoder<CreateMissionInstructionDataArgs> {
@@ -173,6 +189,10 @@ export function getCreateMissionInstructionDataEncoder(): Encoder<CreateMissionI
       ["stageCaps", getArrayEncoder(getU64Encoder())],
       ["expiresAt", getI64Encoder()],
       ["rentLamports", getU64Encoder()],
+      ["verifier", getAddressEncoder()],
+      ["minReviewSecs", getI64Encoder()],
+      ["minResolveSecs", getI64Encoder()],
+      ["maxToleranceBps", getU16Encoder()],
     ]),
     (value) => ({ ...value, discriminator: CREATE_MISSION_DISCRIMINATOR }),
   );
@@ -188,6 +208,10 @@ export function getCreateMissionInstructionDataDecoder(): Decoder<CreateMissionI
     ["stageCaps", getArrayDecoder(getU64Decoder())],
     ["expiresAt", getI64Decoder()],
     ["rentLamports", getU64Decoder()],
+    ["verifier", getAddressDecoder()],
+    ["minReviewSecs", getI64Decoder()],
+    ["minResolveSecs", getI64Decoder()],
+    ["maxToleranceBps", getU16Decoder()],
   ]);
 }
 
@@ -239,6 +263,10 @@ export type CreateMissionAsyncInput<
   stageCaps: CreateMissionInstructionDataArgs["stageCaps"];
   expiresAt: CreateMissionInstructionDataArgs["expiresAt"];
   rentLamports: CreateMissionInstructionDataArgs["rentLamports"];
+  verifier: CreateMissionInstructionDataArgs["verifier"];
+  minReviewSecs: CreateMissionInstructionDataArgs["minReviewSecs"];
+  minResolveSecs: CreateMissionInstructionDataArgs["minResolveSecs"];
+  maxToleranceBps: CreateMissionInstructionDataArgs["maxToleranceBps"];
 };
 
 export async function getCreateMissionInstructionAsync<
@@ -580,6 +608,10 @@ export type CreateMissionInput<
   stageCaps: CreateMissionInstructionDataArgs["stageCaps"];
   expiresAt: CreateMissionInstructionDataArgs["expiresAt"];
   rentLamports: CreateMissionInstructionDataArgs["rentLamports"];
+  verifier: CreateMissionInstructionDataArgs["verifier"];
+  minReviewSecs: CreateMissionInstructionDataArgs["minReviewSecs"];
+  minResolveSecs: CreateMissionInstructionDataArgs["minResolveSecs"];
+  maxToleranceBps: CreateMissionInstructionDataArgs["maxToleranceBps"];
 };
 
 export function getCreateMissionInstruction<
