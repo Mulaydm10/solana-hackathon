@@ -7,7 +7,7 @@ import { base58Encode, canonicalJson, sha256Hex } from "@deal/core";
 import { randomBytes } from "node:crypto";
 
 const addr = () => base58Encode(randomBytes(32)) as Address;
-import { acceptIx, buyIx, deliverIx, policyIx, purchaseTerms, type ListingForSale } from "../lib/buy-flow.ts";
+import { acceptIx, buyIx, dealDraft, deliverIx, policyIx, purchaseTerms, type ListingForSale } from "../lib/buy-flow.ts";
 
 const BUYER = createNoopSigner(addr());
 const SELLER = createNoopSigner(addr());
@@ -59,4 +59,17 @@ test("seller: accept only an Open deal; a Data delivery is always the listing's 
   // A Service delivery names its own hash, and must name one.
   assert.equal(why(await deliverIx(SELLER, { ...deal, expectedDeliveryHash: "" })), "NO_DELIVERY_HASH");
   assert.ok((await deliverIx(SELLER, { ...deal, expectedDeliveryHash: "" }, "cd".repeat(32))).ok);
+});
+
+test("draft: the buyer sees price, seller, deadline and review window of exactly the terms the deal commits to", async () => {
+  const r = await buyIx(BUYER, listing, { mint: MINT, verifier: VERIFIER, now: 1_800_000_000, dealId: 8n });
+  assert.ok(r.ok);
+  assert.equal(r.terms, canonicalJson(r.draft));
+  const d = dealDraft(r.draft);
+  assert.equal(d.price, "6 USDC");
+  assert.equal(d.seller, SELLER.address);
+  assert.equal(d.deadline, "2027-01-16 08:00:00 UTC");
+  assert.equal(d.reviewWindow, "1 day after delivery");
+  assert.match(d.summary, /refunded/);
+  assert.equal(dealDraft({ ...r.draft, reviewSecs: 7_200 }).reviewWindow, "2 hours after delivery");
 });
