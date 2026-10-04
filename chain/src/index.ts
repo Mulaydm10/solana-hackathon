@@ -38,3 +38,6 @@ export function programErrorName(e: unknown): ProgramErrorName | undefined {
   }
   return undefined;
 }
+
+export * from "./deals.ts";
+export { isRateLimited } from "./retry.ts";
