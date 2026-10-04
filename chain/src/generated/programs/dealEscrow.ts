@@ -36,12 +36,18 @@ import {
 import {
   getBuyerPolicyCodec,
   getDealCodec,
+  getDealLinkCodec,
+  getListingCodec,
   getRepPairCodec,
   getSellerRepCodec,
   type BuyerPolicy,
   type BuyerPolicyArgs,
   type Deal,
   type DealArgs,
+  type DealLink,
+  type DealLinkArgs,
+  type Listing,
+  type ListingArgs,
   type RepPair,
   type RepPairArgs,
   type SellerRep,
@@ -49,56 +55,74 @@ import {
 } from "../accounts";
 import {
   getAcceptInstructionAsync,
+  getAttestListingInstruction,
   getCancelInstructionAsync,
   getChallengeInstructionAsync,
   getClaimInstructionAsync,
+  getCloseListingInstruction,
   getCreateDealInstructionAsync,
+  getCreateListingInstructionAsync,
   getInitPolicyInstructionAsync,
   getRefundInstructionAsync,
   getReleaseInstructionAsync,
   getResolveInstructionAsync,
-  getSubmitDeliveryInstruction,
+  getSubmitDeliveryInstructionAsync,
   getTimeoutRefundInstructionAsync,
+  getUpdateListingInstruction,
   getUpdatePolicyInstructionAsync,
   parseAcceptInstruction,
+  parseAttestListingInstruction,
   parseCancelInstruction,
   parseChallengeInstruction,
   parseClaimInstruction,
+  parseCloseListingInstruction,
   parseCreateDealInstruction,
+  parseCreateListingInstruction,
   parseInitPolicyInstruction,
   parseRefundInstruction,
   parseReleaseInstruction,
   parseResolveInstruction,
   parseSubmitDeliveryInstruction,
   parseTimeoutRefundInstruction,
+  parseUpdateListingInstruction,
   parseUpdatePolicyInstruction,
   type AcceptAsyncInput,
+  type AttestListingInput,
   type CancelAsyncInput,
   type ChallengeAsyncInput,
   type ClaimAsyncInput,
+  type CloseListingInput,
   type CreateDealAsyncInput,
+  type CreateListingAsyncInput,
   type InitPolicyAsyncInput,
   type ParsedAcceptInstruction,
+  type ParsedAttestListingInstruction,
   type ParsedCancelInstruction,
   type ParsedChallengeInstruction,
   type ParsedClaimInstruction,
+  type ParsedCloseListingInstruction,
   type ParsedCreateDealInstruction,
+  type ParsedCreateListingInstruction,
   type ParsedInitPolicyInstruction,
   type ParsedRefundInstruction,
   type ParsedReleaseInstruction,
   type ParsedResolveInstruction,
   type ParsedSubmitDeliveryInstruction,
   type ParsedTimeoutRefundInstruction,
+  type ParsedUpdateListingInstruction,
   type ParsedUpdatePolicyInstruction,
   type RefundAsyncInput,
   type ReleaseAsyncInput,
   type ResolveAsyncInput,
-  type SubmitDeliveryInput,
+  type SubmitDeliveryAsyncInput,
   type TimeoutRefundAsyncInput,
+  type UpdateListingInput,
   type UpdatePolicyAsyncInput,
 } from "../instructions";
 import {
   findDealPda,
+  findLinkPda,
+  findListingPda,
   findPolicyPda,
   findRepPairPda,
   findSellerRepPda,
@@ -110,6 +134,8 @@ export const DEAL_ESCROW_PROGRAM_ADDRESS =
 export enum DealEscrowAccount {
   BuyerPolicy,
   Deal,
+  DealLink,
+  Listing,
   RepPair,
   SellerRep,
 }
@@ -139,6 +165,28 @@ export function identifyDealEscrowAccount(
     )
   ) {
     return DealEscrowAccount.Deal;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([52, 68, 23, 199, 207, 93, 142, 90]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowAccount.DealLink;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([218, 32, 50, 73, 43, 134, 26, 58]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowAccount.Listing;
   }
   if (
     containsBytes(
@@ -194,16 +242,20 @@ export function identifyDealEscrowEvent(
 
 export enum DealEscrowInstruction {
   Accept,
+  AttestListing,
   Cancel,
   Challenge,
   Claim,
+  CloseListing,
   CreateDeal,
+  CreateListing,
   InitPolicy,
   Refund,
   Release,
   Resolve,
   SubmitDelivery,
   TimeoutRefund,
+  UpdateListing,
   UpdatePolicy,
 }
 
@@ -221,6 +273,17 @@ export function identifyDealEscrowInstruction(
     )
   ) {
     return DealEscrowInstruction.Accept;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([148, 58, 139, 213, 120, 146, 252, 200]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.AttestListing;
   }
   if (
     containsBytes(
@@ -259,12 +322,34 @@ export function identifyDealEscrowInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([33, 15, 192, 81, 78, 175, 159, 97]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.CloseListing;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([198, 212, 144, 151, 97, 56, 149, 113]),
       ),
       0,
     )
   ) {
     return DealEscrowInstruction.CreateDeal;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([18, 168, 45, 24, 191, 31, 117, 54]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.CreateListing;
   }
   if (
     containsBytes(
@@ -336,6 +421,17 @@ export function identifyDealEscrowInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([192, 174, 210, 68, 116, 40, 242, 253]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowInstruction.UpdateListing;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([212, 245, 246, 7, 163, 151, 18, 57]),
       ),
       0,
@@ -356,6 +452,9 @@ export type ParsedDealEscrowInstruction<
       instructionType: DealEscrowInstruction.Accept;
     } & ParsedAcceptInstruction<TProgram>)
   | ({
+      instructionType: DealEscrowInstruction.AttestListing;
+    } & ParsedAttestListingInstruction<TProgram>)
+  | ({
       instructionType: DealEscrowInstruction.Cancel;
     } & ParsedCancelInstruction<TProgram>)
   | ({
@@ -365,8 +464,14 @@ export type ParsedDealEscrowInstruction<
       instructionType: DealEscrowInstruction.Claim;
     } & ParsedClaimInstruction<TProgram>)
   | ({
+      instructionType: DealEscrowInstruction.CloseListing;
+    } & ParsedCloseListingInstruction<TProgram>)
+  | ({
       instructionType: DealEscrowInstruction.CreateDeal;
     } & ParsedCreateDealInstruction<TProgram>)
+  | ({
+      instructionType: DealEscrowInstruction.CreateListing;
+    } & ParsedCreateListingInstruction<TProgram>)
   | ({
       instructionType: DealEscrowInstruction.InitPolicy;
     } & ParsedInitPolicyInstruction<TProgram>)
@@ -386,6 +491,9 @@ export type ParsedDealEscrowInstruction<
       instructionType: DealEscrowInstruction.TimeoutRefund;
     } & ParsedTimeoutRefundInstruction<TProgram>)
   | ({
+      instructionType: DealEscrowInstruction.UpdateListing;
+    } & ParsedUpdateListingInstruction<TProgram>)
+  | ({
       instructionType: DealEscrowInstruction.UpdatePolicy;
     } & ParsedUpdatePolicyInstruction<TProgram>);
 
@@ -399,6 +507,13 @@ export function parseDealEscrowInstruction<TProgram extends string>(
       return {
         instructionType: DealEscrowInstruction.Accept,
         ...parseAcceptInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.AttestListing: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.AttestListing,
+        ...parseAttestListingInstruction(instruction),
       };
     }
     case DealEscrowInstruction.Cancel: {
@@ -422,11 +537,25 @@ export function parseDealEscrowInstruction<TProgram extends string>(
         ...parseClaimInstruction(instruction),
       };
     }
+    case DealEscrowInstruction.CloseListing: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.CloseListing,
+        ...parseCloseListingInstruction(instruction),
+      };
+    }
     case DealEscrowInstruction.CreateDeal: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: DealEscrowInstruction.CreateDeal,
         ...parseCreateDealInstruction(instruction),
+      };
+    }
+    case DealEscrowInstruction.CreateListing: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.CreateListing,
+        ...parseCreateListingInstruction(instruction),
       };
     }
     case DealEscrowInstruction.InitPolicy: {
@@ -471,6 +600,13 @@ export function parseDealEscrowInstruction<TProgram extends string>(
         ...parseTimeoutRefundInstruction(instruction),
       };
     }
+    case DealEscrowInstruction.UpdateListing: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: DealEscrowInstruction.UpdateListing,
+        ...parseUpdateListingInstruction(instruction),
+      };
+    }
     case DealEscrowInstruction.UpdatePolicy: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -502,6 +638,10 @@ export type DealEscrowPluginAccounts = {
   buyerPolicy: ReturnType<typeof getBuyerPolicyCodec> &
     SelfFetchFunctions<BuyerPolicyArgs, BuyerPolicy>;
   deal: ReturnType<typeof getDealCodec> & SelfFetchFunctions<DealArgs, Deal>;
+  dealLink: ReturnType<typeof getDealLinkCodec> &
+    SelfFetchFunctions<DealLinkArgs, DealLink>;
+  listing: ReturnType<typeof getListingCodec> &
+    SelfFetchFunctions<ListingArgs, Listing>;
   repPair: ReturnType<typeof getRepPairCodec> &
     SelfFetchFunctions<RepPairArgs, RepPair>;
   sellerRep: ReturnType<typeof getSellerRepCodec> &
@@ -512,6 +652,10 @@ export type DealEscrowPluginInstructions = {
   accept: (
     input: AcceptAsyncInput,
   ) => ReturnType<typeof getAcceptInstructionAsync> & SelfPlanAndSendFunctions;
+  attestListing: (
+    input: AttestListingInput,
+  ) => ReturnType<typeof getAttestListingInstruction> &
+    SelfPlanAndSendFunctions;
   cancel: (
     input: CancelAsyncInput,
   ) => ReturnType<typeof getCancelInstructionAsync> & SelfPlanAndSendFunctions;
@@ -522,9 +666,16 @@ export type DealEscrowPluginInstructions = {
   claim: (
     input: ClaimAsyncInput,
   ) => ReturnType<typeof getClaimInstructionAsync> & SelfPlanAndSendFunctions;
+  closeListing: (
+    input: CloseListingInput,
+  ) => ReturnType<typeof getCloseListingInstruction> & SelfPlanAndSendFunctions;
   createDeal: (
     input: CreateDealAsyncInput,
   ) => ReturnType<typeof getCreateDealInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  createListing: (
+    input: CreateListingAsyncInput,
+  ) => ReturnType<typeof getCreateListingInstructionAsync> &
     SelfPlanAndSendFunctions;
   initPolicy: (
     input: InitPolicyAsyncInput,
@@ -540,12 +691,16 @@ export type DealEscrowPluginInstructions = {
     input: ResolveAsyncInput,
   ) => ReturnType<typeof getResolveInstructionAsync> & SelfPlanAndSendFunctions;
   submitDelivery: (
-    input: SubmitDeliveryInput,
-  ) => ReturnType<typeof getSubmitDeliveryInstruction> &
+    input: SubmitDeliveryAsyncInput,
+  ) => ReturnType<typeof getSubmitDeliveryInstructionAsync> &
     SelfPlanAndSendFunctions;
   timeoutRefund: (
     input: TimeoutRefundAsyncInput,
   ) => ReturnType<typeof getTimeoutRefundInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  updateListing: (
+    input: UpdateListingInput,
+  ) => ReturnType<typeof getUpdateListingInstruction> &
     SelfPlanAndSendFunctions;
   updatePolicy: (
     input: UpdatePolicyAsyncInput,
@@ -554,10 +709,12 @@ export type DealEscrowPluginInstructions = {
 };
 
 export type DealEscrowPluginPdas = {
+  link: typeof findLinkPda;
   policy: typeof findPolicyPda;
   deal: typeof findDealPda;
   sellerRep: typeof findSellerRepPda;
   repPair: typeof findRepPairPda;
+  listing: typeof findListingPda;
 };
 
 export type DealEscrowPluginRequirements = ClientWithRpc<
@@ -575,6 +732,8 @@ export function dealEscrowProgram() {
         accounts: {
           buyerPolicy: addSelfFetchFunctions(client, getBuyerPolicyCodec()),
           deal: addSelfFetchFunctions(client, getDealCodec()),
+          dealLink: addSelfFetchFunctions(client, getDealLinkCodec()),
+          listing: addSelfFetchFunctions(client, getListingCodec()),
           repPair: addSelfFetchFunctions(client, getRepPairCodec()),
           sellerRep: addSelfFetchFunctions(client, getSellerRepCodec()),
         },
@@ -583,6 +742,11 @@ export function dealEscrowProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getAcceptInstructionAsync(input),
+            ),
+          attestListing: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAttestListingInstruction(input),
             ),
           cancel: (input) =>
             addSelfPlanAndSendFunctions(
@@ -599,10 +763,20 @@ export function dealEscrowProgram() {
               client,
               getClaimInstructionAsync(input),
             ),
+          closeListing: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCloseListingInstruction(input),
+            ),
           createDeal: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getCreateDealInstructionAsync(input),
+            ),
+          createListing: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCreateListingInstructionAsync(input),
             ),
           initPolicy: (input) =>
             addSelfPlanAndSendFunctions(
@@ -627,12 +801,17 @@ export function dealEscrowProgram() {
           submitDelivery: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getSubmitDeliveryInstruction(input),
+              getSubmitDeliveryInstructionAsync(input),
             ),
           timeoutRefund: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getTimeoutRefundInstructionAsync(input),
+            ),
+          updateListing: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getUpdateListingInstruction(input),
             ),
           updatePolicy: (input) =>
             addSelfPlanAndSendFunctions(
@@ -641,10 +820,12 @@ export function dealEscrowProgram() {
             ),
         },
         pdas: {
+          link: findLinkPda,
           policy: findPolicyPda,
           deal: findDealPda,
           sellerRep: findSellerRepPda,
           repPair: findRepPairPda,
+          listing: findListingPda,
         },
         identifyAccount: identifyDealEscrowAccount,
         identifyInstruction: identifyDealEscrowInstruction,

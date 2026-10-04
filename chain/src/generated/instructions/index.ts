@@ -7,14 +7,18 @@
  */
 
 export * from "./accept";
+export * from "./attestListing";
 export * from "./cancel";
 export * from "./challenge";
 export * from "./claim";
+export * from "./closeListing";
 export * from "./createDeal";
+export * from "./createListing";
 export * from "./initPolicy";
 export * from "./refund";
 export * from "./release";
 export * from "./resolve";
 export * from "./submitDelivery";
 export * from "./timeoutRefund";
+export * from "./updateListing";
 export * from "./updatePolicy";

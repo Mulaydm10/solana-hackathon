@@ -28,18 +28,21 @@ import {
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
+  type ReadonlyAccount,
   type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type WritableAccount,
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
+  getAddressFromResolvedInstructionAccount,
   type InstructionAccountInput,
   type InstructionAccountInputAddress,
   type InstructionSignerInput,
   type ResolvedInstructionAccount,
   type ResolvedInstructionAccountMeta,
 } from "@solana/program-client-core";
+import { findLinkPda } from "../pdas";
 import { DEAL_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
 export const SUBMIT_DELIVERY_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array(
@@ -56,6 +59,7 @@ export type SubmitDeliveryInstruction<
   TProgram extends string = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
   TAccountSeller extends string | AccountMeta<string> = string,
   TAccountDeal extends string | AccountMeta<string> = string,
+  TAccountLink extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -68,6 +72,9 @@ export type SubmitDeliveryInstruction<
       TAccountDeal extends string
         ? WritableAccount<TAccountDeal>
         : TAccountDeal,
+      TAccountLink extends string
+        ? ReadonlyAccount<TAccountLink>
+        : TAccountLink,
       ...TRemainingAccounts,
     ]
   >;
@@ -112,32 +119,41 @@ export function getSubmitDeliveryInstructionDataCodec(): FixedSizeCodec<
   );
 }
 
-export type SubmitDeliveryInput<
+export type SubmitDeliveryAsyncInput<
   TAccountSeller extends InstructionSignerInput = InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
+  TAccountLink extends InstructionAccountInput = InstructionAccountInput,
 > = {
   seller: TAccountSeller;
   deal: TAccountDeal;
+  link?: TAccountLink;
   deliveryHash: SubmitDeliveryInstructionDataArgs["deliveryHash"];
   invoiceAmount: SubmitDeliveryInstructionDataArgs["invoiceAmount"];
 };
 
-export function getSubmitDeliveryInstruction<
+export async function getSubmitDeliveryInstructionAsync<
   TAccountSeller extends InstructionSignerInput,
   TAccountDeal extends InstructionAccountInput,
+  TAccountLink extends InstructionAccountInput,
   TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: SubmitDeliveryInput<TAccountSeller, TAccountDeal>,
+  input: SubmitDeliveryAsyncInput<TAccountSeller, TAccountDeal, TAccountLink>,
   config?: { programAddress?: TProgramAddress },
-): SubmitDeliveryInstruction<
-  TProgramAddress,
-  ResolvedInstructionAccountMeta<
-    TAccountSeller,
-    InstructionAccountInputAddress<TAccountSeller>
-  >,
-  ResolvedInstructionAccountMeta<
-    TAccountDeal,
-    InstructionAccountInputAddress<TAccountDeal>
+): Promise<
+  SubmitDeliveryInstruction<
+    TProgramAddress,
+    ResolvedInstructionAccountMeta<
+      TAccountSeller,
+      InstructionAccountInputAddress<TAccountSeller>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountDeal,
+      InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountLink,
+      InstructionAccountInputAddress<TAccountLink>
+    >
   >
 > {
   // Program address.
@@ -150,6 +166,7 @@ export function getSubmitDeliveryInstruction<
   const originalAccounts = {
     seller: { value: input.seller ?? null, isSigner: true, isWritable: false },
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
+    link: { value: input.link ?? null, isSigner: false, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -159,10 +176,24 @@ export function getSubmitDeliveryInstruction<
   // Original args.
   const args = { ...input };
 
+  // Resolve default values.
+  if (!accounts.link.value) {
+    accounts.link.value = await findLinkPda(
+      {
+        deal: getAddressFromResolvedInstructionAccount(
+          "deal",
+          accounts.deal.value,
+        ),
+      },
+      { programAddress },
+    );
+  }
+
   return Object.freeze({
     accounts: [
       getAccountMeta("seller", accounts.seller),
       getAccountMeta("deal", accounts.deal),
+      getAccountMeta("link", accounts.link),
     ],
     data: getSubmitDeliveryInstructionDataEncoder().encode(
       args as SubmitDeliveryInstructionDataArgs,
@@ -177,6 +208,92 @@ export function getSubmitDeliveryInstruction<
     ResolvedInstructionAccountMeta<
       TAccountDeal,
       InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountLink,
+      InstructionAccountInputAddress<TAccountLink>
+    >
+  >);
+}
+
+export type SubmitDeliveryInput<
+  TAccountSeller extends InstructionSignerInput = InstructionSignerInput,
+  TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
+  TAccountLink extends InstructionAccountInput = InstructionAccountInput,
+> = {
+  seller: TAccountSeller;
+  deal: TAccountDeal;
+  link: TAccountLink;
+  deliveryHash: SubmitDeliveryInstructionDataArgs["deliveryHash"];
+  invoiceAmount: SubmitDeliveryInstructionDataArgs["invoiceAmount"];
+};
+
+export function getSubmitDeliveryInstruction<
+  TAccountSeller extends InstructionSignerInput,
+  TAccountDeal extends InstructionAccountInput,
+  TAccountLink extends InstructionAccountInput,
+  TProgramAddress extends Address = typeof DEAL_ESCROW_PROGRAM_ADDRESS,
+>(
+  input: SubmitDeliveryInput<TAccountSeller, TAccountDeal, TAccountLink>,
+  config?: { programAddress?: TProgramAddress },
+): SubmitDeliveryInstruction<
+  TProgramAddress,
+  ResolvedInstructionAccountMeta<
+    TAccountSeller,
+    InstructionAccountInputAddress<TAccountSeller>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountDeal,
+    InstructionAccountInputAddress<TAccountDeal>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountLink,
+    InstructionAccountInputAddress<TAccountLink>
+  >
+> {
+  // Program address.
+  const programAddress = config?.programAddress ?? DEAL_ESCROW_PROGRAM_ADDRESS;
+
+  // Account meta helper.
+  const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
+
+  // Original accounts.
+  const originalAccounts = {
+    seller: { value: input.seller ?? null, isSigner: true, isWritable: false },
+    deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
+    link: { value: input.link ?? null, isSigner: false, isWritable: false },
+  };
+  const accounts = originalAccounts as Record<
+    keyof typeof originalAccounts,
+    ResolvedInstructionAccount
+  >;
+
+  // Original args.
+  const args = { ...input };
+
+  return Object.freeze({
+    accounts: [
+      getAccountMeta("seller", accounts.seller),
+      getAccountMeta("deal", accounts.deal),
+      getAccountMeta("link", accounts.link),
+    ],
+    data: getSubmitDeliveryInstructionDataEncoder().encode(
+      args as SubmitDeliveryInstructionDataArgs,
+    ),
+    programAddress,
+  } as SubmitDeliveryInstruction<
+    TProgramAddress,
+    ResolvedInstructionAccountMeta<
+      TAccountSeller,
+      InstructionAccountInputAddress<TAccountSeller>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountDeal,
+      InstructionAccountInputAddress<TAccountDeal>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountLink,
+      InstructionAccountInputAddress<TAccountLink>
     >
   >);
 }
@@ -189,6 +306,7 @@ export type ParsedSubmitDeliveryInstruction<
   accounts: {
     seller: TAccountMetas[0];
     deal: TAccountMetas[1];
+    link: TAccountMetas[2];
   };
   data: SubmitDeliveryInstructionData;
 };
@@ -201,12 +319,12 @@ export function parseSubmitDeliveryInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedSubmitDeliveryInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 2) {
+  if (instruction.accounts.length < 3) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 2,
+        expectedAccountMetas: 3,
       },
     );
   }
@@ -218,7 +336,11 @@ export function parseSubmitDeliveryInstruction<
   };
   return {
     programAddress: instruction.programAddress,
-    accounts: { seller: getNextAccount(), deal: getNextAccount() },
+    accounts: {
+      seller: getNextAccount(),
+      deal: getNextAccount(),
+      link: getNextAccount(),
+    },
     data: getSubmitDeliveryInstructionDataDecoder().decode(instruction.data),
   };
 }

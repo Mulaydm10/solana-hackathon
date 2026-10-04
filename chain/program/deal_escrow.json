@@ -108,6 +108,52 @@
       "args": []
     },
     {
+      "name": "attest_listing",
+      "docs": [
+        "The listing's assessor attests the report it produced for exactly the listed content."
+      ],
+      "discriminator": [
+        148,
+        58,
+        139,
+        213,
+        120,
+        146,
+        252,
+        200
+      ],
+      "accounts": [
+        {
+          "name": "assessor",
+          "signer": true
+        },
+        {
+          "name": "listing",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "content_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "report_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "cancel",
       "docs": [
         "Buyer withdraws an offer the seller has not accepted. Full refund, budget credited back."
@@ -286,6 +332,34 @@
               }
             ]
           }
+        },
+        {
+          "name": "link",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing",
+          "docs": [
+            "The deal's listing, if it has one and it still exists (its sales are counted)."
+          ],
+          "writable": true,
+          "optional": true
         },
         {
           "name": "token_program"
@@ -580,11 +654,71 @@
           }
         },
         {
+          "name": "link",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing",
+          "docs": [
+            "The deal's listing, if it has one and it still exists (its sales are counted)."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
           "name": "token_program"
         },
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "close_listing",
+      "docs": [
+        "Seller removes a listing and gets its rent back. Deals already opened from it keep their",
+        "DealLink (which holds the expected delivery hash), so they are unaffected."
+      ],
+      "discriminator": [
+        33,
+        15,
+        192,
+        81,
+        78,
+        175,
+        159,
+        97
+      ],
+      "accounts": [
+        {
+          "name": "seller",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "listing"
+          ]
+        },
+        {
+          "name": "listing",
+          "writable": true
         }
       ],
       "args": []
@@ -735,6 +869,35 @@
           }
         },
         {
+          "name": "listing",
+          "docs": [
+            "Present only when the deal is opened from a listing."
+          ],
+          "optional": true
+        },
+        {
+          "name": "link",
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal"
+              }
+            ]
+          }
+        },
+        {
           "name": "vault",
           "writable": true,
           "pda": {
@@ -813,6 +976,79 @@
           "type": {
             "defined": {
               "name": "DealParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "create_listing",
+      "docs": [
+        "Seller lists data, a service or a team blueprint. It starts unattested; deals can only be",
+        "opened from it once its assessor (never the seller) has attested a report."
+      ],
+      "discriminator": [
+        18,
+        168,
+        45,
+        24,
+        191,
+        31,
+        117,
+        54
+      ],
+      "accounts": [
+        {
+          "name": "seller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "listing",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "seller"
+              },
+              {
+                "kind": "arg",
+                "path": "listing_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "listing_id",
+          "type": "u64"
+        },
+        {
+          "name": "p",
+          "type": {
+            "defined": {
+              "name": "ListingParams"
             }
           }
         }
@@ -1063,6 +1299,34 @@
           }
         },
         {
+          "name": "link",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing",
+          "docs": [
+            "The deal's listing, if it has one and it still exists (its sales are counted)."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
           "name": "token_program"
         },
         {
@@ -1251,6 +1515,34 @@
               }
             ]
           }
+        },
+        {
+          "name": "link",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing",
+          "docs": [
+            "The deal's listing, if it has one and it still exists (its sales are counted)."
+          ],
+          "writable": true,
+          "optional": true
         },
         {
           "name": "token_program"
@@ -1455,6 +1747,34 @@
           }
         },
         {
+          "name": "link",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing",
+          "docs": [
+            "The deal's listing, if it has one and it still exists (its sales are counted)."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
           "name": "token_program"
         },
         {
@@ -1496,6 +1816,26 @@
         {
           "name": "deal",
           "writable": true
+        },
+        {
+          "name": "link",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -1697,6 +2037,34 @@
           }
         },
         {
+          "name": "link",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing",
+          "docs": [
+            "The deal's listing, if it has one and it still exists (its sales are counted)."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
           "name": "token_program"
         },
         {
@@ -1705,6 +2073,46 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "update_listing",
+      "docs": [
+        "Seller changes price or availability freely; changing what is sold (content or metadata)",
+        "clears the attestation, so it must be assessed again before anyone can buy it."
+      ],
+      "discriminator": [
+        192,
+        174,
+        210,
+        68,
+        116,
+        40,
+        242,
+        253
+      ],
+      "accounts": [
+        {
+          "name": "seller",
+          "signer": true,
+          "relations": [
+            "listing"
+          ]
+        },
+        {
+          "name": "listing",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "u",
+          "type": {
+            "defined": {
+              "name": "ListingUpdate"
+            }
+          }
+        }
+      ]
     },
     {
       "name": "update_policy",
@@ -1790,6 +2198,32 @@
         162,
         182,
         219
+      ]
+    },
+    {
+      "name": "DealLink",
+      "discriminator": [
+        52,
+        68,
+        23,
+        199,
+        207,
+        93,
+        142,
+        90
+      ]
+    },
+    {
+      "name": "Listing",
+      "discriminator": [
+        218,
+        32,
+        50,
+        73,
+        43,
+        134,
+        26,
+        58
       ]
     },
     {
@@ -1984,6 +2418,41 @@
       "code": 6029,
       "name": "BadPolicy",
       "msg": "Invalid policy parameters"
+    },
+    {
+      "code": 6030,
+      "name": "BadListing",
+      "msg": "Invalid listing parameters"
+    },
+    {
+      "code": 6031,
+      "name": "AssessorNotIndependent",
+      "msg": "The assessor must be set and must not be the seller"
+    },
+    {
+      "code": 6032,
+      "name": "NotAssessor",
+      "msg": "Only the listing's assessor can attest it"
+    },
+    {
+      "code": 6033,
+      "name": "ListingInactive",
+      "msg": "Listing is not active"
+    },
+    {
+      "code": 6034,
+      "name": "ListingNotAttested",
+      "msg": "Listing has not been attested by its assessor"
+    },
+    {
+      "code": 6035,
+      "name": "ListingMismatch",
+      "msg": "Deal does not match its listing"
+    },
+    {
+      "code": 6036,
+      "name": "NotListedContent",
+      "msg": "Delivery is not the listed content"
     }
   ],
   "types": [
@@ -2192,6 +2661,41 @@
       }
     },
     {
+      "name": "DealLink",
+      "docs": [
+        "Binds a deal to the listing it was opened from (Deal itself is unchanged since v2)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "deal",
+            "type": "pubkey"
+          },
+          {
+            "name": "listing",
+            "type": "pubkey"
+          },
+          {
+            "name": "expected_delivery_hash",
+            "docs": [
+              "For Data listings, the content hash the delivery must equal; zero = no check."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "DealParams",
       "type": {
         "kind": "struct",
@@ -2277,6 +2781,217 @@
           },
           {
             "name": "NoVerdict"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Listing",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "listing_id",
+            "type": "u64"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "ListingKind"
+              }
+            }
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "content_hash",
+            "docs": [
+              "sha256 of the data (Data), of the endpoint descriptor (Service) or of the blueprint (Team)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "meta_hash",
+            "docs": [
+              "sha256 of the canonical metadata JSON (name, description, category, tags, URI) kept off chain."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "terms_template_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "assessor",
+            "type": "pubkey"
+          },
+          {
+            "name": "report_hash",
+            "docs": [
+              "Zero until the assessor attests; cleared whenever the content or metadata changes."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "assessed_at",
+            "type": "i64"
+          },
+          {
+            "name": "active",
+            "type": "bool"
+          },
+          {
+            "name": "sales",
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ListingKind",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Data"
+          },
+          {
+            "name": "Service"
+          },
+          {
+            "name": "Team"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ListingParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "ListingKind"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "content_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "meta_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "terms_template_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "assessor",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ListingUpdate",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "price",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "active",
+            "type": {
+              "option": "bool"
+            }
+          },
+          {
+            "name": "content_hash",
+            "type": {
+              "option": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          },
+          {
+            "name": "meta_hash",
+            "type": {
+              "option": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
           }
         ]
       }

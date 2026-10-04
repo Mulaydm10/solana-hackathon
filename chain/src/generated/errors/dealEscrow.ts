@@ -74,10 +74,26 @@ export const DEAL_ESCROW_ERROR__CONSERVATION = 0x178b; // 6027
 export const DEAL_ESCROW_ERROR__MATH_OVERFLOW = 0x178c; // 6028
 /** BadPolicy: Invalid policy parameters */
 export const DEAL_ESCROW_ERROR__BAD_POLICY = 0x178d; // 6029
+/** BadListing: Invalid listing parameters */
+export const DEAL_ESCROW_ERROR__BAD_LISTING = 0x178e; // 6030
+/** AssessorNotIndependent: The assessor must be set and must not be the seller */
+export const DEAL_ESCROW_ERROR__ASSESSOR_NOT_INDEPENDENT = 0x178f; // 6031
+/** NotAssessor: Only the listing's assessor can attest it */
+export const DEAL_ESCROW_ERROR__NOT_ASSESSOR = 0x1790; // 6032
+/** ListingInactive: Listing is not active */
+export const DEAL_ESCROW_ERROR__LISTING_INACTIVE = 0x1791; // 6033
+/** ListingNotAttested: Listing has not been attested by its assessor */
+export const DEAL_ESCROW_ERROR__LISTING_NOT_ATTESTED = 0x1792; // 6034
+/** ListingMismatch: Deal does not match its listing */
+export const DEAL_ESCROW_ERROR__LISTING_MISMATCH = 0x1793; // 6035
+/** NotListedContent: Delivery is not the listed content */
+export const DEAL_ESCROW_ERROR__NOT_LISTED_CONTENT = 0x1794; // 6036
 
 export type DealEscrowError =
   | typeof DEAL_ESCROW_ERROR__APPROVAL_REQUIRED
+  | typeof DEAL_ESCROW_ERROR__ASSESSOR_NOT_INDEPENDENT
   | typeof DEAL_ESCROW_ERROR__BAD_BOND
+  | typeof DEAL_ESCROW_ERROR__BAD_LISTING
   | typeof DEAL_ESCROW_ERROR__BAD_POLICY
   | typeof DEAL_ESCROW_ERROR__BAD_RESOLVE_WINDOW
   | typeof DEAL_ESCROW_ERROR__BAD_REVIEW_WINDOW
@@ -90,7 +106,12 @@ export type DealEscrowError =
   | typeof DEAL_ESCROW_ERROR__DELIVERY_MISMATCH
   | typeof DEAL_ESCROW_ERROR__EMPTY_DELIVERY
   | typeof DEAL_ESCROW_ERROR__INVOICE_MISMATCH
+  | typeof DEAL_ESCROW_ERROR__LISTING_INACTIVE
+  | typeof DEAL_ESCROW_ERROR__LISTING_MISMATCH
+  | typeof DEAL_ESCROW_ERROR__LISTING_NOT_ATTESTED
   | typeof DEAL_ESCROW_ERROR__MATH_OVERFLOW
+  | typeof DEAL_ESCROW_ERROR__NOT_ASSESSOR
+  | typeof DEAL_ESCROW_ERROR__NOT_LISTED_CONTENT
   | typeof DEAL_ESCROW_ERROR__NOT_VERIFIER
   | typeof DEAL_ESCROW_ERROR__NO_VERIFIER
   | typeof DEAL_ESCROW_ERROR__OVER_MAX_PRICE
@@ -111,7 +132,9 @@ let dealEscrowErrorMessages: Record<DealEscrowError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   dealEscrowErrorMessages = {
     [DEAL_ESCROW_ERROR__APPROVAL_REQUIRED]: `Amount is above the approval threshold and the approver did not sign`,
+    [DEAL_ESCROW_ERROR__ASSESSOR_NOT_INDEPENDENT]: `The assessor must be set and must not be the seller`,
     [DEAL_ESCROW_ERROR__BAD_BOND]: `Challenge bond must be at most 50%`,
+    [DEAL_ESCROW_ERROR__BAD_LISTING]: `Invalid listing parameters`,
     [DEAL_ESCROW_ERROR__BAD_POLICY]: `Invalid policy parameters`,
     [DEAL_ESCROW_ERROR__BAD_RESOLVE_WINDOW]: `Resolve window must be between 60 seconds and 30 days`,
     [DEAL_ESCROW_ERROR__BAD_REVIEW_WINDOW]: `Review window must be between 0 and 30 days`,
@@ -124,7 +147,12 @@ if (process.env["NODE_ENV"] !== "production") {
     [DEAL_ESCROW_ERROR__DELIVERY_MISMATCH]: `Release names a different delivery than the one submitted`,
     [DEAL_ESCROW_ERROR__EMPTY_DELIVERY]: `Delivery hash must not be empty`,
     [DEAL_ESCROW_ERROR__INVOICE_MISMATCH]: `Invoice does not match the order amount within tolerance`,
+    [DEAL_ESCROW_ERROR__LISTING_INACTIVE]: `Listing is not active`,
+    [DEAL_ESCROW_ERROR__LISTING_MISMATCH]: `Deal does not match its listing`,
+    [DEAL_ESCROW_ERROR__LISTING_NOT_ATTESTED]: `Listing has not been attested by its assessor`,
     [DEAL_ESCROW_ERROR__MATH_OVERFLOW]: `Arithmetic overflow`,
+    [DEAL_ESCROW_ERROR__NOT_ASSESSOR]: `Only the listing's assessor can attest it`,
+    [DEAL_ESCROW_ERROR__NOT_LISTED_CONTENT]: `Delivery is not the listed content`,
     [DEAL_ESCROW_ERROR__NOT_VERIFIER]: `Only the deal's verifier can resolve`,
     [DEAL_ESCROW_ERROR__NO_VERIFIER]: `This deal has no verifier, so it cannot be challenged`,
     [DEAL_ESCROW_ERROR__OVER_MAX_PRICE]: `Amount is above the buyer's max price`,

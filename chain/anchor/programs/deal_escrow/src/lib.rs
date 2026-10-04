@@ -18,6 +18,11 @@
 //!   token the seller minted themselves never mix with (or inflate) the USDC record. Scoring (min deals, min distinct buyers,
 //!   concentration) is a pure function in core; the program only keeps honest counts.
 //!
+//! - Listing registry (OnchainRouter's single registry, PLAN §2.2): a seller lists data, a
+//!   service or an agent-team blueprint with a content hash; an independent assessor attests a
+//!   report hash. Changing the content clears the attestation. A deal opened from a Data listing
+//!   must be delivered with exactly the listed content hash (checked through its DealLink).
+//!
 //! Tokens leave the vault only in `settle`, after every check, and only to the deal's own buyer and
 //! seller token accounts; a refused instruction moves nothing.
 use anchor_lang::prelude::*;
@@ -31,6 +36,8 @@ declare_id!("CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV");
 pub const DEAL_SEED: &[u8] = b"deal";
 pub const POLICY_SEED: &[u8] = b"policy";
 pub const REP_SEED: &[u8] = b"rep";
+pub const LISTING_SEED: &[u8] = b"listing";
+pub const LINK_SEED: &[u8] = b"link";
 pub const MAX_WINDOW_SECS: i64 = 30 * 86_400;
 pub const MIN_RESOLVE_SECS: i64 = 60;
 pub const MAX_TOLERANCE_BPS: u16 = 2_000;
@@ -118,6 +125,26 @@ pub mod deal_escrow {
         policy.period_spent = spent;
         init_rep(&mut ctx.accounts.seller_rep, &mut ctx.accounts.rep_pair, seller, buyer, ctx.accounts.mint.key(), ctx.bumps.seller_rep, ctx.bumps.rep_pair);
 
+        // Opened from a listing: the listing must be live, attested and match the deal exactly.
+        // The DealLink binds the deal to it so delivery and settlement can check it later.
+        match (&ctx.accounts.listing, &mut ctx.accounts.link) {
+            (Some(listing), Some(link)) => {
+                require!(listing.active, DealError::ListingInactive);
+                require!(listing.assessed_at != 0, DealError::ListingNotAttested);
+                require_keys_eq!(listing.seller, seller, DealError::ListingMismatch);
+                require_keys_eq!(listing.mint, ctx.accounts.mint.key(), DealError::ListingMismatch);
+                require!(listing.price == p.amount, DealError::ListingMismatch);
+                link.set_inner(DealLink {
+                    deal: ctx.accounts.deal.key(),
+                    listing: listing.key(),
+                    expected_delivery_hash: if listing.kind == ListingKind::Data { listing.content_hash } else { [0; 32] },
+                    bump: ctx.bumps.link.ok_or(DealError::ListingMismatch)?,
+                });
+            }
+            (None, None) => {}
+            _ => return err!(DealError::ListingMismatch),
+        }
+
         ctx.accounts.deal.set_inner(Deal {
             buyer,
             seller,
@@ -153,6 +180,79 @@ pub mod deal_escrow {
             p.amount,
         )?;
         emit!(DealEvent { deal: ctx.accounts.deal.key(), status: DealStatus::Open });
+        Ok(())
+    }
+
+    /// Seller lists data, a service or a team blueprint. It starts unattested; deals can only be
+    /// opened from it once its assessor (never the seller) has attested a report.
+    pub fn create_listing(ctx: Context<CreateListing>, listing_id: u64, p: ListingParams) -> Result<()> {
+        let seller = ctx.accounts.seller.key();
+        require!(p.price > 0, DealError::ZeroAmount);
+        require!(p.content_hash != [0; 32], DealError::BadListing);
+        require!(p.assessor != Pubkey::default() && p.assessor != seller, DealError::AssessorNotIndependent);
+        ctx.accounts.listing.set_inner(Listing {
+            seller,
+            listing_id,
+            kind: p.kind,
+            mint: ctx.accounts.mint.key(),
+            price: p.price,
+            content_hash: p.content_hash,
+            meta_hash: p.meta_hash,
+            terms_template_hash: p.terms_template_hash,
+            assessor: p.assessor,
+            report_hash: [0; 32],
+            assessed_at: 0,
+            active: true,
+            sales: 0,
+            created_at: Clock::get()?.unix_timestamp,
+            bump: ctx.bumps.listing,
+        });
+        Ok(())
+    }
+
+    /// The listing's assessor attests the report it produced for exactly the listed content.
+    pub fn attest_listing(ctx: Context<AttestListing>, content_hash: [u8; 32], report_hash: [u8; 32]) -> Result<()> {
+        let l = &mut ctx.accounts.listing;
+        require_keys_eq!(ctx.accounts.assessor.key(), l.assessor, DealError::NotAssessor);
+        // Bound to the content the assessor saw, so a swap racing the attestation is refused.
+        require!(l.content_hash == content_hash, DealError::ListingMismatch);
+        require!(report_hash != [0; 32], DealError::BadListing);
+        l.report_hash = report_hash;
+        l.assessed_at = Clock::get()?.unix_timestamp;
+        Ok(())
+    }
+
+    /// Seller changes price or availability freely; changing what is sold (content or metadata)
+    /// clears the attestation, so it must be assessed again before anyone can buy it.
+    pub fn update_listing(ctx: Context<UpdateListing>, u: ListingUpdate) -> Result<()> {
+        let l = &mut ctx.accounts.listing;
+        if let Some(price) = u.price {
+            require!(price > 0, DealError::ZeroAmount);
+            l.price = price;
+        }
+        if let Some(active) = u.active {
+            l.active = active;
+        }
+        let mut changed = false;
+        if let Some(h) = u.content_hash {
+            require!(h != [0; 32], DealError::BadListing);
+            changed |= h != l.content_hash;
+            l.content_hash = h;
+        }
+        if let Some(h) = u.meta_hash {
+            changed |= h != l.meta_hash;
+            l.meta_hash = h;
+        }
+        if changed {
+            l.report_hash = [0; 32];
+            l.assessed_at = 0;
+        }
+        Ok(())
+    }
+
+    /// Seller removes a listing and gets its rent back. Deals already opened from it keep their
+    /// DealLink (which holds the expected delivery hash), so they are unaffected.
+    pub fn close_listing(_ctx: Context<CloseListing>) -> Result<()> {
         Ok(())
     }
 
@@ -199,6 +299,11 @@ pub mod deal_escrow {
         require!(now <= d.deadline, DealError::DeadlinePassed);
         require!(delivery_hash != [0; 32], DealError::EmptyDelivery);
         require!(invoice_matches(d.amount, invoice_amount, d.tolerance_bps), DealError::InvoiceMismatch);
+        if let Some(link) = read_link(&ctx.accounts.link)? {
+            if link.expected_delivery_hash != [0; 32] {
+                require!(delivery_hash == link.expected_delivery_hash, DealError::NotListedContent);
+            }
+        }
         d.delivery_hash = delivery_hash;
         d.invoice_amount = invoice_amount;
         d.delivered_at = now;
@@ -397,9 +502,29 @@ fn settle(a: &mut Settle, bumps: &SettleBumps, to_seller: u64, to_buyer: u64, st
     // Deals opened under v2 have no reputation accounts yet; `init_if_needed` made them above.
     init_rep(&mut a.seller_rep, &mut a.rep_pair, a.deal.seller, a.deal.buyer, a.deal.mint, bumps.seller_rep, bumps.rep_pair);
     record_outcome(&mut a.seller_rep, &mut a.rep_pair, &a.deal, status)?;
+    // Sales are a statistic: they never block a payout. A listing closed while its deals were
+    // open is simply not counted; a wrong listing account is refused.
+    if let (Some(link), Some(listing)) = (read_link(&a.link)?, a.listing.as_mut()) {
+        require_keys_eq!(listing.key(), link.listing, DealError::ListingMismatch);
+        if matches!(status, DealStatus::Released | DealStatus::Claimed | DealStatus::VerifiedPass) {
+            listing.sales = listing.sales.checked_add(1).ok_or(DealError::MathOverflow)?;
+        }
+    }
     a.deal.status = status;
     emit!(DealEvent { deal: a.deal.key(), status });
     Ok(())
+}
+
+/// The deal's DealLink, if the deal was opened from a listing. The account is always passed at
+/// its PDA (seeds checked by the caller's constraint), so a party cannot hide it; an empty
+/// account means the deal has no listing.
+fn read_link(info: &UncheckedAccount) -> Result<Option<DealLink>> {
+    if info.data_is_empty() {
+        return Ok(None);
+    }
+    require_keys_eq!(*info.owner, crate::ID, DealError::ListingMismatch);
+    let data = info.try_borrow_data()?;
+    Ok(Some(DealLink::try_deserialize(&mut &data[..])?))
 }
 
 /// Fills in a reputation account pair the first time it is seen (all-zero = just created).
@@ -533,6 +658,68 @@ pub struct Deal {
     pub bump: u8,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace, Debug)]
+pub enum ListingKind {
+    /// Stored data sold as is; the delivery must equal the listed content hash.
+    Data,
+    /// An endpoint the seller runs; the method stays with the seller.
+    Service,
+    /// An agent-team blueprint, hired for a goal.
+    Team,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct ListingParams {
+    pub kind: ListingKind,
+    pub price: u64,
+    pub content_hash: [u8; 32],
+    pub meta_hash: [u8; 32],
+    pub terms_template_hash: [u8; 32],
+    pub assessor: Pubkey,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct ListingUpdate {
+    pub price: Option<u64>,
+    pub active: Option<bool>,
+    pub content_hash: Option<[u8; 32]>,
+    pub meta_hash: Option<[u8; 32]>,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct Listing {
+    pub seller: Pubkey,
+    pub listing_id: u64,
+    pub kind: ListingKind,
+    pub mint: Pubkey,
+    pub price: u64,
+    /// sha256 of the data (Data), of the endpoint descriptor (Service) or of the blueprint (Team).
+    pub content_hash: [u8; 32],
+    /// sha256 of the canonical metadata JSON (name, description, category, tags, URI) kept off chain.
+    pub meta_hash: [u8; 32],
+    pub terms_template_hash: [u8; 32],
+    pub assessor: Pubkey,
+    /// Zero until the assessor attests; cleared whenever the content or metadata changes.
+    pub report_hash: [u8; 32],
+    pub assessed_at: i64,
+    pub active: bool,
+    pub sales: u64,
+    pub created_at: i64,
+    pub bump: u8,
+}
+
+/// Binds a deal to the listing it was opened from (Deal itself is unchanged since v2).
+#[account]
+#[derive(InitSpace)]
+pub struct DealLink {
+    pub deal: Pubkey,
+    pub listing: Pubkey,
+    /// For Data listings, the content hash the delivery must equal; zero = no check.
+    pub expected_delivery_hash: [u8; 32],
+    pub bump: u8,
+}
+
 /// A seller's track record in one token, written only by `settle`.
 #[account]
 #[derive(InitSpace)]
@@ -632,6 +819,10 @@ pub struct CreateDeal<'info> {
     pub seller_rep: Box<Account<'info, SellerRep>>,
     #[account(init_if_needed, payer = buyer, space = 8 + RepPair::INIT_SPACE, seeds = [REP_SEED, seller.key().as_ref(), buyer.key().as_ref(), mint.key().as_ref()], bump)]
     pub rep_pair: Box<Account<'info, RepPair>>,
+    /// Present only when the deal is opened from a listing.
+    pub listing: Option<Box<Account<'info, Listing>>>,
+    #[account(init, payer = buyer, space = 8 + DealLink::INIT_SPACE, seeds = [LINK_SEED, deal.key().as_ref()], bump)]
+    pub link: Option<Box<Account<'info, DealLink>>>,
     #[account(
         init,
         payer = buyer,
@@ -663,6 +854,9 @@ pub struct SubmitDelivery<'info> {
     pub seller: Signer<'info>,
     #[account(mut, has_one = seller @ DealError::Unauthorized)]
     pub deal: Account<'info, Deal>,
+    /// CHECK: the deal's DealLink PDA, always passed; empty when the deal has no listing (read_link).
+    #[account(seeds = [LINK_SEED, deal.key().as_ref()], bump)]
+    pub link: UncheckedAccount<'info>,
 }
 
 #[derive(Accounts)]
@@ -676,6 +870,39 @@ pub struct Challenge<'info> {
     #[account(mut, token::mint = mint, token::authority = buyer, token::token_program = token_program)]
     pub buyer_token: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+#[instruction(listing_id: u64)]
+pub struct CreateListing<'info> {
+    #[account(mut)]
+    pub seller: Signer<'info>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(init, payer = seller, space = 8 + Listing::INIT_SPACE, seeds = [LISTING_SEED, seller.key().as_ref(), &listing_id.to_le_bytes()], bump)]
+    pub listing: Box<Account<'info, Listing>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct AttestListing<'info> {
+    pub assessor: Signer<'info>,
+    #[account(mut)]
+    pub listing: Box<Account<'info, Listing>>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateListing<'info> {
+    pub seller: Signer<'info>,
+    #[account(mut, has_one = seller @ DealError::Unauthorized)]
+    pub listing: Box<Account<'info, Listing>>,
+}
+
+#[derive(Accounts)]
+pub struct CloseListing<'info> {
+    #[account(mut)]
+    pub seller: Signer<'info>,
+    #[account(mut, has_one = seller @ DealError::Unauthorized, close = seller)]
+    pub listing: Box<Account<'info, Listing>>,
 }
 
 /// Shared by every instruction that pays out of the vault. Payouts can only reach the deal's own
@@ -700,6 +927,12 @@ pub struct Settle<'info> {
     pub seller_rep: Box<Account<'info, SellerRep>>,
     #[account(init_if_needed, payer = actor, space = 8 + RepPair::INIT_SPACE, seeds = [REP_SEED, deal.seller.as_ref(), deal.buyer.as_ref(), deal.mint.as_ref()], bump)]
     pub rep_pair: Box<Account<'info, RepPair>>,
+    /// CHECK: the deal's DealLink PDA, always passed; empty when the deal has no listing (read_link).
+    #[account(seeds = [LINK_SEED, deal.key().as_ref()], bump)]
+    pub link: UncheckedAccount<'info>,
+    /// The deal's listing, if it has one and it still exists (its sales are counted).
+    #[account(mut)]
+    pub listing: Option<Box<Account<'info, Listing>>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
@@ -766,4 +999,18 @@ pub enum DealError {
     MathOverflow,
     #[msg("Invalid policy parameters")]
     BadPolicy,
+    #[msg("Invalid listing parameters")]
+    BadListing,
+    #[msg("The assessor must be set and must not be the seller")]
+    AssessorNotIndependent,
+    #[msg("Only the listing's assessor can attest it")]
+    NotAssessor,
+    #[msg("Listing is not active")]
+    ListingInactive,
+    #[msg("Listing has not been attested by its assessor")]
+    ListingNotAttested,
+    #[msg("Deal does not match its listing")]
+    ListingMismatch,
+    #[msg("Delivery is not the listed content")]
+    NotListedContent,
 }
