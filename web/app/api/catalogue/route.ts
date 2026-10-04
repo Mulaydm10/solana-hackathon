@@ -3,7 +3,7 @@
 import { parseQuery, search } from "../../../lib/catalogue";
 import { catalogueItem } from "../../../lib/catalogue-json";
 import { demand } from "../../../lib/demand";
-import { registryMode, siteRegistry } from "../../../lib/site-registry";
+import { RegistryUnavailable, registryMode, siteRegistry } from "../../../lib/site-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,17 @@ export async function GET(req: Request) {
   const query = parseQuery(Object.fromEntries(url.searchParams));
   const seller = url.searchParams.get("seller");
   if (seller !== null && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(seller)) return Response.json({ ok: false, reason: "BAD_REQUEST" }, { status: 400 });
-  const results = search(await siteRegistry().list(), query).filter((l) => seller === null || l.seller === seller);
+  let all;
+  try {
+    all = await siteRegistry().list();
+  } catch (e) {
+    if (!(e instanceof RegistryUnavailable)) throw e;
+    return Response.json(
+      { ok: false, reason: "REGISTRY_UNAVAILABLE", message: "The listing registry is temporarily unavailable. Try again in a few seconds." },
+      { status: 503, headers: { "cache-control": "no-store", "retry-after": "5" } },
+    );
+  }
+  const results = search(all, query).filter((l) => seller === null || l.seller === seller);
   // A seller looking at its own listings is not unmet demand.
   if (results.length === 0 && seller === null) demand.record({ q: query.q, category: query.category, kind: query.kind, budget: query.maxPrice });
   return Response.json(
