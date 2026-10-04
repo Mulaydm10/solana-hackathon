@@ -4,6 +4,8 @@
 //   BROKER_MASTER_KEY       64 hex; unseals provider credentials                                   required
 //   BROKER_CREDENTIALS      path to a JSON array of sealed credentials (sealCredential output)     default: none
 //   MISSION_FEE_PAYER       path to a keypair file with a little devnet SOL (pays agents' tx fees)  required
+//   MISSION_TEAM_SELLER     path to the team seller's keypair (seller of the Team listings; demo:   optional
+//                           surface/.keys/sellers/<id>.json): accepts fee deals, delivers the product  (no fee deals without it)
 //   DEAL_RPC_URL / DEAL_MINT / HOST / PORT                                                          devnet, Circle USDC, 127.0.0.1, 3320
 // Mainnet is refused. Workers are the deterministic ones in ../workers until PLAN §11.
 import { readFileSync } from "node:fs";
@@ -30,6 +32,9 @@ if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(verifier)) fail("DEAL_VERIFIER must be
 if (!env.MISSION_FEE_PAYER) fail("MISSION_FEE_PAYER must point to a keypair file with a little devnet SOL");
 const payer = await createKeyPairSignerFromBytes(Uint8Array.from(JSON.parse(readFileSync(env.MISSION_FEE_PAYER!, "utf8")) as number[]));
 const client = createClient().use(signerPlugin(payer)).use(solanaRpc({ rpcUrl }));
+const teamSeller = env.MISSION_TEAM_SELLER
+  ? await createKeyPairSignerFromBytes(Uint8Array.from(JSON.parse(readFileSync(env.MISSION_TEAM_SELLER, "utf8")) as number[]))
+  : undefined;
 const ctx: DealContext = { client: client as unknown as DealClient, mint: (env.DEAL_MINT ?? "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU") as never };
 const master = masterKeyFromEnv(env);
 const sealed: SealedCredential[] = env.BROKER_CREDENTIALS ? JSON.parse(readFileSync(env.BROKER_CREDENTIALS, "utf8")) : [];
@@ -39,8 +44,8 @@ const workers = Object.fromEntries(["researcher", "writer"].map((r) => [r, fileU
 
 const svc = createMissionService({
   ctx, broker, capabilities: ["market:read", "booking:quote", "booking:pay"], workers, live: liveFrom(source),
-  dealRules: { verifier: verifier as never }, token,
+  dealRules: { verifier: verifier as never }, token, team: teamSeller ? { seller: teamSeller } : undefined,
 });
 const host = env.HOST ?? "127.0.0.1";
 const port = Number(env.PORT ?? 3320);
-svc.listen(port, host, () => console.log(`serve-missions: listening on http://${host}:${port} (fee payer ${payer.address})`));
+svc.listen(port, host, () => console.log(`serve-missions: listening on http://${host}:${port} (fee payer ${payer.address}${teamSeller ? `, team seller ${teamSeller.address}` : ", no team seller: fee deals refused"})`));

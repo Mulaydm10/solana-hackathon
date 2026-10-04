@@ -3,7 +3,8 @@
  * for minutes, so the site's API routes talk to this service on a long-running host (the Omen or the Mac).
  *
  *   POST /missions/prepare        { blueprint, goal, budget, missionId, buyer, expiresAt }  -> what the buyer signs
- *   POST /missions/:mission/start -> begins runStages (waits for the buyer's on-chain approvals itself)
+ *   POST /missions/:mission/start { feeDeal? } -> begins runStages (waits for the buyer's on-chain approvals itself);
+ *                                 with a fee deal, the team seller accepts it and delivers the final product hash there
  *   GET  /missions/:mission       -> status and events so far
  *
  * The service holds the agents' keypairs (agents hold none) and never the buyer's key: the buyer signs
@@ -13,8 +14,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import type { Address } from "@solana/kit";
-import type { DealContext } from "@deal/chain";
+import type { Address, TransactionSigner } from "@solana/kit";
+import { fetchMaybeDealLink, findLinkPda, getDeal, getListing, readWithRetry, type DealContext } from "@deal/chain";
 import type { Broker } from "../broker/broker.ts";
 import { prepareMission, runStages, type MissionEvent, type PreparedMission } from "./orchestrator.ts";
 
@@ -31,7 +32,32 @@ export type ServiceOptions = {
   token: string;
   pollMs?: number;
   runner?: { mode?: "process" | "container"; pollMs?: number; maxSecs?: number };
+  /** The team seller's key: the seller of the Team listings this service runs; it accepts and delivers fee deals. */
+  team?: { seller: TransactionSigner };
 };
+
+/** Fee deal checks: every one must hold on chain, or the team will not deliver into that deal. */
+export type FeeDealCheck = { ok: true; invoice: bigint } | { ok: false; reason: string; message: string };
+
+/**
+ * The fee deal is only taken if the chain shows it is this mission's buyer paying THIS team seller the Team
+ * listing's price under this mission's terms, and the seller has not acted on it yet (Open or Funded).
+ */
+export async function checkFeeDeal(ctx: DealContext, deal: Address, want: { buyer: string; seller: string; termsHash: string }): Promise<FeeDealCheck> {
+  const no = (reason: string, message: string): FeeDealCheck => ({ ok: false, reason, message });
+  const d = await getDeal(ctx, deal);
+  if (!d) return no("FEE_DEAL_NOT_FOUND", "no deal at that address");
+  if (d.status !== "Open" && d.status !== "Funded") return no("FEE_DEAL_STATE", `the fee deal is ${d.status}`);
+  if (d.buyer !== want.buyer) return no("FEE_DEAL_BUYER", "the fee deal is not from this mission's buyer");
+  if (d.seller !== want.seller) return no("FEE_DEAL_SELLER", "the fee deal does not pay this team's seller");
+  if (d.termsHash !== want.termsHash) return no("FEE_DEAL_TERMS", "the fee deal is not for this mission's terms");
+  const link = await readWithRetry(ctx, async () => fetchMaybeDealLink(ctx.client.rpc, (await findLinkPda({ deal }))[0]));
+  if (!link.exists) return no("FEE_DEAL_NO_LISTING", "the fee deal was not opened from a Team listing");
+  const l = await getListing(ctx, link.data.listing);
+  if (!l || l.kind !== "Team" || l.seller !== want.seller) return no("FEE_DEAL_LISTING", "the fee deal's listing is not this team's Team listing");
+  if (d.amount !== l.price) return no("FEE_DEAL_AMOUNT", "the fee deal's amount is not the listing price");
+  return { ok: true, invoice: BigInt(d.amount) };
+}
 
 type Entry = { prepared: PreparedMission; events: MissionEvent[]; state: "prepared" | "running" | "done" | "failed" };
 
@@ -104,12 +130,25 @@ export function createMissionService(o: ServiceOptions): Server {
 
       if (req.method === "POST" && parts[2] === "start") {
         if (entry.state !== "prepared") return json(res, 409, { ok: false, reason: "ALREADY_STARTED" });
+        const body = (await readBody(req)) as { feeDeal?: unknown };
+        let team: { seller: TransactionSigner; feeDeal: Address; invoice: bigint } | undefined;
+        if (body.feeDeal !== undefined) {
+          if (typeof body.feeDeal !== "string" || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(body.feeDeal)) return json(res, 400, { ok: false, reason: "BAD_REQUEST" });
+          if (!o.team) return json(res, 422, { ok: false, reason: "NO_TEAM_SELLER", message: "this service has no team seller key" });
+          const c = await checkFeeDeal(o.ctx, body.feeDeal as Address, {
+            buyer: entry.prepared.buyer, seller: o.team.seller.address, termsHash: bytesToHex(entry.prepared.terms.hash),
+          });
+          // Refused: the mission stays "prepared", so the buyer can start it again with the right deal.
+          if (!c.ok) return json(res, 422, c);
+          team = { seller: o.team.seller, feeDeal: body.feeDeal as Address, invoice: c.invoice };
+        }
+        if (entry.state !== "prepared") return json(res, 409, { ok: false, reason: "ALREADY_STARTED" }); // a racing start won
         entry.state = "running";
         void (async () => {
           try {
             for await (const e of runStages({
               ctx: o.ctx, prepared: entry.prepared, broker: o.broker, workers: o.workers, workerEnv: o.workerEnv, live: o.live,
-              pollMs: o.pollMs, runner: o.runner, approvalTimeoutMs: Number(entry.prepared.expiresAt) * 1000 - Date.now(),
+              pollMs: o.pollMs, runner: o.runner, approvalTimeoutMs: Number(entry.prepared.expiresAt) * 1000 - Date.now(), team,
             })) entry.events.push(e);
             entry.state = entry.events.at(-1)?.type === "delivered" ? "done" : "failed";
           } catch (e) {
