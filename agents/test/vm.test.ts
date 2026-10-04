@@ -18,7 +18,7 @@ test("a well-behaved agent: its broker call and its message go through the runne
   const messages: unknown[] = [];
   const deps: RunnerDeps = {
     live: async () => true,
-    call: async (token, action, args) => { calls.push({ token, action, args }); return { price: "1.08" }; },
+    call: async (agent, token, action, args) => { calls.push({ agent, token, action, args }); return { price: "1.08" }; },
     onMessage: async (_agent, m) => { messages.push(m); return "ok"; },
     pollMs: 50,
   };
@@ -26,7 +26,7 @@ test("a well-behaved agent: its broker call and its message go through the runne
   assert.ok(r.ok);
   const exit = await r.handle.done;
   assert.deepEqual(exit, { code: 0, reason: "exit" });
-  assert.deepEqual(calls, [{ token: "t", action: "read", args: { q: 1 } }]);
+  assert.deepEqual(calls, [{ agent: "A", token: "t", action: "read", args: { q: 1 } }]); // the runner names its own agent
   assert.deepEqual(messages, [{ got: { price: "1.08" } }]);
 });
 
@@ -66,6 +66,7 @@ test("a compromised agent: no file reads outside its folder, no writes, no child
   assert.equal(report.writeTmp, "blocked");
   assert.equal(report.childProcess, "blocked");
   assert.equal(report.envSecrets, "blocked");
+  assert.equal(report.readSibling, "blocked"); // its own private folder: no other agent's files
   if (nodeGovernsNetwork()) {
     assert.equal(r.handle.isolation, "process-no-network");
     assert.equal(report.network, "blocked");

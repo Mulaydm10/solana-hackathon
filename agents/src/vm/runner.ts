@@ -17,7 +17,9 @@
  *     CPU/memory/pid limits (`containerArgs`). Needs Docker (colima on the Mac).
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { dirname } from "node:path";
+import { copyFileSync, mkdtempSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 
 export type Isolation = "container" | "process-no-network" | "process-fs-only";
@@ -41,15 +43,36 @@ export type AgentRequest =
 export type RunnerDeps = {
   /** Live = not revoked, not expired, mission open (same source as the broker's). */
   live: (mission: string, agent: string) => Promise<boolean>;
-  /** Broker call for the agent (the runner never sees a credential either). */
-  call: (token: string, action: string, args: unknown) => Promise<unknown>;
+  /** Broker call for the agent; `agent` is who presents the token (the broker refuses another agent's token). */
+  call: (agent: string, token: string, action: string, args: unknown) => Promise<unknown>;
   /** Typed messages to the orchestrator; the reply goes back to the agent. */
   onMessage?: (agent: string, message: unknown) => Promise<unknown>;
   mode?: "process" | "container";
   pollMs?: number;
   /** For containers. */
   image?: string;
+  /** Requests one agent may have in flight; more are dropped (a looping agent cannot flood the RPC). Default 4. */
+  maxInFlight?: number;
 };
+
+/**
+ * Each agent gets its own fresh folder with only its entry script in it, so `--allow-fs-read` (or the read-only
+ * mount) exposes nothing else: not other agents' files or prompts, not the runner's.
+ */
+function privateCopy(entry: string): string {
+  // realpath: on macOS the temp dir is behind a /var -> /private/var symlink, and the permission model
+  // checks the real path.
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "deal-agent-")));
+  const copy = join(dir, basename(entry));
+  copyFileSync(entry, copy);
+  return copy;
+}
+
+/** What the docker CLI itself needs to find its daemon (colima's socket via ~/.docker); none of it reaches the agent. */
+function dockerCliEnv(): Record<string, string> {
+  const keep = ["PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT"];
+  return Object.fromEntries(keep.flatMap((k) => (process.env[k] ? [[k, process.env[k]!]] : [])));
+}
 
 export type Exit = { code: number | null; reason: "exit" | "revoked" | "timeout" | "killed" };
 
@@ -93,12 +116,14 @@ export async function startAgent(spec: AgentSpec, deps: RunnerDeps): Promise<Sta
     return { ok: false, reason: "MANDATE_NOT_LIVE", message: "the mandate is revoked or expired, or the mission is closed; the agent is not started" };
   }
   const mode = deps.mode ?? "process";
+  const own = { ...spec, entry: privateCopy(spec.entry) };
   let child: ChildProcess;
   try {
     child = mode === "container"
-      ? spawn("docker", containerArgs(spec, deps.image), { stdio: ["pipe", "pipe", "pipe"], env: {} })
+      // The container's own environment is only the explicit -e list; the CLI gets just enough to reach docker.
+      ? spawn("docker", containerArgs(own, deps.image), { stdio: ["pipe", "pipe", "pipe"], env: dockerCliEnv() })
       // A minimal environment: nothing from the runner's own env (no keys, no proxies, no tokens) leaks in.
-      : spawn(process.execPath, processArgs(spec.entry), { stdio: ["pipe", "pipe", "pipe"], env: { ...(spec.env ?? {}) } });
+      : spawn(process.execPath, processArgs(own.entry), { stdio: ["pipe", "pipe", "pipe"], env: { ...(spec.env ?? {}) } });
   } catch (e) {
     return { ok: false, reason: "SPAWN_FAILED", message: e instanceof Error ? e.message : String(e) };
   }
@@ -115,6 +140,8 @@ export async function startAgent(spec: AgentSpec, deps: RunnerDeps): Promise<Sta
     if (child.stdin?.writable) child.stdin.write(JSON.stringify({ id, ...((body ?? {}) as object) }) + "\n");
   };
   const lines = createInterface({ input: child.stdout! });
+  let inFlight = 0;
+  const maxInFlight = deps.maxInFlight ?? 4;
   lines.on("line", async (line) => {
     if (line.length > 65_536) return; // oversize lines are dropped, not parsed
     let req: AgentRequest;
@@ -124,12 +151,20 @@ export async function startAgent(spec: AgentSpec, deps: RunnerDeps): Promise<Sta
       return;
     }
     if (typeof req !== "object" || req === null || !Number.isSafeInteger(req.id)) return;
-    if (req.kind === "call" && typeof req.token === "string" && typeof req.action === "string") {
-      // Every call is checked against the chain again by the broker; a dead mandate also stops the process.
-      if (!(await deps.live(spec.mission, spec.agent).catch(() => false))) return kill("revoked");
-      reply(req.id, { result: await deps.call(req.token, req.action, req.args) });
-    } else if (req.kind === "message" && deps.onMessage) {
-      reply(req.id, { result: await deps.onMessage(spec.agent, req.message) });
+    if (inFlight >= maxInFlight) return reply(req.id, { error: "BUSY" }); // dropped, not queued
+    inFlight++;
+    try {
+      if (req.kind === "call" && typeof req.token === "string" && typeof req.action === "string") {
+        // Every call is checked against the chain again by the broker; a dead mandate also stops the process.
+        if (!(await deps.live(spec.mission, spec.agent).catch(() => false))) return kill("revoked");
+        reply(req.id, { result: await deps.call(spec.agent, req.token, req.action, req.args) });
+      } else if (req.kind === "message" && deps.onMessage) {
+        reply(req.id, { result: await deps.onMessage(spec.agent, req.message) });
+      }
+    } catch {
+      reply(req.id, { error: "FAILED" });
+    } finally {
+      inFlight--;
     }
   });
   child.stderr?.resume();

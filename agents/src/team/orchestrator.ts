@@ -170,7 +170,7 @@ export async function* runMission(o: MissionOptions): AsyncGenerator<MissionEven
         { mission, agent: agent.address, entry: o.workers[roleName]!, env, maxSecs: o.runner?.maxSecs },
         {
           live: o.live,
-          call: async (token, action, args) => o.broker.call(token, action, args),
+          call: async (presenter, token, action, args) => o.broker.call(token, action, args, presenter),
           onMessage: async (_a, message) => {
             const m = await readWorkerMessage(reader, message);
             if (m.kind === "spend") {

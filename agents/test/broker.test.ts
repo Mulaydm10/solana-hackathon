@@ -83,6 +83,13 @@ test("grant: only capabilities the role lists, only for the role approved on cha
   assert.ok(g.ok);
 });
 
+test("call: a token presented by another agent is refused (tokens are bound to their agent)", async () => {
+  const { broker } = setup();
+  const g = (await grantMarket(broker)) as { token: string };
+  assert.deepEqual(((await broker.call(g.token, "read", {}, OTHER)) as { reason: string }).reason, "WRONG_AGENT");
+  assert.ok((await broker.call(g.token, "read", {}, AGENT)).ok);
+});
+
 test("call: the provider gets the credential, the agent never does; actions are limited to the grant", async () => {
   const { broker, calls } = setup();
   const g = (await grantMarket(broker)) as { token: string };
