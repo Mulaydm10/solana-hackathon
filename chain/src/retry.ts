@@ -19,7 +19,7 @@ export function isRateLimited(e: unknown): boolean {
 }
 
 const TRANSIENT =
-  /\b429\b|too many requests|HTTP error \(5\d\d\)|\b50[0234]\b|fetch failed|network|socket hang up|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EPIPE|UND_ERR|blockhash not found|block height exceeded|node is behind|service unavailable|gateway/i;
+  /\b429\b|too many requests|HTTP error \(5\d\d\)|\b50[0234]\b|fetch failed|network|socket hang up|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EPIPE|UND_ERR|blockhash not found|block height exceeded|node is behind|service unavailable|gateway|websocket|subscription|connection closed/i;
 
 /**
  * True for failures worth retrying after checking chain state: rate limits, network errors,
