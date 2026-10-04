@@ -14,6 +14,6 @@ test("isPlainText", () => {
   assert.equal(isPlainText("hello", 4), false);
   assert.equal(isPlainText("a\nb", 10), false);
   assert.equal(isPlainText("a\nb", 10, true), true);
-  assert.equal(isPlainText("⁦x", 10, true), false);
+  assert.equal(isPlainText("\u2066x", 10, true), false);
   assert.equal(isPlainText(5, 10), false);
 });

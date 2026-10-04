@@ -96,7 +96,7 @@ test("missionTerms refuses what add_mandate would refuse on chain", () => {
   assert.equal(reason("Plan a trip", 30_999_999n), "CAPS_OVER_BUDGET");
   assert.equal(reason("Plan a trip", 0n), "ZERO_BUDGET");
   assert.equal(reason("", 40_000_000n), "BAD_GOAL");
-  assert.equal(reason("hidden ‮ text", 40_000_000n), "BAD_GOAL");
+  assert.equal(reason("hidden \u202e text", 40_000_000n), "BAD_GOAL");
   const big = clone(); big.stages[0]!.cap = 50_000_000n;
   assert.equal(reason("Plan a trip", 40_000_000n, big), "STAGE_CAP_OVER_BUDGET");
 });
