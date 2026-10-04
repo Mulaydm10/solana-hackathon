@@ -163,6 +163,12 @@ export type MissionInput = {
   /** SOL (lamports) for the rent of deals the agents open. */
   rentLamports?: bigint;
   approver?: TransactionSigner;
+  /** The verifier every agent deal must name (not the buyer). */
+  verifier: Address;
+  /** Floors for agents' deals; defaults 600 s, 600 s, 5%. */
+  minReviewSecs?: bigint;
+  minResolveSecs?: bigint;
+  maxToleranceBps?: number;
 };
 
 export type MissionAccounts = { mission: Address; auth: Address; authPolicy: Address; vault: Address };
@@ -294,6 +300,12 @@ async function missionDealAccounts(ctx: DealContext, auth: Address, deal: Addres
   };
 }
 
+/** The actor's mandate account if it has one (an agent); undefined for the buyer. */
+async function actorMandate(ctx: DealContext, mission: Address, actor: Address): Promise<Address | undefined> {
+  const m = await rawMandate(ctx, mission, actor);
+  return m.data ? m.address : undefined;
+}
+
 const statusOf = async (ctx: DealContext, deal: Address) => {
   const d = await readWithRetry(ctx, () => fetchMaybeDeal(ctx.client.rpc, deal));
   return d.exists ? STATUS_NAMES[d.data.status] ?? "" : null;
@@ -307,7 +319,8 @@ export const missions = {
       await getCreateMissionInstructionAsync({
         buyer, approver: p.approver, mint: ctx.mint, buyerToken: await ata(ctx, buyer.address), missionId: p.missionId,
         budget: p.budget, termsHash: p.termsHash, teamListing: p.teamListing ?? NO_KEY, stageCaps: p.stageCaps,
-        expiresAt: BigInt(p.expiresAt), rentLamports: p.rentLamports ?? 0n,
+        expiresAt: BigInt(p.expiresAt), rentLamports: p.rentLamports ?? 0n, verifier: p.verifier,
+        minReviewSecs: p.minReviewSecs ?? 600n, minResolveSecs: p.minResolveSecs ?? 600n, maxToleranceBps: p.maxToleranceBps ?? 500,
       }),
     ]);
     return r.ok ? { ...r, ...acc } : r;
@@ -379,22 +392,25 @@ export const missions = {
   },
 
   /** An agent with a live mandate releases one of the mission's deals. */
-  async release(ctx: DealContext, agent: TransactionSigner, mission: Address, deal: Address, expectedDeliveryHash: Uint8Array): Promise<Sent> {
+  /** Releases one of the mission's deals: the buyer at any time, or the agent that opened it. */
+  async release(ctx: DealContext, actor: TransactionSigner, mission: Address, deal: Address, expectedDeliveryHash: Uint8Array): Promise<Sent> {
     const [auth] = await findMissionAuthPda({ mission });
     const x = await missionDealAccounts(ctx, auth, deal);
     if (!x) return refuse("DEAL_NOT_FOUND", "No deal at that address.");
+    const mandate = await actorMandate(ctx, mission, actor.address);
     return safeSend(ctx, deal, async () => (await statusOf(ctx, deal)) === "Released", async () => [
-      await getAgentReleaseInstructionAsync({ agent, mission, ...x.accounts, expectedDeliveryHash }),
+      await getAgentReleaseInstructionAsync({ agent: actor, mission, mandate, ...x.accounts, expectedDeliveryHash }),
     ]);
   },
 
-  /** An agent challenges one of the mission's deals; the bond counts against every cap. */
-  async challenge(ctx: DealContext, agent: TransactionSigner, mission: Address, deal: Address): Promise<Sent> {
+  /** Challenges one of the mission's deals: the buyer at any time, or the agent that opened it. The bond counts as spend. */
+  async challenge(ctx: DealContext, actor: TransactionSigner, mission: Address, deal: Address): Promise<Sent> {
     const [auth] = await findMissionAuthPda({ mission });
     const x = await missionDealAccounts(ctx, auth, deal);
     if (!x) return refuse("DEAL_NOT_FOUND", "No deal at that address.");
+    const mandate = await actorMandate(ctx, mission, actor.address);
     return safeSend(ctx, deal, async () => ["Challenged", "VerifiedPass", "VerifiedFail", "NoVerdict"].includes((await statusOf(ctx, deal)) ?? ""), async () => [
-      await getAgentChallengeInstructionAsync({ agent, mission, deal, mint: ctx.mint, dealVault: x.accounts.dealVault }),
+      await getAgentChallengeInstructionAsync({ agent: actor, mission, mandate, deal, mint: ctx.mint, dealVault: x.accounts.dealVault }),
     ]);
   },
 

@@ -41,6 +41,7 @@ import {
   getListingCodec,
   getMandateCodec,
   getMissionCodec,
+  getMissionDealCodec,
   getRepPairCodec,
   getSellerRepCodec,
   type AssessorRegistry,
@@ -57,6 +58,8 @@ import {
   type MandateArgs,
   type Mission,
   type MissionArgs,
+  type MissionDeal,
+  type MissionDealArgs,
   type RepPair,
   type RepPairArgs,
   type SellerRep,
@@ -175,6 +178,7 @@ import {
   findListingPda,
   findMandatePda,
   findMissionAuthPda,
+  findMissionDealPda,
   findMissionPda,
   findPolicyPda,
   findRegistryPda,
@@ -193,6 +197,7 @@ export enum DealEscrowAccount {
   Listing,
   Mandate,
   Mission,
+  MissionDeal,
   RepPair,
   SellerRep,
 }
@@ -277,6 +282,17 @@ export function identifyDealEscrowAccount(
     )
   ) {
     return DealEscrowAccount.Mission;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([173, 73, 19, 189, 234, 49, 249, 169]),
+      ),
+      0,
+    )
+  ) {
+    return DealEscrowAccount.MissionDeal;
   }
   if (
     containsBytes(
@@ -970,6 +986,8 @@ export type DealEscrowPluginAccounts = {
     SelfFetchFunctions<MandateArgs, Mandate>;
   mission: ReturnType<typeof getMissionCodec> &
     SelfFetchFunctions<MissionArgs, Mission>;
+  missionDeal: ReturnType<typeof getMissionDealCodec> &
+    SelfFetchFunctions<MissionDealArgs, MissionDeal>;
   repPair: ReturnType<typeof getRepPairCodec> &
     SelfFetchFunctions<RepPairArgs, RepPair>;
   sellerRep: ReturnType<typeof getSellerRepCodec> &
@@ -1077,6 +1095,7 @@ export type DealEscrowPluginInstructions = {
 
 export type DealEscrowPluginPdas = {
   mandate: typeof findMandatePda;
+  missionDeal: typeof findMissionDealPda;
   missionAuth: typeof findMissionAuthPda;
   registry: typeof findRegistryPda;
   policy: typeof findPolicyPda;
@@ -1112,6 +1131,7 @@ export function dealEscrowProgram() {
           listing: addSelfFetchFunctions(client, getListingCodec()),
           mandate: addSelfFetchFunctions(client, getMandateCodec()),
           mission: addSelfFetchFunctions(client, getMissionCodec()),
+          missionDeal: addSelfFetchFunctions(client, getMissionDealCodec()),
           repPair: addSelfFetchFunctions(client, getRepPairCodec()),
           sellerRep: addSelfFetchFunctions(client, getSellerRepCodec()),
         },
@@ -1249,6 +1269,7 @@ export function dealEscrowProgram() {
         },
         pdas: {
           mandate: findMandatePda,
+          missionDeal: findMissionDealPda,
           missionAuth: findMissionAuthPda,
           registry: findRegistryPda,
           policy: findPolicyPda,

@@ -13,5 +13,6 @@ export * from "./dealLink";
 export * from "./listing";
 export * from "./mandate";
 export * from "./mission";
+export * from "./missionDeal";
 export * from "./repPair";
 export * from "./sellerRep";

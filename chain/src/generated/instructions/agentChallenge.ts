@@ -42,7 +42,7 @@ import {
   type ResolvedInstructionAccount,
   type ResolvedInstructionAccountMeta,
 } from "@solana/program-client-core";
-import { findMandatePda, findMissionAuthPda } from "../pdas";
+import { findMissionAuthPda, findMissionDealPda } from "../pdas";
 import { DEAL_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
 export const AGENT_CHALLENGE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array(
@@ -60,6 +60,7 @@ export type AgentChallengeInstruction<
   TAccountAgent extends string | AccountMeta<string> = string,
   TAccountMission extends string | AccountMeta<string> = string,
   TAccountMandate extends string | AccountMeta<string> = string,
+  TAccountMissionDeal extends string | AccountMeta<string> = string,
   TAccountMissionAuth extends string | AccountMeta<string> = string,
   TAccountDeal extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
@@ -84,6 +85,9 @@ export type AgentChallengeInstruction<
       TAccountMandate extends string
         ? WritableAccount<TAccountMandate>
         : TAccountMandate,
+      TAccountMissionDeal extends string
+        ? ReadonlyAccount<TAccountMissionDeal>
+        : TAccountMissionDeal,
       TAccountMissionAuth extends string
         ? ReadonlyAccount<TAccountMissionAuth>
         : TAccountMissionAuth,
@@ -142,6 +146,7 @@ export type AgentChallengeAsyncInput<
   TAccountAgent extends InstructionSignerInput = InstructionSignerInput,
   TAccountMission extends InstructionAccountInput = InstructionAccountInput,
   TAccountMandate extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMissionDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountMissionAuth extends InstructionAccountInput = InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
@@ -151,9 +156,11 @@ export type AgentChallengeAsyncInput<
     InstructionAccountInput,
   TAccountDealProgram extends InstructionAccountInput = InstructionAccountInput,
 > = {
+  /** The mission's buyer, or the agent that opened the deal. */
   agent: TAccountAgent;
   mission: TAccountMission;
   mandate?: TAccountMandate;
+  missionDeal?: TAccountMissionDeal;
   missionAuth?: TAccountMissionAuth;
   deal: TAccountDeal;
   mint: TAccountMint;
@@ -167,6 +174,7 @@ export async function getAgentChallengeInstructionAsync<
   TAccountAgent extends InstructionSignerInput,
   TAccountMission extends InstructionAccountInput,
   TAccountMandate extends InstructionAccountInput,
+  TAccountMissionDeal extends InstructionAccountInput,
   TAccountMissionAuth extends InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
@@ -180,6 +188,7 @@ export async function getAgentChallengeInstructionAsync<
     TAccountAgent,
     TAccountMission,
     TAccountMandate,
+    TAccountMissionDeal,
     TAccountMissionAuth,
     TAccountDeal,
     TAccountMint,
@@ -203,6 +212,10 @@ export async function getAgentChallengeInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountMandate,
       InstructionAccountInputAddress<TAccountMandate>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMissionDeal,
+      InstructionAccountInputAddress<TAccountMissionDeal>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMissionAuth,
@@ -253,6 +266,11 @@ export async function getAgentChallengeInstructionAsync<
       isSigner: false,
       isWritable: true,
     },
+    missionDeal: {
+      value: input.missionDeal ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
     missionAuth: {
       value: input.missionAuth ?? null,
       isSigner: false,
@@ -283,16 +301,12 @@ export async function getAgentChallengeInstructionAsync<
   >;
 
   // Resolve default values.
-  if (!accounts.mandate.value) {
-    accounts.mandate.value = await findMandatePda(
+  if (!accounts.missionDeal.value) {
+    accounts.missionDeal.value = await findMissionDealPda(
       {
-        mission: getAddressFromResolvedInstructionAccount(
-          "mission",
-          accounts.mission.value,
-        ),
-        agent: getAddressFromResolvedInstructionAccount(
-          "agent",
-          accounts.agent.value,
+        deal: getAddressFromResolvedInstructionAccount(
+          "deal",
+          accounts.deal.value,
         ),
       },
       { programAddress },
@@ -346,6 +360,7 @@ export async function getAgentChallengeInstructionAsync<
       getAccountMeta("agent", accounts.agent),
       getAccountMeta("mission", accounts.mission),
       getAccountMeta("mandate", accounts.mandate),
+      getAccountMeta("missionDeal", accounts.missionDeal),
       getAccountMeta("missionAuth", accounts.missionAuth),
       getAccountMeta("deal", accounts.deal),
       getAccountMeta("mint", accounts.mint),
@@ -369,6 +384,10 @@ export async function getAgentChallengeInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountMandate,
       InstructionAccountInputAddress<TAccountMandate>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMissionDeal,
+      InstructionAccountInputAddress<TAccountMissionDeal>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMissionAuth,
@@ -405,6 +424,7 @@ export type AgentChallengeInput<
   TAccountAgent extends InstructionSignerInput = InstructionSignerInput,
   TAccountMission extends InstructionAccountInput = InstructionAccountInput,
   TAccountMandate extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMissionDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountMissionAuth extends InstructionAccountInput = InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
@@ -414,9 +434,11 @@ export type AgentChallengeInput<
     InstructionAccountInput,
   TAccountDealProgram extends InstructionAccountInput = InstructionAccountInput,
 > = {
+  /** The mission's buyer, or the agent that opened the deal. */
   agent: TAccountAgent;
   mission: TAccountMission;
-  mandate: TAccountMandate;
+  mandate?: TAccountMandate;
+  missionDeal: TAccountMissionDeal;
   missionAuth: TAccountMissionAuth;
   deal: TAccountDeal;
   mint: TAccountMint;
@@ -430,6 +452,7 @@ export function getAgentChallengeInstruction<
   TAccountAgent extends InstructionSignerInput,
   TAccountMission extends InstructionAccountInput,
   TAccountMandate extends InstructionAccountInput,
+  TAccountMissionDeal extends InstructionAccountInput,
   TAccountMissionAuth extends InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
@@ -443,6 +466,7 @@ export function getAgentChallengeInstruction<
     TAccountAgent,
     TAccountMission,
     TAccountMandate,
+    TAccountMissionDeal,
     TAccountMissionAuth,
     TAccountDeal,
     TAccountMint,
@@ -465,6 +489,10 @@ export function getAgentChallengeInstruction<
   ResolvedInstructionAccountMeta<
     TAccountMandate,
     InstructionAccountInputAddress<TAccountMandate>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountMissionDeal,
+    InstructionAccountInputAddress<TAccountMissionDeal>
   >,
   ResolvedInstructionAccountMeta<
     TAccountMissionAuth,
@@ -514,6 +542,11 @@ export function getAgentChallengeInstruction<
       isSigner: false,
       isWritable: true,
     },
+    missionDeal: {
+      value: input.missionDeal ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
     missionAuth: {
       value: input.missionAuth ?? null,
       isSigner: false,
@@ -558,6 +591,7 @@ export function getAgentChallengeInstruction<
       getAccountMeta("agent", accounts.agent),
       getAccountMeta("mission", accounts.mission),
       getAccountMeta("mandate", accounts.mandate),
+      getAccountMeta("missionDeal", accounts.missionDeal),
       getAccountMeta("missionAuth", accounts.missionAuth),
       getAccountMeta("deal", accounts.deal),
       getAccountMeta("mint", accounts.mint),
@@ -581,6 +615,10 @@ export function getAgentChallengeInstruction<
     ResolvedInstructionAccountMeta<
       TAccountMandate,
       InstructionAccountInputAddress<TAccountMandate>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMissionDeal,
+      InstructionAccountInputAddress<TAccountMissionDeal>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMissionAuth,
@@ -619,16 +657,18 @@ export type ParsedAgentChallengeInstruction<
 > = {
   programAddress: Address<TProgram>;
   accounts: {
+    /** The mission's buyer, or the agent that opened the deal. */
     agent: TAccountMetas[0];
     mission: TAccountMetas[1];
-    mandate: TAccountMetas[2];
-    missionAuth: TAccountMetas[3];
-    deal: TAccountMetas[4];
-    mint: TAccountMetas[5];
-    dealVault: TAccountMetas[6];
-    vault: TAccountMetas[7];
-    tokenProgram: TAccountMetas[8];
-    dealProgram: TAccountMetas[9];
+    mandate?: TAccountMetas[2] | undefined;
+    missionDeal: TAccountMetas[3];
+    missionAuth: TAccountMetas[4];
+    deal: TAccountMetas[5];
+    mint: TAccountMetas[6];
+    dealVault: TAccountMetas[7];
+    vault: TAccountMetas[8];
+    tokenProgram: TAccountMetas[9];
+    dealProgram: TAccountMetas[10];
   };
   data: AgentChallengeInstructionData;
 };
@@ -641,12 +681,12 @@ export function parseAgentChallengeInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedAgentChallengeInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 10) {
+  if (instruction.accounts.length < 11) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 10,
+        expectedAccountMetas: 11,
       },
     );
   }
@@ -656,12 +696,19 @@ export function parseAgentChallengeInstruction<
     accountIndex += 1;
     return accountMeta;
   };
+  const getNextOptionalAccount = () => {
+    const accountMeta = getNextAccount();
+    return accountMeta.address === DEAL_ESCROW_PROGRAM_ADDRESS
+      ? undefined
+      : accountMeta;
+  };
   return {
     programAddress: instruction.programAddress,
     accounts: {
       agent: getNextAccount(),
       mission: getNextAccount(),
-      mandate: getNextAccount(),
+      mandate: getNextOptionalAccount(),
+      missionDeal: getNextAccount(),
       missionAuth: getNextAccount(),
       deal: getNextAccount(),
       mint: getNextAccount(),

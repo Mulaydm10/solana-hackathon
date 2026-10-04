@@ -64,7 +64,7 @@ test(`mission attack search: ${RUNS} runs x ${STEPS} steps, model-checked after 
     const stageCount = 1 + Math.floor(r() * 3);
     const stageCaps = Array.from({ length: stageCount }, () => { const c = BigInt(3 + Math.floor(r() * 20)) * USDC; return c > budget ? budget : c; });
     const expiresAt = t.now() + BigInt(1800 + Math.floor(r() * 3600));
-    const created = await missions.create(dctx, t.buyer, { missionId: 1n, budget, termsHash: hash(50), stageCaps, expiresAt, rentLamports: 200_000_000n });
+    const created = await missions.create(dctx, t.buyer, { missionId: 1n, budget, termsHash: hash(50), stageCaps, expiresAt, rentLamports: 200_000_000n, verifier: t.verifier.address, minReviewSecs: 60n, minResolveSecs: 600n });
     assert.ok(created.ok, JSON.stringify(created));
     const mission = (created as { mission: Address }).mission;
 

@@ -60,7 +60,7 @@ test("missions: the full agent flow through the library, with the digest the UI 
   const { t, ctx } = await market();
   const expiresAt = t.now() + 2n * HOUR;
   const m = await missions.create(ctx, t.buyer, {
-    missionId: 7n, budget: 30n * USDC, termsHash: hash(50), stageCaps: [20n * USDC, 20n * USDC], expiresAt, rentLamports: 100_000_000n,
+    missionId: 7n, budget: 30n * USDC, termsHash: hash(50), stageCaps: [20n * USDC, 20n * USDC], expiresAt, rentLamports: 100_000_000n, verifier: t.verifier.address,
   });
   assert.ok(m.ok, JSON.stringify(m));
   const mission = (m as { mission: Address }).mission;
@@ -113,7 +113,7 @@ test("missions.spend: a 429 after the payment landed is settled by the chain, ne
   const { t, ctx } = await market();
   const expiresAt = t.now() + 2n * HOUR;
   const mission = ((await missions.create(ctx, t.buyer, {
-    missionId: 1n, budget: 30n * USDC, termsHash: hash(50), stageCaps: [20n * USDC], expiresAt,
+    missionId: 1n, budget: 30n * USDC, termsHash: hash(50), stageCaps: [20n * USDC], expiresAt, verifier: t.verifier.address,
   })) as { mission: Address }).mission;
   const agent = await generateKeyPairSigner();
   t.client.svm.airdrop(agent.address, lamports(1_000_000_000n));
