@@ -90,6 +90,9 @@ export function createMissionService(o: ServiceOptions): Server {
           dealRules: o.dealRules, buyer: b.buyer as Address,
         });
         if (!r.ok) return json(res, 422, r);
+        // One entry per mission, never replaced: a second prepare would swap in new agent keys that match no
+        // mandate the buyer signed, and reset a running mission so it could be started twice.
+        if (missions.has(r.value.mission)) return json(res, 409, { ok: false, reason: "MISSION_EXISTS" });
         missions.set(r.value.mission, { prepared: r.value, events: [], state: "prepared" });
         return json(res, 200, { ok: true, ...publicView(r.value) });
       }

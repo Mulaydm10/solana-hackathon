@@ -277,6 +277,11 @@ test("mission service over HTTP: token required, prepare -> buyer signs -> start
     }
     assert.equal((await call(`/missions/${prep.mission}/start`, {})).status, 202);
     assert.equal((await call(`/missions/${prep.mission}/start`, {})).status, 409);
+    // Re-preparing the same mission is refused: it would reset the running entry with new agent keys.
+    const again = await call("/missions/prepare", { blueprint: wire, goal: "Brief", budget: String(10n * USDC), missionId: "8", buyer: c.buyer.address, expiresAt: String(c.now() + 3_600n) });
+    assert.equal(again.status, 409);
+    assert.equal((await again.json()).reason, "MISSION_EXISTS");
+    assert.deepEqual((await (await call(`/missions/${prep.mission}`)).json()).roles.map((r: { agent: string }) => r.agent), prep.roles.map((r: { agent: string }) => r.agent));
     for (const [i, plan] of prep.plans.entries()) {
       await missions.approveStage(c.ctx, c.buyer, prep.mission, i, hexTo(plan.planHash), hexTo(prep.digest));
       // wait until the service has run this stage before approving the next
