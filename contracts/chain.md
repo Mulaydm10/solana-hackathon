@@ -53,6 +53,11 @@ Every token an agent moves counts against per-payment, mandate, stage and missio
   reach that mission's agent deals; revoking or closing does.
 - `close_mission` credits the unspent budget back to the buyer's period once. Refunds swept later return as tokens
   but stay counted as spent for that period (conservative).
+- An agent's `agent_release` / `agent_challenge` needs a live mandate with the **current** stage open for it; a deal
+  opened in an earlier stage is acted on by the buyer once that stage has passed (the orchestrator routes late
+  deliveries to the buyer).
+- The buyer also bounds the challenge bond (`max_bond_bps`) and the seller's minimum stake (`min_stake_bps`) of
+  agents' deals (#103).
 - `Listing.sales` can be under-counted (the listing account is optional at settlement) but never inflated; it must
   not feed ranking or pricing.
 
