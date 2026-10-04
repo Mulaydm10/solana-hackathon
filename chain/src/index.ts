@@ -1,12 +1,12 @@
 // Client for the deal_escrow program. Generated code lives in ./generated (run `npm run codegen`
 // after changing the program); this file adds the few helpers surface needs. See contracts/chain.md.
+// This entry must stay browser/bundler-safe (web and mcp lanes): no Node built-ins, no file paths.
+// Node-only helpers (the program binary path) live in ./node.ts, exported as "@deal/chain/node".
 import type { Address } from "@solana/kit";
 import { findDealPda } from "./generated/index.ts";
 
 export * from "./generated/index.ts";
 
-/** Path of the compiled program, committed so tests and deploys need no Rust toolchain. */
-export const PROGRAM_SO = new URL("../program/deal_escrow.so", import.meta.url).pathname;
 
 /** Deal PDA for (buyer, dealId). */
 export async function dealAddress(buyer: Address, dealId: bigint): Promise<Address> {

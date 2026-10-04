@@ -15,7 +15,6 @@ import {
 import {
   DEAL_ESCROW_PROGRAM_ADDRESS,
   DealStatus,
-  PROGRAM_SO,
   dealAddress,
   fetchDeal,
   getClaimInstructionAsync,
@@ -24,6 +23,7 @@ import {
   getReleaseInstructionAsync,
   getSubmitDeliveryInstruction,
 } from "../src/index.ts";
+import { PROGRAM_SO } from "../src/node.ts";
 
 const USDC = 1_000_000n; // 6 decimals
 const PRICE = 2n * USDC;
