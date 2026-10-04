@@ -9,6 +9,7 @@ import { sendWithWallet } from "../../lib/wallet-tx";
 import { PUBLIC_MINT, PUBLIC_RPC } from "../../lib/public-config";
 import { approveStageIx, challengeIx, describePlan, planHashOk, releaseIx, waitingStage, type FeeDealState } from "../../lib/mission-flow";
 import { listMissions, missionLink, type SavedMission } from "../../lib/inbox";
+import { missionState, readChainState, rpcReads, type ChainState } from "./chain-state";
 
 type Event = { type: string; stage?: number; role?: string; ok?: boolean; reason?: string; amount?: string; payee?: string; output?: string; deliverableHash?: string };
 type Status = {
@@ -61,7 +62,8 @@ function Inbox() {
     setSaved(ms);
     void Promise.all(ms.map(async (m) => {
       const s = await fetch(`/api/missions/${m.mission}`, { cache: "no-store" }).then((r) => r.json() as Promise<Status>).catch(() => null);
-      setStatus((prev) => ({ ...prev, [m.mission]: s }));
+      const chain = s?.ok ? await readChainState(rpcReads(createSolanaRpc(PUBLIC_RPC)), m.mission as Address, []) : null;
+      setStatus((prev) => ({ ...prev, [m.mission]: s?.ok ? { ...s, state: missionState(s.state, chain) } : s }));
     }));
   }, []);
   if (saved.length === 0) return <p data-testid="inbox-empty">No missions hired from this browser yet. <a href="/hire">Hire a team</a>, or open a mission with <code>?m=&lt;mission address&gt;</code>.</p>;
@@ -75,6 +77,7 @@ function Inbox() {
           <li key={m.mission}>
             <a href={missionLink(m)}><code>{m.mission.slice(0, 8)}…</code></a>{" "}
             {s === undefined ? "loading…" : !s?.ok ? `not available (${s?.reason ?? "no answer"})`
+              : s.state === "closed" ? "closed: what was left went back to you"
               : waiting !== null ? <strong>stage {waiting + 1} is waiting for your approval</strong>
               : delivered ? <strong>final product delivered: release or challenge</strong>
               : s.state}
@@ -92,12 +95,15 @@ export function MissionView() {
   const connected = useWallet();
   const [s, setS] = useState<Status | null>(null);
   const [deal, setDeal] = useState<FeeDealState | null>(null);
+  const [chain, setChain] = useState<ChainState | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!ADDRESS.test(m)) return;
     const r = await fetch(`/api/missions/${m}`, { cache: "no-store" });
-    setS(await r.json());
+    const st = (await r.json()) as Status;
+    setS(st);
+    if (st.ok) setChain(await readChainState(rpcReads(createSolanaRpc(PUBLIC_RPC)), m as Address, st.roles.map((x) => x.agent)));
     if (ADDRESS.test(fee)) setDeal(await readFeeDeal(fee));
   }, [m, fee]);
   useEffect(() => {
@@ -126,9 +132,11 @@ export function MissionView() {
   const waiting = waitingStage(s.events);
   const plan = waiting === null ? undefined : s.plans.find((p) => p.stage === waiting);
   const product = s.events.find((e) => e.type === "delivered")?.deliverableHash;
+  const closed = chain?.closed === true;
   return (
     <section data-testid="mission-view">
-      <p>Mission <a href={explorer(s.mission)}><code>{s.mission}</code></a>: <strong>{s.state}</strong></p>
+      <p>Mission <a href={explorer(s.mission)}><code>{s.mission}</code></a>: <strong>{missionState(s.state, chain)}</strong>
+        {closed && " (you closed it; what was left went back to your wallet)"}</p>
       {plan && (
         <div data-testid="approval">
           <h2>Waiting for your approval</h2>
@@ -141,14 +149,18 @@ export function MissionView() {
       <h2>Agents</h2>
       <ul>{s.roles.map((r) => (
         <li key={r.agent}>{r.role} <a href={explorer(r.agent)}><code>{r.agent.slice(0, 6)}…</code></a>{" "}
-          <button type="button" onClick={() => void act(async (buyer) => [getRevokeMandateInstruction({
-            buyer, mission: s.mission as Address, mandate: (await findMandatePda({ mission: s.mission as Address, agent: r.agent as Address }))[0],
-          })])}>Revoke (wallet)</button></li>
+          {chain?.revoked[r.agent] ? <strong data-testid="revoked">revoked</strong> : !closed && (
+            <button type="button" onClick={() => void act(async (buyer) => [getRevokeMandateInstruction({
+              buyer, mission: s.mission as Address, mandate: (await findMandatePda({ mission: s.mission as Address, agent: r.agent as Address }))[0],
+            })])}>Revoke (wallet)</button>
+          )}</li>
       ))}</ul>
-      <button type="button" onClick={() => void act(async (buyer) => [await getCloseMissionInstructionAsync({
-        actor: buyer, mission: s.mission as Address, buyer: s.buyer as Address, policy: await policyAddress(s.buyer as Address), mint: PUBLIC_MINT as Address,
-        buyerToken: (await findAssociatedTokenPda({ owner: s.buyer as Address, mint: PUBLIC_MINT as Address, tokenProgram: TOKEN_PROGRAM_ADDRESS }))[0],
-      })])}>Close the mission and take back what is left (wallet)</button>
+      {closed ? <p data-testid="closed">This mission is closed.</p> : (
+        <button type="button" onClick={() => void act(async (buyer) => [await getCloseMissionInstructionAsync({
+          actor: buyer, mission: s.mission as Address, buyer: s.buyer as Address, policy: await policyAddress(s.buyer as Address), mint: PUBLIC_MINT as Address,
+          buyerToken: (await findAssociatedTokenPda({ owner: s.buyer as Address, mint: PUBLIC_MINT as Address, tokenProgram: TOKEN_PROGRAM_ADDRESS }))[0],
+        })])}>Close the mission and take back what is left (wallet)</button>
+      )}
       <h2>Team fee</h2>
       {!ADDRESS.test(fee) ? <p>No fee deal is linked to this mission.</p> : !deal ? <p>Fee deal <a href={explorer(fee)}><code>{fee.slice(0, 8)}…</code></a>: not readable yet.</p> : (
         <div data-testid="fee-deal">
