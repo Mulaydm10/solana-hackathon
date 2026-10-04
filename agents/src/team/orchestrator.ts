@@ -210,8 +210,11 @@ export async function* runStages(o: RunStagesOptions): AsyncGenerator<MissionEve
       const agent = agents.get(roleName)!;
       const role = p.blueprint.roles.find((r) => r.name === roleName)!;
       // One capability token per provider the role uses, scoped to the role's actions.
+      // The role's mandate (payees, per-payment cap) is public terms, so the worker may know whom it can pay.
       // Earlier stages' results (already through the reader's RESULT schema) are this stage's inputs.
+      const mandate = p.roles.find((r) => r.role === roleName)!.mandate;
       const env: Record<string, string> = {
+        PAYEES: mandate.payees.join(","), PER_TX_CAP: mandate.perTxCap.toString(),
         ...(o.workerEnv?.[roleName] ?? {}), ROLE: roleName, GOAL: p.goal.slice(0, 500), INPUTS: JSON.stringify(stageInputs),
       };
       const byProvider = new Map<string, string[]>();

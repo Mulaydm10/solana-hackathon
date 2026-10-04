@@ -110,6 +110,30 @@ test("a team mission end to end: approved stages, isolated workers, a spend judg
   for (const e of events.filter((x) => x.type === "worker-exit") as Extract<MissionEvent, { type: "worker-exit" }>[]) assert.equal(e.exit.reason, "exit");
 });
 
+test("the shipped researcher buys from its mandate's payee with no extra env, and buys nothing when the mandate names none", async () => {
+  const c = await chain();
+  const { broker: b, live } = broker(c);
+  const shipped = (n: string) => fileURLToPath(new URL(`../workers/${n}`, import.meta.url));
+  const run = (bp: Blueprint, missionId: bigint) => collect(runMission({
+    ctx: c.ctx, buyer: c.buyer, blueprint: bp, goal: "Plan a 3-day trip to Lisbon", budget: 10n * USDC, missionId,
+    expiresAt: c.now() + 3_600n, dealRules: { verifier: c.verifier }, broker: b, capabilities: ["market:read"],
+    workers: { researcher: shipped("researcher.mjs"), writer: shipped("writer.mjs") }, approve: async () => true, live, runner: { pollMs: 200 },
+  }));
+  const withPayee = await run(blueprint(c.seller.address), 10n);
+  assert.ok(!withPayee.some((e) => e.type === "refused" && e.role === "researcher"), JSON.stringify(withPayee.filter((e) => e.type === "refused")));
+  const spends = withPayee.filter((e) => e.type === "spend") as Extract<MissionEvent, { type: "spend" }>[];
+  assert.deepEqual(spends.map((s) => [s.role, s.payee, s.amount, s.ok]), [["researcher", c.seller.address, String(1n * USDC), true]]);
+  const research = withPayee.find((e) => e.type === "result" && e.role === "researcher") as Extract<MissionEvent, { type: "result" }>;
+  assert.match(research.output, /EURUSD 1\.\d{4}; data purchase paid/);
+
+  const bp = blueprint(c.seller.address);
+  const noPayees: Blueprint = { ...bp, roles: bp.roles.map(({ payees: _p, ...r }) => r) };
+  const without = await run(noPayees, 11n);
+  assert.ok(!without.some((e) => e.type === "refused" || e.type === "spend"));
+  const r = without.find((e) => e.type === "result" && e.role === "researcher") as Extract<MissionEvent, { type: "result" }>;
+  assert.match(r.output, /data purchase refused: NO_PAYEE/);
+});
+
 test("the shipped writer turns the research stage's result into a day-by-day plan, not a placeholder", async () => {
   const c = await chain();
   const { broker: b, live } = broker(c);
