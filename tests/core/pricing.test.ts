@@ -15,6 +15,17 @@ test("listings and sales together when sales are few; even count takes the mean 
   const r = suggestPrice({ kind: "Data", comparables: [sale(4n * USDC), ask(6n * USDC)] });
   assert.equal(r.mid, 5n * USDC);
 });
+test("a seller's own listings and sales never move its own price", () => {
+  const others = [sale(5n * USDC), sale(5n * USDC), sale(5n * USDC)].map((c) => ({ ...c, seller: "Other" }));
+  const mine = [sale(500n * USDC), sale(500n * USDC), sale(500n * USDC), ask(900n * USDC), ask(900n * USDC)].map((c) => ({ ...c, seller: "Me" }));
+  const r = suggestPrice({ kind: "Data", seller: "Me", comparables: [...others, ...mine] });
+  assert.equal(r.mid, 5n * USDC);
+  assert.equal(r.reasons[0], "Left out 5 of your own listings and sales.");
+  // Without a seller, all six sales count and the median jumps to (5 + 500) / 2: the exclusion is what protects the price.
+  assert.equal(suggestPrice({ kind: "Data", comparables: [...others, ...mine] }).mid, 252_500_000n);
+  // Only own evidence: falls back to the anchor rather than the seller's own prices.
+  assert.equal(suggestPrice({ kind: "Data", seller: "Me", comparables: mine }).mid, 5n * USDC);
+});
 test("comparables of another kind are ignored; no evidence falls back to the anchor with a wide range", () => {
   const r = suggestPrice({ kind: "Service", comparables: [sale(9n * USDC)] });
   assert.equal(r.mid, 10_000n);

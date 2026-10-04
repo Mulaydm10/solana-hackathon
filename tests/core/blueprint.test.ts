@@ -71,8 +71,23 @@ test("pinned vectors: blueprint, role and mission-terms hashes match sha256sum o
   assert.equal(hex(roleHash(bp.roles[1]!)), "a6e98746ca2747702511e1c0be0c0a65d7bbdc4fb5f712249d42fbce16ebf7a5");
   const m = missionTerms(bp, "Plan a 5-day trip to Bali", 40_000_000n);
   assert.ok(m.ok);
-  assert.equal(hex(m.value.hash), "e5509a3319ef9a3a24af7349edfe25503364e2b25d3f00cb627aba8baa1048f7");
+  assert.equal(hex(m.value.hash), "3222178f336725d8883737f4d6e274152cadaf303c97ff1ea3cc3a8a7de4bfff");
   assert.equal(m.value.hash.length, 32);
+});
+
+test("each mandate names the stages its role works in (on chain: Mandate.stage_mask)", () => {
+  const b = clone();
+  b.stages.push({ name: "Review", roles: ["writer", "researcher"], cap: 500_000n, gate: "human" });
+  const m = missionTerms(b, "Goal", 40_000_000n);
+  assert.ok(m.ok);
+  assert.deepEqual(m.value.terms.mandates.map((x) => [x.role, x.stages]), [["researcher", [0, 2]], ["writer", [1, 2]]]);
+  // Moving a role out of a stage changes the hash: the stage binding is part of what the buyer signs.
+  const moved = clone();
+  moved.stages[1]!.roles = ["writer", "researcher"];
+  const a = missionTerms(bp, "Goal", 40_000_000n);
+  const c = missionTerms(moved, "Goal", 40_000_000n);
+  assert.ok(a.ok && c.ok);
+  assert.notDeepEqual(a.value.hash, c.value.hash);
 });
 
 test("missionTerms refuses what add_mandate would refuse on chain", () => {
