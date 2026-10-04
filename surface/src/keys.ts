@@ -40,3 +40,14 @@ export function readConfig(): DeskConfig {
   if (!existsSync(CONFIG_PATH)) throw new Error("no surface/.keys/config.json - run `npm run setup:devnet --prefix surface` first");
   return JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as DeskConfig;
 }
+
+export const TOKEN_PATH = KEYS_DIR + "api-token";
+
+/** The demo API's write token (random, 32 bytes, hex), created on first use. */
+export function loadOrCreateToken(): string {
+  if (!existsSync(TOKEN_PATH)) {
+    mkdirSync(KEYS_DIR, { recursive: true });
+    writeFileSync(TOKEN_PATH, Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex"), { mode: 0o600 });
+  }
+  return readFileSync(TOKEN_PATH, "utf8").trim();
+}

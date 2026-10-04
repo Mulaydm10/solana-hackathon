@@ -7,6 +7,9 @@ import { createApp } from "../src/app.ts";
 import { SERVICES } from "../src/catalog.ts";
 import { parseBudgetUsdc, parseDeadlineMins, ruleDraft } from "../src/draft.ts";
 import type { Desk, LockInput } from "../src/desk.ts";
+import type { GuardConfig } from "../src/guard.ts";
+
+const TOKEN = "test-token-0123456789";
 
 const NOW = 1_800_000_000;
 const BUYER = "Buyer1111111111111111111111111111111111111" as Address;
@@ -36,16 +39,17 @@ function fakeDesk(failWith?: number) {
   return { desk, calls };
 }
 
-async function serve(desk: Desk) {
+async function serve(desk: Desk, guard: Partial<GuardConfig> = {}) {
   const app = createApp({
     desk, draft: ruleDraft, produce: async (_s, task) => `done: ${task}`, services: SERVICES,
     decimals: 6, symbol: "USDC", defaultBudgetUsdc: 50, now: () => NOW,
+    guard: { token: TOKEN, ...guard },
   });
   const server = app.listen(0);
   await new Promise((r) => server.once("listening", r));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const post = async (path: string, body: unknown = {}) =>
-    (await fetch(base + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json() as Promise<Record<string, any>>;
+    (await fetch(base + path, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${TOKEN}` }, body: JSON.stringify(body) })).json() as Promise<Record<string, any>>;
   return { post, base, close: () => server.close() };
 }
 
@@ -135,6 +139,72 @@ test("status reports the live setup", async () => {
   try {
     const r = await (await fetch(s.base + "/api/status")).json() as Record<string, any>;
     assert.deepEqual([r.ok, r.programDeployed, r.sellers, r.drafting], [true, true, 4, "rules"]);
+  } finally {
+    s.close();
+  }
+});
+
+test("writes without the token are refused; reads stay open", async () => {
+  const { desk, calls } = fakeDesk();
+  const s = await serve(desk);
+  try {
+    const noAuth = await fetch(s.base + "/api/lock", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    assert.equal(noAuth.status, 401);
+    const wrong = await fetch(s.base + "/api/lock", { method: "POST", headers: { authorization: "Bearer nope" } });
+    assert.equal(wrong.status, 401);
+    assert.equal((await fetch(s.base + "/api/services")).status, 200);
+    assert.equal(calls.length, 0);
+  } finally {
+    s.close();
+  }
+});
+
+test("security headers are set", async () => {
+  const { desk } = fakeDesk();
+  const s = await serve(desk);
+  try {
+    const r = await fetch(s.base + "/");
+    assert.match(r.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
+    assert.equal(r.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(r.headers.get("x-powered-by"), null);
+  } finally {
+    s.close();
+  }
+});
+
+test("per-client write rate limit", async () => {
+  const { desk } = fakeDesk();
+  const s = await serve(desk, { writesPerMinute: 2 });
+  try {
+    const codes = [];
+    for (let i = 0; i < 3; i++) codes.push((await s.post("/api/draft", { request: "translate a page" })).reason ?? "ok");
+    assert.equal(codes[2], "RATE_LIMITED");
+  } finally {
+    s.close();
+  }
+});
+
+test("hourly cap on new deals", async () => {
+  const { desk } = fakeDesk();
+  const s = await serve(desk, { locksPerHour: 1 });
+  try {
+    const draft = await s.post("/api/draft", { request: "translate a page" });
+    const first = await s.post("/api/lock", { terms: draft.terms });
+    const second = await s.post("/api/lock", { terms: draft.terms });
+    assert.equal(first.ok, true);
+    assert.equal(second.reason, "LOCK_LIMIT");
+  } finally {
+    s.close();
+  }
+});
+
+test("malformed input is a JSON refusal, not a crash", async () => {
+  const { desk } = fakeDesk();
+  const s = await serve(desk);
+  try {
+    assert.equal((await s.post("/api/describe", { terms: { price: "x" } })).reason, "BAD_TERMS");
+    const r = await fetch(s.base + "/api/lock", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${TOKEN}` }, body: "{not json" });
+    assert.equal((await r.json() as Record<string, unknown>).ok, false);
   } finally {
     s.close();
   }
