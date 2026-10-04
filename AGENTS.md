@@ -56,8 +56,8 @@ Workers are interactive sessions and may vanish. Assume abandonment is common.
 - Progress signal = commits and PR events; `heartbeat` comments are a fallback (workers may be blocked on approval prompts).
 - No commit, PR event, or comment for 2 h → same login may reclaim (it's your own dead session). Different login: 4 h, and comment what you are taking first.
 - Reclaim = rename, never delete: `claim/<n>` → `abandoned/<n>-<device>-<ts>` (frees the lock, keeps the work), comment `reclaimed from <device>`, then follow Claim.
-- After merge + issue close, a `claim/<n>` may be renamed `done/<n>` (not a lock, keeps the branch tip); design does this, never during review.
   `<device>` only, never the full worker id: it contains `/` and would nest the ref. `<ts>` = unix seconds.
+- After merge + issue close, a `claim/<n>` may be renamed `done/<n>` (not a lock, keeps the branch tip); design does this, never during review.
 - Resume the abandoned tip only if its CI is green **and** the lane's verify passes on it; otherwise restart from `main`.
 - In review (PR open, worker silent 2 h): design either closes the PR + renames the ref (task re-queued), or labels the PR
   `adoptable` — the next claimer takes the existing `claim/<n>` + PR as-is and may force-push (original author is gone).
