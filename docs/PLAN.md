@@ -125,19 +125,23 @@ final product). The Mission holds a separate **expense budget** that the team's 
     - the mandate is not revoked or expired;
     - the current stage is approved;
     - the amount is within `per_tx_cap`, the mandate cap, the stage cap and the mission budget;
-    - the payee is allowed.
+    - the payee is allowed. When `payees` is empty, a `Listing` account is **required** on the instruction: it must be
+      active and attested, and the payee must be its seller (from #59 review).
 
     It then pays from the mission vault straight to the payee and emits `SpendEvent { mission, agent, payee, amount,
     receipt_hash }`. The receipt hash commits to the context that justified the payment (from LedgerMind).
   - **`agent_open_deal`** (agent signs): like `agent_spend`, but the money goes into a normal escrow `Deal` with a
     `Listing` seller, so team agents buy data and services under the same protections as humans. The mission is the
-    deal's buyer of record; the deal's buyer PDA is the mission.
+    deal's buyer of record; the deal's buyer PDA is the mission. It counts against **every** cap exactly like
+    `agent_spend` (`spent`, per-tx, mandate, stage, budget), so a deal is never a way around a cap. If such a deal is
+    refunded, the money returns to the mission vault but `spent` is **not** reduced: caps limit outflow, and the
+    refunded amount only goes back to the buyer at `close_mission`.
   - **`revoke_mandate`** (buyer): one transaction. The agent's next spend fails, and its VM sees the flag and stops
     (§6.2).
   - **`close_mission`** (buyer at any time, anyone after `expires_at`): refunds the unspent vault to the buyer, and
     later spends are refused.
 - **Invariant tests** (LiteSVM plus the attack search):
-  - The vault balance always equals `budget - spent` minus anything that went into deals.
+  - The vault balance always equals `budget - spent` plus refunds received back from the mission's deals.
   - No spend ever exceeds any cap.
   - A revoked or expired mandate never spends.
   - An unapproved stage never spends.
@@ -167,8 +171,9 @@ No network or chain code, all deterministic, all unit-tested:
     - `stages[]` with gate rules;
     - the deliverable spec;
     - `maxDuration`.
-  - **`validateBlueprint(bp, platformLimits)`:** every capability must exist in the broker's catalogue, every cap must be
-    within platform limits, every stage needs a human gate, and the deliverable must be hash-checkable.
+  - **`validateBlueprint(bp, { limits, capabilities })`:** the capability catalogue is passed in as a parameter, so core
+    stays pure and does not depend on `agents` (from #59 review). Every capability must be in that catalogue, every cap
+    must be within `limits`, every stage needs a human gate, and the deliverable must be hash-checkable.
   - **`missionTerms(bp, goal, budget)`:** the canonical mission terms plus their hash, which becomes the on-chain
     `terms_hash`.
 - **`pricing.ts`:**
@@ -179,7 +184,9 @@ No network or chain code, all deterministic, all unit-tested:
 - **`rep.ts`:** `repScore`, as described in §2.1.
 - **`messages.ts`:** typed inter-agent messages (`{ type, from, mission, stage, body, sig }`).
   - The types are a closed set: task, result, need-approval, report.
-  - Signatures are ed25519, checked with `@noble/curves`.
+  - Signatures are ed25519, checked with `@noble/curves`. This is core's second runtime dependency after
+    `@noble/hashes`; it is added in the core PR with its lockfile, and `docs/setup.sh` needs no change because it
+    already runs `npm ci` per lane.
   - There are no free-text commands; a message that doesn't parse is dropped.
 
 ## 4. Phase 3: listing pipeline, the seller-side agent chain (new lane `agents`)
@@ -237,6 +244,10 @@ runner. Adding a lane edits `docs/STATE.md`, `docs/verify.txt` and `docs/setup.s
 - Big jobs use escrow deals, as today.
 - Per-call fees use **x402 `exact` on Solana devnet** through the public x402.org facilitator. The buyer's agent signs a
   USDC `TransferChecked`, and the facilitator settles it.
+- **x402 is only for agents that spend their own owner's money** (a buyer's own agent, under the buyer's own wallet).
+  **Team agents never hold spendable tokens**: their wallets hold only SOL for fees, and every token they move goes
+  through `agent_spend` or `agent_open_deal`, where the mandate sees it. A team agent that needs a Service per call opens
+  a **prepaid tab** with `agent_open_deal` (from #59 review).
 - **No answer, no charge:** the route only settles after the seller's endpoint returned a valid answer (a 2xx reply that
   fits the schema). An empty or failed answer is never settled.
 - **Fallback** if x402 on Solana devnet is not reliable enough: a prepaid tab, meaning a small escrow deal that a
