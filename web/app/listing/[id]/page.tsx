@@ -1,13 +1,13 @@
 import { notFound } from "next/navigation";
 import { describeListing, describeRep, repScore, suggestPrice } from "@deal/core";
-import { registry } from "../../../lib/registry";
+import { siteRegistry } from "../../../lib/site-registry";
 import { explorer, usdc } from "../../format";
 
 export const dynamic = "force-dynamic";
 
 export default async function ListingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const reg = registry();
+  const reg = siteRegistry();
   const l = await reg.get(id);
   if (!l) notFound();
   const rep = repScore(l.rep);

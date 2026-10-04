@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { describeRep } from "@deal/core";
 import { categories, parseQuery, search } from "../lib/catalogue";
-import { registry } from "../lib/registry";
+import { demand } from "../lib/demand";
+import { siteRegistry } from "../lib/site-registry";
 import { usdc } from "./format";
 
 export const dynamic = "force-dynamic";
 
 export default async function Catalogue({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const query = parseQuery(await searchParams);
-  const all = await registry().list();
+  const all = await siteRegistry().list();
   const results = search(all, query);
+  if (results.length === 0) demand.record({ q: query.q, category: query.category, kind: query.kind, budget: query.maxPrice });
   return (
     <main>
       <h1>Catalogue</h1>

@@ -4,23 +4,28 @@
 // running half-configured.
 import { z } from "zod";
 
+const keypairBytes = z
+  .string()
+  .refine((s) => {
+    try {
+      const a = JSON.parse(s);
+      return Array.isArray(a) && a.length === 64 && a.every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
+    } catch {
+      return false;
+    }
+  }, "must be a JSON array of 64 bytes");
+
 const Schema = z.object({
   DEAL_CLUSTER: z.enum(["devnet", "localnet"]).default("devnet"),
   DEAL_RPC_URL: z.string().url().optional(),
   /** Drafting model key (Claude). Optional: drafting falls back to rules without it. */
   ANTHROPIC_API_KEY: z.string().min(10).optional(),
   /** Verifier keypair as a JSON array of 64 bytes. Needed only by the verifier route. */
-  DEAL_VERIFIER_KEY: z
-    .string()
-    .refine((s) => {
-      try {
-        const a = JSON.parse(s);
-        return Array.isArray(a) && a.length === 64 && a.every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
-      } catch {
-        return false;
-      }
-    }, "must be a JSON array of 64 bytes")
-    .optional(),
+  DEAL_VERIFIER_KEY: keypairBytes.optional(),
+  /** Devnet faucet wallet (64-byte JSON array) holding the test token. Needed only by /api/faucet. */
+  DEAL_FAUCET_KEY: keypairBytes.optional(),
+  /** The token the site settles in (base58 mint). Default: Circle devnet USDC. */
+  DEAL_MINT: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(),
 });
 
 export type ServerEnv = z.infer<typeof Schema> & { rpcUrl: string };
@@ -39,8 +44,8 @@ export function parseEnv(raw: Record<string, string | undefined>): EnvResult {
   return { ok: true, env: { ...r.data, rpcUrl: r.data.DEAL_RPC_URL ?? DEFAULT_RPC[r.data.DEAL_CLUSTER] } };
 }
 
-export type Capability = "drafting" | "verifier";
-const NEEDS: Record<Capability, keyof ServerEnv> = { drafting: "ANTHROPIC_API_KEY", verifier: "DEAL_VERIFIER_KEY" };
+export type Capability = "drafting" | "verifier" | "faucet";
+const NEEDS: Record<Capability, keyof ServerEnv> = { drafting: "ANTHROPIC_API_KEY", verifier: "DEAL_VERIFIER_KEY", faucet: "DEAL_FAUCET_KEY" };
 
 /** For routes that cannot run without a secret: a typed refusal instead of a half-configured run. */
 export function requireEnv(r: EnvResult, cap: Capability): { ok: true; env: ServerEnv } | { ok: false; status: number; body: { ok: false; reason: string; message: string } } {
@@ -55,6 +60,6 @@ export function health(r: EnvResult) {
   return {
     ok: true as const,
     cluster: r.env.DEAL_CLUSTER,
-    capabilities: { drafting: Boolean(r.env.ANTHROPIC_API_KEY), verifier: Boolean(r.env.DEAL_VERIFIER_KEY) },
+    capabilities: { drafting: Boolean(r.env.ANTHROPIC_API_KEY), verifier: Boolean(r.env.DEAL_VERIFIER_KEY), faucet: Boolean(r.env.DEAL_FAUCET_KEY) },
   };
 }
