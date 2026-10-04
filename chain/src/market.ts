@@ -32,7 +32,7 @@ import {
   getRevokeMandateInstruction,
   getUpdateListingInstruction,
 } from "./generated/index.ts";
-import { ata, NO_KEY, readWithRetry, refuse, safeSend, type DealContext, type OpenParams, type Sent } from "./deals.ts";
+import { ata, isOurs, NO_KEY, readWithRetry, refuse, safeSend, type DealContext, type OpenParams, type Sent } from "./deals.ts";
 import { dealAddress, policyAddress, registryAddress, repPairAddress, sellerRepAddress, STATUS_NAMES } from "./index.ts";
 
 const hex = (b: ArrayLike<number>) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
@@ -411,7 +411,8 @@ export const missions = {
       stakeRequired: p.stakeRequired ?? (p.amount * BigInt(m.minStakeBps) + 9_999n) / 10_000n,
     };
     const deal = await dealAddress(auth, p.dealId);
-    const r = await safeSend(ctx, deal, async () => (await statusOf(ctx, deal)) !== null, async () => [
+    if (await isOurs(ctx, deal, null)) return refuse("DEAL_ID_TAKEN", "A deal with this id already exists; choose another id.");
+    const r = await safeSend(ctx, deal, async () => isOurs(ctx, deal, { seller: p.seller, amount: p.amount, termsHash: p.termsHash }), async () => [
       await getAgentOpenDealInstructionAsync({
         agent, mission, seller: p.seller, authPolicy: await policyAddress(auth), mint: ctx.mint, deal,
         dealVault: (await findAssociatedTokenPda({ owner: deal, mint: ctx.mint, tokenProgram: TOKEN_PROGRAM_ADDRESS }))[0],
