@@ -13,6 +13,7 @@ export * from "./listing";
 export * from "./mandate";
 export * from "./mission";
 export * from "./missionAuth";
+export * from "./missionDeal";
 export * from "./policy";
 export * from "./registry";
 export * from "./repPair";

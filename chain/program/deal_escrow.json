@@ -184,8 +184,9 @@
     {
       "name": "agent_challenge",
       "docs": [
-        "An agent with a live mandate challenges a mission deal. The bond leaves the mission vault,",
-        "so it counts against every cap like any other spend."
+        "Challenges a mission deal: the buyer at any time (even after revoking agents or closing the",
+        "mission), or the agent that opened it, with a live mandate. The bond leaves the mission vault, so",
+        "it counts as spend: against every cap for an agent, against the mission budget for the buyer."
       ],
       "discriminator": [
         203,
@@ -200,6 +201,9 @@
       "accounts": [
         {
           "name": "agent",
+          "docs": [
+            "The mission's buyer, or the agent that opened the deal."
+          ],
           "signer": true,
           "relations": [
             "mandate"
@@ -209,12 +213,14 @@
           "name": "mission",
           "writable": true,
           "relations": [
-            "mandate"
+            "mandate",
+            "mission_deal"
           ]
         },
         {
           "name": "mandate",
           "writable": true,
+          "optional": true,
           "pda": {
             "seeds": [
               {
@@ -236,6 +242,34 @@
               {
                 "kind": "account",
                 "path": "agent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mission_deal",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  95,
+                  100,
+                  101,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal"
               }
             ]
           }
@@ -517,6 +551,35 @@
           "writable": true
         },
         {
+          "name": "mission_deal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  95,
+                  100,
+                  101,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal"
+              }
+            ]
+          }
+        },
+        {
           "name": "seller_rep",
           "writable": true
         },
@@ -598,8 +661,9 @@
     {
       "name": "agent_release",
       "docs": [
-        "An agent with a live mandate releases a mission deal (re-entering `release` as the",
-        "mission's authority). Moves nothing out of the mission vault, so no cap is charged."
+        "Releases a mission deal (re-entering `release` as the mission's authority). The buyer may always",
+        "do this, even after revoking agents or closing the mission; an agent only for a deal it opened",
+        "itself, with a live mandate. Moves nothing out of the mission vault, so no cap is charged."
       ],
       "discriminator": [
         142,
@@ -614,6 +678,9 @@
       "accounts": [
         {
           "name": "agent",
+          "docs": [
+            "The mission's buyer, or the agent that opened the deal."
+          ],
           "signer": true,
           "relations": [
             "mandate"
@@ -622,11 +689,16 @@
         {
           "name": "mission",
           "relations": [
-            "mandate"
+            "mandate",
+            "mission_deal"
           ]
         },
         {
           "name": "mandate",
+          "docs": [
+            "The acting agent's mandate (not needed when the buyer acts)."
+          ],
+          "optional": true,
           "pda": {
             "seeds": [
               {
@@ -648,6 +720,34 @@
               {
                 "kind": "account",
                 "path": "agent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mission_deal",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  95,
+                  100,
+                  101,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deal"
               }
             ]
           }
@@ -3810,6 +3910,19 @@
       ]
     },
     {
+      "name": "MissionDeal",
+      "discriminator": [
+        173,
+        73,
+        19,
+        189,
+        234,
+        49,
+        249,
+        169
+      ]
+    },
+    {
       "name": "RepPair",
       "discriminator": [
         18,
@@ -4134,6 +4247,16 @@
       "code": 6053,
       "name": "AssessorNotRegistered",
       "msg": "The assessor is not on the registry of assessors"
+    },
+    {
+      "code": 6054,
+      "name": "DealTermsNotAllowed",
+      "msg": "An agent's deal must use the mission's verifier and at least its review and resolve windows"
+    },
+    {
+      "code": 6055,
+      "name": "NotDealOpener",
+      "msg": "Only the agent that opened this deal (or the buyer) may act on it"
     }
   ],
   "types": [
@@ -4922,8 +5045,51 @@
             "type": "bool"
           },
           {
+            "name": "verifier",
+            "type": "pubkey"
+          },
+          {
+            "name": "min_review_secs",
+            "type": "i64"
+          },
+          {
+            "name": "min_resolve_secs",
+            "type": "i64"
+          },
+          {
+            "name": "max_tolerance_bps",
+            "type": "u16"
+          },
+          {
             "name": "auth_bump",
             "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MissionDeal",
+      "docs": [
+        "Which agent opened a mission deal (only it, or the buyer, may release or challenge it)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mission",
+            "type": "pubkey"
+          },
+          {
+            "name": "deal",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
           },
           {
             "name": "bump",
@@ -4979,6 +5145,31 @@
               "SOL moved to the mission authority to pay rent for the deals agents open."
             ],
             "type": "u64"
+          },
+          {
+            "name": "verifier",
+            "docs": [
+              "Every deal an agent opens must name this verifier (not the buyer)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "min_review_secs",
+            "docs": [
+              "Agents' deals give the buyer at least this long to review a delivery, and the verifier this long to rule."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "min_resolve_secs",
+            "type": "i64"
+          },
+          {
+            "name": "max_tolerance_bps",
+            "docs": [
+              "Agents' deals accept invoices at most this far from the order."
+            ],
+            "type": "u16"
           }
         ]
       }

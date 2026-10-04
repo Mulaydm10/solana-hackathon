@@ -49,7 +49,11 @@ import {
   type ResolvedInstructionAccount,
   type ResolvedInstructionAccountMeta,
 } from "@solana/program-client-core";
-import { findMandatePda, findMissionAuthPda } from "../pdas";
+import {
+  findMandatePda,
+  findMissionAuthPda,
+  findMissionDealPda,
+} from "../pdas";
 import { DEAL_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
 export const AGENT_OPEN_DEAL_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array(
@@ -74,6 +78,7 @@ export type AgentOpenDealInstruction<
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountDeal extends string | AccountMeta<string> = string,
   TAccountDealVault extends string | AccountMeta<string> = string,
+  TAccountMissionDeal extends string | AccountMeta<string> = string,
   TAccountSellerRep extends string | AccountMeta<string> = string,
   TAccountRepPair extends string | AccountMeta<string> = string,
   TAccountListing extends string | AccountMeta<string> = string,
@@ -123,6 +128,9 @@ export type AgentOpenDealInstruction<
       TAccountDealVault extends string
         ? WritableAccount<TAccountDealVault>
         : TAccountDealVault,
+      TAccountMissionDeal extends string
+        ? WritableAccount<TAccountMissionDeal>
+        : TAccountMissionDeal,
       TAccountSellerRep extends string
         ? WritableAccount<TAccountSellerRep>
         : TAccountSellerRep,
@@ -247,6 +255,7 @@ export type AgentOpenDealAsyncInput<
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountDealVault extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMissionDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput = InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
@@ -270,6 +279,7 @@ export type AgentOpenDealAsyncInput<
   vault?: TAccountVault;
   deal: TAccountDeal;
   dealVault: TAccountDealVault;
+  missionDeal?: TAccountMissionDeal;
   sellerRep: TAccountSellerRep;
   repPair: TAccountRepPair;
   listing?: TAccountListing;
@@ -304,6 +314,7 @@ export async function getAgentOpenDealInstructionAsync<
   TAccountVault extends InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput,
   TAccountDealVault extends InstructionAccountInput,
+  TAccountMissionDeal extends InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
@@ -326,6 +337,7 @@ export async function getAgentOpenDealInstructionAsync<
     TAccountVault,
     TAccountDeal,
     TAccountDealVault,
+    TAccountMissionDeal,
     TAccountSellerRep,
     TAccountRepPair,
     TAccountListing,
@@ -379,6 +391,10 @@ export async function getAgentOpenDealInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountDealVault,
       InstructionAccountInputAddress<TAccountDealVault>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountMissionDeal,
+      InstructionAccountInputAddress<TAccountMissionDeal>
     >,
     ResolvedInstructionAccountMeta<
       TAccountSellerRep,
@@ -453,6 +469,11 @@ export async function getAgentOpenDealInstructionAsync<
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
     dealVault: {
       value: input.dealVault ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    missionDeal: {
+      value: input.missionDeal ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -560,6 +581,17 @@ export async function getAgentOpenDealInstructionAsync<
       ],
     });
   }
+  if (!accounts.missionDeal.value) {
+    accounts.missionDeal.value = await findMissionDealPda(
+      {
+        deal: getAddressFromResolvedInstructionAccount(
+          "deal",
+          accounts.deal.value,
+        ),
+      },
+      { programAddress },
+    );
+  }
   if (!accounts.associatedTokenProgram.value) {
     accounts.associatedTokenProgram.value =
       "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" as Address<"ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL">;
@@ -585,6 +617,7 @@ export async function getAgentOpenDealInstructionAsync<
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("deal", accounts.deal),
       getAccountMeta("dealVault", accounts.dealVault),
+      getAccountMeta("missionDeal", accounts.missionDeal),
       getAccountMeta("sellerRep", accounts.sellerRep),
       getAccountMeta("repPair", accounts.repPair),
       getAccountMeta("listing", accounts.listing),
@@ -642,6 +675,10 @@ export async function getAgentOpenDealInstructionAsync<
       InstructionAccountInputAddress<TAccountDealVault>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountMissionDeal,
+      InstructionAccountInputAddress<TAccountMissionDeal>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountSellerRep,
       InstructionAccountInputAddress<TAccountSellerRep>
     >,
@@ -691,6 +728,7 @@ export type AgentOpenDealInput<
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountDealVault extends InstructionAccountInput = InstructionAccountInput,
+  TAccountMissionDeal extends InstructionAccountInput = InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput = InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput = InstructionAccountInput,
   TAccountListing extends InstructionAccountInput = InstructionAccountInput,
@@ -714,6 +752,7 @@ export type AgentOpenDealInput<
   vault: TAccountVault;
   deal: TAccountDeal;
   dealVault: TAccountDealVault;
+  missionDeal: TAccountMissionDeal;
   sellerRep: TAccountSellerRep;
   repPair: TAccountRepPair;
   listing?: TAccountListing;
@@ -748,6 +787,7 @@ export function getAgentOpenDealInstruction<
   TAccountVault extends InstructionAccountInput,
   TAccountDeal extends InstructionAccountInput,
   TAccountDealVault extends InstructionAccountInput,
+  TAccountMissionDeal extends InstructionAccountInput,
   TAccountSellerRep extends InstructionAccountInput,
   TAccountRepPair extends InstructionAccountInput,
   TAccountListing extends InstructionAccountInput,
@@ -770,6 +810,7 @@ export function getAgentOpenDealInstruction<
     TAccountVault,
     TAccountDeal,
     TAccountDealVault,
+    TAccountMissionDeal,
     TAccountSellerRep,
     TAccountRepPair,
     TAccountListing,
@@ -822,6 +863,10 @@ export function getAgentOpenDealInstruction<
   ResolvedInstructionAccountMeta<
     TAccountDealVault,
     InstructionAccountInputAddress<TAccountDealVault>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountMissionDeal,
+    InstructionAccountInputAddress<TAccountMissionDeal>
   >,
   ResolvedInstructionAccountMeta<
     TAccountSellerRep,
@@ -895,6 +940,11 @@ export function getAgentOpenDealInstruction<
     deal: { value: input.deal ?? null, isSigner: false, isWritable: true },
     dealVault: {
       value: input.dealVault ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    missionDeal: {
+      value: input.missionDeal ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -978,6 +1028,7 @@ export function getAgentOpenDealInstruction<
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("deal", accounts.deal),
       getAccountMeta("dealVault", accounts.dealVault),
+      getAccountMeta("missionDeal", accounts.missionDeal),
       getAccountMeta("sellerRep", accounts.sellerRep),
       getAccountMeta("repPair", accounts.repPair),
       getAccountMeta("listing", accounts.listing),
@@ -1035,6 +1086,10 @@ export function getAgentOpenDealInstruction<
       InstructionAccountInputAddress<TAccountDealVault>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountMissionDeal,
+      InstructionAccountInputAddress<TAccountMissionDeal>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountSellerRep,
       InstructionAccountInputAddress<TAccountSellerRep>
     >,
@@ -1089,15 +1144,16 @@ export type ParsedAgentOpenDealInstruction<
     vault: TAccountMetas[7];
     deal: TAccountMetas[8];
     dealVault: TAccountMetas[9];
-    sellerRep: TAccountMetas[10];
-    repPair: TAccountMetas[11];
-    listing?: TAccountMetas[12] | undefined;
-    link?: TAccountMetas[13] | undefined;
-    registry?: TAccountMetas[14] | undefined;
-    tokenProgram: TAccountMetas[15];
-    associatedTokenProgram: TAccountMetas[16];
-    systemProgram: TAccountMetas[17];
-    dealProgram: TAccountMetas[18];
+    missionDeal: TAccountMetas[10];
+    sellerRep: TAccountMetas[11];
+    repPair: TAccountMetas[12];
+    listing?: TAccountMetas[13] | undefined;
+    link?: TAccountMetas[14] | undefined;
+    registry?: TAccountMetas[15] | undefined;
+    tokenProgram: TAccountMetas[16];
+    associatedTokenProgram: TAccountMetas[17];
+    systemProgram: TAccountMetas[18];
+    dealProgram: TAccountMetas[19];
   };
   data: AgentOpenDealInstructionData;
 };
@@ -1110,12 +1166,12 @@ export function parseAgentOpenDealInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedAgentOpenDealInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 19) {
+  if (instruction.accounts.length < 20) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 19,
+        expectedAccountMetas: 20,
       },
     );
   }
@@ -1144,6 +1200,7 @@ export function parseAgentOpenDealInstruction<
       vault: getNextAccount(),
       deal: getNextAccount(),
       dealVault: getNextAccount(),
+      missionDeal: getNextAccount(),
       sellerRep: getNextAccount(),
       repPair: getNextAccount(),
       listing: getNextOptionalAccount(),

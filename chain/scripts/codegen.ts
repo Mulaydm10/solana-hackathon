@@ -14,6 +14,9 @@ codama.update(
     // The registry is only passed when a listing is (it may not exist on a fresh cluster).
     agentSpend: { accounts: { registry: { defaultValue: null } } },
     agentOpenDeal: { accounts: { registry: { defaultValue: null } } },
+    // The buyer acts on mission deals without a mandate; an agent passes its own.
+    agentRelease: { accounts: { mandate: { defaultValue: null } } },
+    agentChallenge: { accounts: { mandate: { defaultValue: null } } },
   }),
 );
 // DealParams is shared by create_deal and agent_open_deal; keep its fields flat in both builders
