@@ -6,6 +6,8 @@ import { createSolanaRpc } from "@solana/kit";
 import { chainRegistry, type DocStore } from "./chain-registry";
 import { rpcSource, type MinimalRpc } from "./chain-source";
 import { parseEnv } from "./env";
+import { docsBlobs } from "./sell-server";
+import { docStore } from "./storage";
 import { fixtureRegistry, type Registry } from "./registry";
 
 /** Listing documents on disk: `<dir>/<listing address>.json` = { meta: string, report?: string }. */
@@ -31,7 +33,8 @@ export function siteRegistry(): Registry {
   const env = parseEnv(process.env);
   if (process.env.DEAL_REGISTRY === "chain" && env.ok) {
     const rpc = createSolanaRpc(env.env.rpcUrl) as unknown as MinimalRpc;
-    cached = chainRegistry(rpcSource(rpc), fileDocStore(process.env.DEAL_DOCS_DIR ?? join(process.cwd(), ".data", "docs")));
+    // The same documents the sell flow writes (files, or Vercel Blob with BLOB_READ_WRITE_TOKEN).
+    cached = chainRegistry(rpcSource(rpc), docStore(docsBlobs(env.env)));
   } else {
     cached = fixtureRegistry();
   }

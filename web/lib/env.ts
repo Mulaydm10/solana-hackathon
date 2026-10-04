@@ -26,6 +26,12 @@ const Schema = z.object({
   DEAL_FAUCET_KEY: keypairBytes.optional(),
   /** The token the site settles in (base58 mint). Default: Circle devnet USDC. */
   DEAL_MINT: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(),
+  /** The marketplace assessor's keypair (64-byte JSON array): re-assesses and signs attest_listing (#110). */
+  DEAL_ASSESSOR_KEY: keypairBytes.optional(),
+  /** Custody master key, 64 hex (32 bytes): seals every per-listing custody key at rest (#110). */
+  DEAL_CUSTODY_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, "must be 64 hex characters").optional(),
+  /** Vercel Blob read-write token: listing documents and custody storage on Vercel (else files on disk). */
+  BLOB_READ_WRITE_TOKEN: z.string().min(10).optional(),
   /** The mission service (agents runtime on a long-running host) that runs hired teams (#73). */
   MISSION_SERVICE_URL: z.string().url().optional(),
   /** Bearer token for the mission service; server routes only. */
@@ -48,12 +54,13 @@ export function parseEnv(raw: Record<string, string | undefined>): EnvResult {
   return { ok: true, env: { ...r.data, rpcUrl: r.data.DEAL_RPC_URL ?? DEFAULT_RPC[r.data.DEAL_CLUSTER] } };
 }
 
-export type Capability = "drafting" | "verifier" | "missions" | "faucet";
+export type Capability = "drafting" | "verifier" | "missions" | "faucet" | "sell";
 const NEEDS: Record<Capability, (keyof ServerEnv)[]> = {
   drafting: ["ANTHROPIC_API_KEY"],
   verifier: ["DEAL_VERIFIER_KEY"],
   missions: ["MISSION_SERVICE_URL", "MISSION_SERVICE_TOKEN"],
   faucet: ["DEAL_FAUCET_KEY"],
+  sell: ["DEAL_ASSESSOR_KEY", "DEAL_CUSTODY_KEY"],
 };
 
 /** For routes that cannot run without a secret: a typed refusal instead of a half-configured run. */
@@ -74,6 +81,7 @@ export function health(r: EnvResult) {
       verifier: Boolean(r.env.DEAL_VERIFIER_KEY),
       missions: Boolean(r.env.MISSION_SERVICE_URL && r.env.MISSION_SERVICE_TOKEN),
       faucet: Boolean(r.env.DEAL_FAUCET_KEY),
+      sell: Boolean(r.env.DEAL_ASSESSOR_KEY && r.env.DEAL_CUSTODY_KEY),
     },
   };
 }
