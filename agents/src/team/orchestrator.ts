@@ -205,11 +205,15 @@ export async function* runStages(o: RunStagesOptions): AsyncGenerator<MissionEve
 
     const events: MissionEvent[] = [];
     const stage = p.blueprint.stages[i]!;
+    const stageInputs = [...results];
     await Promise.all(stage.roles.map(async (roleName) => {
       const agent = agents.get(roleName)!;
       const role = p.blueprint.roles.find((r) => r.name === roleName)!;
       // One capability token per provider the role uses, scoped to the role's actions.
-      const env: Record<string, string> = { ...(o.workerEnv?.[roleName] ?? {}), ROLE: roleName, GOAL: p.goal.slice(0, 500) };
+      // Earlier stages' results (already through the reader's RESULT schema) are this stage's inputs.
+      const env: Record<string, string> = {
+        ...(o.workerEnv?.[roleName] ?? {}), ROLE: roleName, GOAL: p.goal.slice(0, 500), INPUTS: JSON.stringify(stageInputs),
+      };
       const byProvider = new Map<string, string[]>();
       for (const c of role.capabilities) {
         const [prov, a] = c.split(":") as [string, string];
