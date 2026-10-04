@@ -82,6 +82,11 @@ test("catalogue: lists every fixture, filters by query string, never shows the s
   assert.ok(svc.html.includes("Invoice OCR") && !svc.html.includes("Trip planner"));
   const flagged = await page("/?hideFlagged=1");
   assert.ok(!flagged.html.includes("B2B leads, DACH"));
+  // The form's max price is USDC (#134): the listing's own USDC price keeps it in the results.
+  const power = FIXTURES.find((l) => l.meta.name === "EU day-ahead power prices 2025")!;
+  const usdcMax = await page(`/?maxUsdc=${Number(power.price) / 1e6}`);
+  assert.ok(usdcMax.html.includes(power.meta.name) && usdcMax.html.includes('placeholder="Max price (USDC)"'));
+  assert.ok(!(await page(`/?maxUsdc=${Number(power.price - 1n) / 1e6}`)).html.includes(power.meta.name));
   const junk = await page("/?kind=Admin&maxPrice=1e99&minGrade=Z");
   assert.equal(junk.status, 200);
 });

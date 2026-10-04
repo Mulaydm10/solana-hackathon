@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { describeRep } from "@deal/core";
+import { describeRep, formatAmount } from "@deal/core";
 import { categories, parseQuery, search } from "../lib/catalogue";
 import { demand } from "../lib/demand";
 import { siteRegistry } from "../lib/site-registry";
@@ -32,7 +32,7 @@ export default async function Catalogue({ searchParams }: { searchParams: Promis
           <option value="">Any grade</option>
           {["A", "B", "C", "D"].map((g) => <option key={g} value={g}>Grade {g} or better</option>)}
         </select>
-        <input name="maxPrice" placeholder="Max price (base units)" defaultValue={query.maxPrice?.toString() ?? ""} aria-label="Maximum price in base units" />
+        <input name="maxUsdc" inputMode="decimal" placeholder="Max price (USDC)" defaultValue={query.maxPrice === undefined ? "" : formatAmount(query.maxPrice, 6)} aria-label="Maximum price in USDC" />
         <label><input type="checkbox" name="hideFlagged" value="1" defaultChecked={query.hideFlagged} /> Hide flagged sellers</label>
         <label><input type="checkbox" name="attestedOnly" value="1" defaultChecked={query.attestedOnly} /> Assessed only</label>
         <button type="submit">Search</button>

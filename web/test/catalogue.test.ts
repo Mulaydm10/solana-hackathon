@@ -50,5 +50,10 @@ test("parseQuery ignores anything malformed and never throws", () => {
     q: undefined, kind: undefined, category: undefined, maxPrice: undefined, minGrade: undefined, hideFlagged: false, attestedOnly: false,
   });
   assert.equal(parseQuery({ maxPrice: "2500000" }).maxPrice, 2_500_000n);
+  // The catalogue form sends USDC (#134): "2" means 2 USDC, not 2 base units.
+  assert.equal(parseQuery({ maxUsdc: "2" }).maxPrice, 2_000_000n);
+  assert.equal(parseQuery({ maxUsdc: "2.5" }).maxPrice, 2_500_000n);
+  assert.equal(parseQuery({ maxUsdc: "abc" }).maxPrice, undefined);
+  assert.equal(parseQuery({ maxUsdc: "1.0000001" }).maxPrice, undefined);
   assert.equal(parseQuery({ q: "x".repeat(500) }).q?.length, 200);
 });
