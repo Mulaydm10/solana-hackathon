@@ -7,6 +7,7 @@ import { createApp } from "../src/app.ts";
 import { SERVICES } from "../src/catalog.ts";
 import { parseBudgetUsdc, parseDeadlineMins, ruleDraft } from "../src/draft.ts";
 import type { Desk, LockInput } from "../src/desk.ts";
+import type { DealView, Sent } from "@deal/chain";
 import type { GuardConfig } from "../src/guard.ts";
 
 const TOKEN = "test-token-0123456789";
@@ -15,28 +16,57 @@ const NOW = 1_800_000_000;
 const BUYER = "Buyer1111111111111111111111111111111111111" as Address;
 const sellerOf = (id: string) => `Seller${id}`.padEnd(43, "1") as Address;
 
-function fakeDesk(failWith?: number) {
+/** In-memory stand-in for the chain: tracks deal status and refuses like the program would. */
+function fakeDesk(refuseWith?: string) {
   const calls: { op: string; arg: unknown }[] = [];
-  const fail = () => {
-    if (failWith !== undefined) throw Object.assign(new Error("tx failed"), { cause: { context: { code: failWith } } });
+  const state = new Map<string, { status: string; deliveryHash: string }>();
+  const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
+  let n = 0;
+  const step = (op: string, deal: Address, from: string[], to: string, arg: unknown = deal): Sent => {
+    calls.push({ op, arg });
+    if (refuseWith) return { ok: false, reason: refuseWith, message: "refused" };
+    const d = state.get(deal);
+    if (!d) return { ok: false, reason: "DEAL_NOT_FOUND", message: "no deal" };
+    if (!from.includes(d.status)) return { ok: false, reason: "WrongStatus", message: "wrong status" };
+    d.status = to;
+    return { ok: true, signature: `sig${op}` };
   };
   const desk: Desk = {
     buyer: BUYER,
+    verifier: "Verifier111111111111111111111111111111111111" as Address,
     sellerFor: (id) => (SERVICES.some((s) => s.id === id) ? sellerOf(id) : undefined),
     async lock(input: LockInput) {
       calls.push({ op: "lock", arg: input });
-      return { deal: "Deal1111111111111111111111111111111111111" as Address, signature: "sigLock" };
+      if (refuseWith) return { ok: false, reason: refuseWith, message: "refused" };
+      const deal = `Deal${++n}`.padEnd(43, "1") as Address;
+      state.set(deal, { status: "Open", deliveryHash: "" });
+      return { ok: true, signature: "siglock", deal };
     },
-    async deliver(deal, hash) { calls.push({ op: "deliver", arg: { deal, hash } }); return "sigDeliver"; },
-    async release(deal) { fail(); calls.push({ op: "release", arg: deal }); return "sigRelease"; },
-    async refund(deal) { fail(); calls.push({ op: "refund", arg: deal }); return "sigRefund"; },
-    async claim(deal) { fail(); calls.push({ op: "claim", arg: deal }); return "sigClaim"; },
-    async get() { return null; },
+    accept: async (d) => step("accept", d, ["Open"], "Funded"),
+    async deliver(d, hash, invoice) {
+      const r = step("deliver", d, ["Funded"], "Delivered", { hash, invoice });
+      if (r.ok) state.get(d)!.deliveryHash = hex(hash);
+      return r;
+    },
+    async release(d, hash) {
+      if (state.get(d) && state.get(d)!.deliveryHash !== hex(hash)) return { ok: false, reason: "DeliveryMismatch", message: "x" };
+      return step("release", d, ["Delivered"], "Released");
+    },
+    challenge: async (d) => step("challenge", d, ["Delivered"], "Challenged"),
+    resolve: async (d, ok) => step("resolve", d, ["Challenged"], ok ? "VerifiedPass" : "VerifiedFail", ok),
+    timeoutRefund: async (d) => step("timeout", d, ["Challenged"], "NoVerdict"),
+    refund: async (d) => step("refund", d, ["Open", "Funded"], "Refunded"),
+    claim: async (d) => step("claim", d, ["Delivered"], "Claimed"),
+    cancel: async (d) => step("cancel", d, ["Open"], "Cancelled"),
+    async get(d) {
+      const x = state.get(d);
+      return x ? ({ address: d, status: x.status, deliveryHash: x.deliveryHash } as unknown as DealView) : null;
+    },
     async status() {
-      return { program: "Prog" as Address, programDeployed: true, buyerSol: 1, buyerTokens: "5", mint: "Mint" as Address, sellers: 4 };
+      return { program: "Prog" as Address, programDeployed: true, buyerSol: 1, buyerTokens: "5", mint: "Mint" as Address, sellers: 5, verifier: "V" as Address, policy: null };
     },
   };
-  return { desk, calls };
+  return { desk, calls, state };
 }
 
 async function serve(desk: Desk, guard: Partial<GuardConfig> = {}) {
@@ -69,30 +99,63 @@ test("rule drafter picks the matching service", async () => {
   assert.equal(r.serviceId, "research");
 });
 
-test("draft -> lock -> deliver -> release", async () => {
+async function lockTranslation(s: Awaited<ReturnType<typeof serve>>) {
+  const draft = await s.post("/api/draft", { request: "Translate a German contract to English in 2 hours under 10 USDC" });
+  const lock = await s.post("/api/lock", { terms: draft.terms, budgetUsdc: draft.budgetUsdc });
+  return { draft, lock, deal: lock.deal as string };
+}
+
+test("draft -> lock (stake/bond/tolerance shape) -> accept -> deliver -> hash-bound release", async () => {
   const { desk, calls } = fakeDesk();
   const s = await serve(desk);
   try {
-    const draft = await s.post("/api/draft", { request: "Translate a German contract to English in 2 hours under 10 USDC" });
-    assert.equal(draft.ok, true);
+    const { draft, lock, deal } = await lockTranslation(s);
     assert.equal(draft.service.id, "translate");
-    assert.equal(draft.terms.price, "2000000");
-    assert.equal(draft.terms.deadline, NOW + 7200);
     assert.match(draft.summary, /You pay 2 USDC into escrow/);
-
-    const lock = await s.post("/api/lock", { terms: draft.terms, budgetUsdc: draft.budgetUsdc });
     assert.equal(lock.ok, true, JSON.stringify(lock));
     const input = calls.find((c) => c.op === "lock")!.arg as LockInput;
-    assert.equal(input.price, 2_000_000n);
+    assert.deepEqual([input.price, input.stake, input.bondBps, input.toleranceBps], [2_000_000n, 200_000n, 1000, 500]);
     assert.equal(input.termsHash.length, 32);
-
-    const deliver = await s.post(`/api/deals/${lock.deal}/deliver`);
-    assert.equal(deliver.ok, true);
-    assert.match(deliver.delivery, /^done: /);
-    const release = await s.post(`/api/deals/${lock.deal}/release`);
-    assert.deepEqual([release.ok, release.signature], [true, "sigRelease"]);
+    assert.equal((await s.post(`/api/deals/${deal}/accept`)).ok, true);
+    const delivered = await s.post(`/api/deals/${deal}/deliver`);
+    assert.equal(delivered.ok, true);
+    assert.match(delivered.delivery, /^done: /);
+    const { invoice } = calls.find((c) => c.op === "deliver")!.arg as { invoice: bigint };
+    assert.equal(invoice, 2_000_000n);
+    assert.equal((await s.post(`/api/deals/${deal}/release`)).ok, true);
+    assert.equal((await s.post(`/api/deals/${deal}/release`)).reason, "WrongStatus");
   } finally {
     s.close();
+  }
+});
+
+test("release before any delivery is refused", async () => {
+  const s = await serve(fakeDesk().desk);
+  try {
+    const { deal } = await lockTranslation(s);
+    assert.equal((await s.post(`/api/deals/${deal}/release`)).reason, "NO_DELIVERY");
+  } finally {
+    s.close();
+  }
+});
+
+test("challenge + verifier: junk delivery fails, good delivery passes", async () => {
+  for (const [quality, expected] of [["junk", "VerifiedFail"], ["good", "VerifiedPass"]] as const) {
+    const { desk, state } = fakeDesk();
+    const s = await serve(desk);
+    try {
+      const { deal } = await lockTranslation(s);
+      await s.post(`/api/deals/${deal}/accept`);
+      await s.post(`/api/deals/${deal}/deliver`, { quality });
+      assert.equal((await s.post(`/api/deals/${deal}/verify`)).reason, "WrongStatus"); // not challenged yet
+      assert.equal((await s.post(`/api/deals/${deal}/challenge`)).ok, true);
+      const v = await s.post(`/api/deals/${deal}/verify`);
+      assert.equal(v.ok, true, JSON.stringify(v));
+      assert.equal(v.verdict.ok, quality === "good", JSON.stringify(v.verdict));
+      assert.equal(state.get(deal)!.status, expected);
+    } finally {
+      s.close();
+    }
   }
 });
 
@@ -111,8 +174,7 @@ test("over-budget terms are refused before any money moves", async () => {
 });
 
 test("tampered seller is refused", async () => {
-  const { desk } = fakeDesk();
-  const s = await serve(desk);
+  const s = await serve(fakeDesk().desk);
   try {
     const draft = await s.post("/api/draft", { request: "translate a page" });
     const lock = await s.post("/api/lock", { terms: { ...draft.terms, seller: sellerOf("design") } });
@@ -122,12 +184,11 @@ test("tampered seller is refused", async () => {
   }
 });
 
-test("program refusals come back as reason codes", async () => {
-  const { desk } = fakeDesk(6006); // DeadlineNotReached
-  const s = await serve(desk);
+test("program refusals pass through as reason codes", async () => {
+  const s = await serve(fakeDesk("OverMaxPrice").desk);
   try {
-    const r = await s.post("/api/deals/Deal1111111111111111111111111111111111111/refund");
-    assert.deepEqual([r.ok, r.reason], [false, "DeadlineNotReached"]);
+    const { lock } = await lockTranslation(s);
+    assert.deepEqual([lock.ok, lock.reason], [false, "OverMaxPrice"]);
   } finally {
     s.close();
   }
@@ -138,7 +199,7 @@ test("status reports the live setup", async () => {
   const s = await serve(desk);
   try {
     const r = await (await fetch(s.base + "/api/status")).json() as Record<string, any>;
-    assert.deepEqual([r.ok, r.programDeployed, r.sellers, r.drafting], [true, true, 4, "rules"]);
+    assert.deepEqual([r.ok, r.programDeployed, r.sellers, r.drafting], [true, true, 5, "rules"]);
   } finally {
     s.close();
   }

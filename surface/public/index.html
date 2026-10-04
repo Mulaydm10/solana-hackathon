@@ -96,7 +96,7 @@
       <label>Review window <input type="number" id="reviewMins" min="0"> min</label>
       <label>Budget <input type="number" id="budget" min="0" step="0.01"> <span id="sym">USDC</span></label>
     </div>
-    <div class="row"><button id="lockBtn">Approve &amp; lock in escrow</button><span class="muted">One Solana transaction creates the deal and moves the money.</span></div>
+    <div class="row"><button id="lockBtn">Approve &amp; lock in escrow</button><span class="muted">One Solana transaction creates the deal and moves the money; the program checks your spending policy first.</span></div>
     <div id="lockRefusal"></div>
   </section>
 
@@ -105,9 +105,14 @@
     <div>Status: <span class="status" id="status">…</span> <span class="muted" id="clock"></span></div>
     <dl class="kv" id="kv"></dl>
     <div class="row">
+      <button id="acceptBtn" class="ghost">Seller accepts (posts stake)</button>
       <button id="deliverBtn" class="ghost">Seller delivers</button>
+      <button id="junkBtn" class="ghost">Seller delivers junk</button>
       <button id="releaseBtn">Release payment</button>
+      <button id="challengeBtn" class="ghost">Challenge (post bond)</button>
+      <button id="verifyBtn" class="ghost">Verifier decides</button>
       <button id="refundBtn" class="ghost">Refund (after deadline)</button>
+      <button id="timeoutBtn" class="ghost">Refund (no verdict)</button>
       <button id="claimBtn" class="ghost">Seller claims (after review)</button>
     </div>
     <div id="dealRefusal"></div>
@@ -122,8 +127,9 @@ const EXAMPLES = [
   "Market research report on European battery suppliers by tomorrow, under 20 USDC",
   "Market research report on battery suppliers, under 10 USDC",
   "A price list of the top 20 GPUs as a CSV within 5 minutes",
+  "Security audit of our smart contract within 2 hours, under 100 USDC",
 ];
-let cfg, services = [], draft, deal, deadline = 0, reviewEnd = 0, onChain;
+let cfg, services = [], draft, deal, deadline = 0, reviewEnd = 0, resolveEnd = 0, onChain;
 
 // Write token: arrives once as ?token=..., is kept in this browser, and is stripped from the URL.
 const TOKEN = (() => {
@@ -187,18 +193,18 @@ $("lockBtn").onclick = () => busy($("lockBtn"), async () => {
   $("deal").scrollIntoView({ behavior: "smooth" });
 });
 
-async function act(btn, step) {
+async function act(btn, step, body = {}) {
   await busy(btn, async () => {
-    const r = await api(`/api/deals/${deal}/${step}`, {});
+    const r = await api(`/api/deals/${deal}/${step}`, body);
     refusal($("dealRefusal"), r);
     if (r.ok && r.delivery) { $("delivery").textContent = r.delivery; $("deliveryBox").hidden = false; }
+    if (r.ok && r.verdict) $("dealRefusal").innerHTML = `<div class="refusal">Verifier: ${r.verdict.ok ? "delivery passes — seller paid" : "delivery fails (" + r.verdict.reasons.join(", ") + ") — buyer refunded, seller's stake slashed"}</div>`;
     await refresh();
   });
 }
-$("deliverBtn").onclick = () => act($("deliverBtn"), "deliver");
-$("releaseBtn").onclick = () => act($("releaseBtn"), "release");
-$("refundBtn").onclick = () => act($("refundBtn"), "refund");
-$("claimBtn").onclick = () => act($("claimBtn"), "claim");
+const ACTIONS = { acceptBtn: "accept", deliverBtn: "deliver", releaseBtn: "release", challengeBtn: "challenge", verifyBtn: "verify", refundBtn: "refund", timeoutBtn: "timeout", claimBtn: "claim" };
+for (const [id, step] of Object.entries(ACTIONS)) $(id).onclick = () => act($(id), step);
+$("junkBtn").onclick = () => act($("junkBtn"), "deliver", { quality: "junk" });
 
 async function refresh() {
   const r = await api(`/api/deals/${deal}`);
@@ -206,13 +212,18 @@ async function refresh() {
   onChain = r.onChain;
   deadline = onChain.deadline;
   reviewEnd = onChain.deliveredAt ? onChain.deliveredAt + onChain.reviewSecs : 0;
+  resolveEnd = onChain.challengedAt ? onChain.challengedAt + onChain.resolveSecs : 0;
   $("status").textContent = onChain.status;
   $("status").className = "status " + onChain.status;
   const ex = (a) => `https://explorer.solana.com/address/${a}?cluster=${cfg.cluster}`;
   $("kv").innerHTML = [
     ["Deal account", `<a href="${ex(onChain.address)}" target="_blank">${onChain.address}</a>`],
-    ["Escrowed", `${fmt(onChain.amount)} ${cfg.symbol}`],
+    ["Order (escrowed)", `${fmt(onChain.amount)} ${cfg.symbol}`],
+    ["Seller stake", `${fmt(onChain.stakePosted)} of ${fmt(onChain.stakeRequired)} ${cfg.symbol}`],
+    ["Invoice", onChain.invoiceAmount === "0" ? "—" : `${fmt(onChain.invoiceAmount)} ${cfg.symbol}`],
+    ["Challenge bond", onChain.bondPosted === "0" ? "—" : `${fmt(onChain.bondPosted)} ${cfg.symbol}`],
     ["Seller", onChain.seller],
+    ["Verifier", onChain.verifier],
     ["Deadline", new Date(onChain.deadline * 1000).toLocaleString()],
     ["Terms hash", onChain.termsHash],
     ["Delivery hash", /^0+$/.test(onChain.deliveryHash) ? "—" : onChain.deliveryHash],
@@ -226,13 +237,19 @@ function tick() {
   if (!onChain) return;
   const now = Date.now() / 1000;
   const s = onChain.status;
-  $("deliverBtn").disabled = s !== "Funded" || now > deadline;
+  $("acceptBtn").disabled = s !== "Open" || now > deadline;
+  $("deliverBtn").disabled = $("junkBtn").disabled = s !== "Funded" || now > deadline;
   $("releaseBtn").disabled = s !== "Delivered";
-  $("refundBtn").disabled = s !== "Funded" || now <= deadline;
+  $("challengeBtn").disabled = s !== "Delivered" || now >= reviewEnd;
+  $("verifyBtn").disabled = s !== "Challenged" || now > resolveEnd;
+  $("refundBtn").disabled = !["Open", "Funded"].includes(s) || now <= deadline;
+  $("timeoutBtn").disabled = s !== "Challenged" || now <= resolveEnd;
   $("claimBtn").disabled = s !== "Delivered" || now < reviewEnd;
   const left = (t) => { const d = Math.max(0, Math.round(t - now)); return `${Math.floor(d / 60)}m ${d % 60}s`; };
-  $("clock").textContent = s === "Funded" ? (now <= deadline ? `· delivery due in ${left(deadline)}` : "· deadline passed — refund available")
-    : s === "Delivered" ? (now < reviewEnd ? `· buyer review ends in ${left(reviewEnd)}` : "· review window over — seller may claim") : "";
+  $("clock").textContent = s === "Open" ? "· waiting for the seller to accept"
+    : s === "Funded" ? (now <= deadline ? `· delivery due in ${left(deadline)}` : "· deadline passed — refund available, stake slashed")
+    : s === "Delivered" ? (now < reviewEnd ? `· buyer review ends in ${left(reviewEnd)}` : "· review window over — seller may claim")
+    : s === "Challenged" ? (now <= resolveEnd ? `· verifier must decide within ${left(resolveEnd)}` : "· no verdict in time — buyer may refund") : "";
 }
 setInterval(tick, 1000);
 
@@ -256,6 +273,7 @@ async function loadStatus() {
     ["Buyer wallet", `${st.buyerSol.toFixed(3)} SOL · ${fmt(st.buyerTokens)} ${cfg.symbol}`],
     ["Sellers listed", `${st.sellers} (sign without SOL)`],
     ["Terms drafted by", st.drafting === "claude" ? "Claude" : "rule-based parser"],
+    ["Buyer policy (on chain)", st.policy ? `${fmt(st.policy.periodSpent)} / ${fmt(st.policy.periodBudget)} ${cfg.symbol} today · max ${fmt(st.policy.maxPrice)} · approval above ${fmt(st.policy.approvalThreshold)} · ${st.policy.allowedSellers.length} approved sellers` : "none"],
   ].map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
 }
 function check(label) {
@@ -282,25 +300,31 @@ $("proveBtn").onclick = () => busy($("proveBtn"), async () => {
   let passed = 0, total = 0;
   const run = async (label, fn) => { total++; const c = check(label); try { if (await fn(c)) passed++; } catch (e) { c.done(false, String(e)); } };
 
+  const status = async (d) => (await api(`/api/deals/${d}`)).onChain;
   let payDeal;
   await run("AI drafts terms from a plain-English request (service, price, deadline)", async (c) => {
     const d = await api("/api/draft", { request: EXAMPLES[0] });
     return c.done(d.ok && d.service.id === "translate", d.ok ? `${d.service.name}, ${fmt(d.terms.price)} ${cfg.symbol}, via ${d.source}` : d.reason);
   });
-  await run("Lock: one transaction moves the money into the program's escrow", async (c) => {
+  await run("Lock: the program checks the buyer's policy and escrows the order", async (c) => {
     const { l } = await draftAndLock(EXAMPLES[0]);
     c.link("lock tx", l); payDeal = l.ok && l.deal;
-    const st = payDeal && (await api(`/api/deals/${payDeal}`)).onChain;
-    return c.done(st && st.status === "Funded", st ? `deal status on chain: ${st.status}, ${fmt(st.amount)} ${cfg.symbol} escrowed` : l.reason);
+    const st = payDeal && (await status(payDeal));
+    return c.done(st && st.status === "Open", st ? `status: ${st.status}, ${fmt(st.amount)} ${cfg.symbol} escrowed` : l.reason);
   });
-  await run("Deliver: the seller records a hash of the work on chain", async (c) => {
+  await run("Seller accepts the terms and posts its stake", async (c) => {
+    const r = await api(`/api/deals/${payDeal}/accept`, {}); c.link("accept tx", r);
+    const st = await status(payDeal);
+    return c.done(r.ok && st.status === "Funded" && st.stakePosted !== "0", `status: ${st.status}, stake ${fmt(st.stakePosted)} ${cfg.symbol}`);
+  });
+  await run("Deliver: the seller commits the work's hash and an invoice on chain", async (c) => {
     const r = await api(`/api/deals/${payDeal}/deliver`, {}); c.link("deliver tx", r);
-    const st = (await api(`/api/deals/${payDeal}`)).onChain;
-    return c.done(r.ok && st.status === "Delivered", `status: ${st.status}, delivery hash ${st.deliveryHash.slice(0, 12)}…`);
+    const st = await status(payDeal);
+    return c.done(r.ok && st.status === "Delivered", `status: ${st.status}, invoice ${fmt(st.invoiceAmount)}, hash ${st.deliveryHash.slice(0, 12)}…`);
   });
-  await run("Release: the buyer accepts and the program pays the seller", async (c) => {
+  await run("Release: the buyer approves exactly that delivery; seller paid, stake returned", async (c) => {
     const r = await api(`/api/deals/${payDeal}/release`, {}); c.link("release tx", r);
-    const st = (await api(`/api/deals/${payDeal}`)).onChain;
+    const st = await status(payDeal);
     return c.done(r.ok && st.status === "Released", `status: ${st.status}`);
   });
   await run("Solana refuses to pay the same deal twice", async (c) => {
@@ -311,20 +335,35 @@ $("proveBtn").onclick = () => busy($("proveBtn"), async () => {
     const { l } = await draftAndLock(EXAMPLES[2]);
     return c.done(!l.ok && l.reason === "OVER_BUDGET", `refused: ${l.reason}`);
   });
+  await run("On-chain policy: a purchase above the buyer's max price is refused by Solana", async (c) => {
+    const { d, l } = await draftAndLock(EXAMPLES[4]);
+    return c.done(!l.ok && l.reason === "OverMaxPrice", `${d.ok ? d.service.name + " at " + fmt(d.terms.price) + " " + cfg.symbol : ""} — refused by the program: ${l.reason}`);
+  });
+  await run("Bad delivery: buyer challenges, verifier fails it, buyer refunded and stake slashed", async (c) => {
+    const { l } = await draftAndLock(EXAMPLES[0]); c.link("lock tx", l);
+    if (!l.ok) return c.done(false, l.reason);
+    c.link("accept tx", await api(`/api/deals/${l.deal}/accept`, {}));
+    c.link("junk delivery tx", await api(`/api/deals/${l.deal}/deliver`, { quality: "junk" }));
+    c.link("challenge tx", await api(`/api/deals/${l.deal}/challenge`, {}));
+    const v = await api(`/api/deals/${l.deal}/verify`, {}); c.link("verdict tx", v);
+    const st = await status(l.deal);
+    return c.done(v.ok && st.status === "VerifiedFail", `verifier: ${v.verdict ? v.verdict.reasons.join(", ") : v.reason} → ${st.status}`);
+  });
   let refundDeal, deadlineAt;
   await run("Solana refuses a refund before the deadline", async (c) => {
     const { l } = await draftAndLock(EXAMPLES[3], 1);
     c.link("lock tx", l); refundDeal = l.deal; deadlineAt = Date.now() + 61_000;
+    c.link("accept tx", await api(`/api/deals/${refundDeal}/accept`, {}));
     const r = await api(`/api/deals/${refundDeal}/refund`, {});
     return c.done(!r.ok && r.reason === "DeadlineNotReached", `refused by the program: ${r.reason}`);
   });
-  await run("No delivery by the deadline: the buyer gets a full refund", async (c) => {
+  await run("Missed deadline: buyer refunded and the seller's stake slashed to the buyer", async (c) => {
     while (Date.now() < deadlineAt + 3000) { c.note(`waiting for the deadline… ${Math.ceil((deadlineAt + 3000 - Date.now()) / 1000)}s`); await sleep(1000); }
     let r;
     for (let i = 0; i < 10; i++) { r = await api(`/api/deals/${refundDeal}/refund`, {}); if (r.ok || r.reason !== "DeadlineNotReached") break; await sleep(3000); }
     c.link("refund tx", r);
-    const st = (await api(`/api/deals/${refundDeal}`)).onChain;
-    return c.done(r.ok && st.status === "Refunded", `status: ${st.status}`);
+    const st = await status(refundDeal);
+    return c.done(r.ok && st.status === "Refunded" && st.stakePosted !== "0", `status: ${st.status}, stake ${fmt(st.stakePosted)} ${cfg.symbol} to the buyer`);
   });
   $("proveNote").textContent = `${passed} / ${total} checks passed${passed === total ? " — everything works on chain." : "."}`;
   await loadStatus();

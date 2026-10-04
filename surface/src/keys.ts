@@ -16,6 +16,10 @@ export type DeskConfig = {
   symbol: string;
   /** serviceId -> seller keypair file. */
   sellers: Record<string, string>;
+  /** Independent verifier key that decides challenges (never buyer or seller). */
+  verifierKeyPath: string;
+  /** The buyer policy's approver: signs deals above the approval threshold. */
+  approverKeyPath: string;
 };
 
 export async function loadSigner(path: string): Promise<KeyPairSigner> {

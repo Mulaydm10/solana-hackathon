@@ -4,7 +4,7 @@
   "type": "module",
   "version": "0.1.0",
   "scripts": {
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "tsc --noEmit && node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "setup:devnet": "node --import tsx scripts/setup-devnet.ts",
     "start": "node --import tsx src/main.ts"
