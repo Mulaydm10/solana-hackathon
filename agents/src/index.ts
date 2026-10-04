@@ -4,3 +4,4 @@ export * from "./broker/index.ts";
 export * from "./reader/index.ts";
 export * from "./custody/index.ts";
 export * from "./seller/index.ts";
+export * from "./vm/index.ts";
