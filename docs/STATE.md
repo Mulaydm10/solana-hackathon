@@ -1,7 +1,7 @@
 # STATE.md — current shape of the project (written by design only, via `claim/state`)
 
 ## Purpose
-Build for the Superteam Germany "Build an MVP with Solana at WHU" hackathon (deadline ~4-5 Oct 2026, confirm on the listing; winners 8 Oct): port the agent-spending-authority project (parent agent grants a child agent a capped, revocable USDC allowance, spent on x402-gated APIs) to Solana devnet, with the cap enforced on chain by SPL Token approve/revoke delegation. TypeScript/Node. Plan: Analysis/strategy.md.
+Build for the Superteam Germany "Build an MVP with Solana at WHU" hackathon: an AI procurement layer. A buyer (person or agent) states a need; the AI finds a service and fills in an audited deal template; a Solana program (`deal_escrow`, devnet) holds the USDC and pays on delivery or refunds after the deadline. MVP = one template (pay on delivery), end to end, live on devnet. TypeScript/Node + Anchor. Idea: Analysis/idea-ai-procurement-lawyer-2026-10-03.md; interfaces: contracts/.
 
 mode: team
 attention: active
@@ -17,9 +17,9 @@ design: Mulaydm10
 | lane | directory | purpose | contract |
 |------|-----------|---------|----------|
 | `lane:canary` | `canary/` | two standing issues: post-merge canary (permanent claim, draft PR) and pre-merge canary (transient claim per workflow PR) | — |
-| `lane:surface` | `surface/` | x402-gated server, browser demo, MCP server (refusals are normal results) | `contracts/surface.md` |
-| `lane:chain` | `chain/` | Solana devnet: x402 USDC payments, SPL approve/revoke delegation, RPC getTransaction verification | `contracts/chain.md` |
-| `lane:core` | `core/` | chain-agnostic grant/allowance rules (child <= parent authority, revoke cuts subtree); no network or chain code | `contracts/core.md` |
+| `lane:surface` | `surface/` | HTTP API + web demo of Ask -> Find -> Terms -> Lock -> Deliver -> Settle; Claude drafts terms (refusals are normal results) | `contracts/surface.md` |
+| `lane:chain` | `chain/` | Solana program `deal_escrow` (Anchor) + TS client; tests run the compiled program in LiteSVM | `contracts/chain.md` |
+| `lane:core` | `core/` | chain-agnostic deal terms: validation, terms hash, plain-language summary; no network or chain code | `contracts/core.md` |
 <!-- bootstrap.sh appends one row per lane you pass it; design edits after that. A lane may be a nested path (`src/01_ingest`); no lane may be a prefix of another. -->
 
 ## Verify environment
@@ -43,3 +43,4 @@ design: Mulaydm10
 ## Log
 - 2026-09-29: repo created from agent-bus-template; bootstrap run (mode=team).
 - 2026-09-29: no Devin on this repo. Design = Dhruv's Claude Code on `mac` (Mulaydm10); the only worker = vedant059. Omen is not in this project's pool. Teammate setup is plugin-free: vedant059 follows AGENTS.md via docs/TEAMMATE.md.
+- 2026-10-04: direction set to the AI procurement layer (pay-on-delivery escrow program). On Dhruv's instruction the design session also builds the first lane tasks (deviation from "design never claims lane tasks"); vedant059 reviews.
