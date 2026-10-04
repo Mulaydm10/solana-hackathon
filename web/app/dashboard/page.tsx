@@ -2,6 +2,7 @@ import Link from "next/link";
 import { usdc } from "../../lib/catalogue-json";
 import { siteRegistry } from "../../lib/site-registry";
 import { sellerView } from "../../lib/dashboard";
+import { ConnectedSeller } from "./connected-seller";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   return (
     <main>
       <h1>Seller dashboard</h1>
+      <ConnectedSeller shown={seller} />
       <form method="get"><input name="seller" placeholder="Seller wallet address" defaultValue={seller ?? ""} aria-label="Seller wallet" /> <button type="submit">Show</button></form>
       {!seller ? (
         <p data-testid="dashboard-empty">Enter a seller wallet (or connect yours) to see its listings and reputation.</p>

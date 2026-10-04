@@ -7,7 +7,7 @@
 import { type Address, type Instruction, type TransactionSigner } from "@solana/kit";
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { getAcceptInstructionAsync, getInitPolicyInstructionAsync, getSubmitDeliveryInstructionAsync } from "@deal/chain";
-import { canonicalJson, sha256Hex, type DealTerms } from "@deal/core";
+import { canonicalJson, describeTerms, formatAmount, sha256Hex, type DealTerms } from "@deal/core";
 import { FEE_REVIEW_SECS, feeDealIx, hexToBytes, randomDealId } from "./mission-flow";
 
 export type Budget = {
@@ -55,17 +55,34 @@ export function purchaseTerms(buyer: string, l: ListingForSale, deadline: number
 
 export async function buyIx(
   buyer: TransactionSigner, l: ListingForSale, o: { mint: string; verifier: string; now: number; deliveryHours?: number; dealId?: bigint },
-): Promise<{ ok: true; deal: Address; ix: Instruction; terms: string } | Refused> {
+): Promise<{ ok: true; deal: Address; ix: Instruction; terms: string; draft: DealTerms } | Refused> {
   // Nothing here is hard-coded to one token: the listing must be priced in the site's configured mint.
   if (l.mint !== o.mint) return refuse("MINT_MISMATCH", "this listing is priced in a different token than the site settles in");
   if (l.kind === "Team") return refuse("TEAM_LISTING", "teams are hired on the Hire page");
   const deadline = o.now + (o.deliveryHours ?? 24) * 3_600;
-  const terms = canonicalJson(purchaseTerms(buyer.address, l, deadline));
+  const draft = purchaseTerms(buyer.address, l, deadline);
+  const terms = canonicalJson(draft);
   const { deal, ix } = await feeDealIx(buyer, {
     listing: { address: l.address, seller: l.seller, price: l.price, contentHash: l.contentHash },
     mint: o.mint as Address, verifier: o.verifier as Address, deadline: BigInt(deadline), termsHash: sha256Hex(terms), dealId: o.dealId ?? randomDealId(),
   });
-  return { ok: true, deal, ix, terms };
+  return { ok: true, deal, ix, terms, draft };
+}
+
+const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
+const duration = (secs: number) =>
+  secs >= 86_400 && secs % 86_400 === 0 ? plural(secs / 86_400, "day") : secs >= 3_600 && secs % 3_600 === 0 ? plural(secs / 3_600, "hour") : plural(Math.ceil(secs / 60), "minute");
+
+/** The deal draft the buyer reviews before the wallet is asked to sign: exactly the terms the deal commits to. */
+export function dealDraft(t: DealTerms): { price: string; seller: string; deadline: string; reviewWindow: string; summary: string } {
+  const opts = { decimals: 6, symbol: "USDC" };
+  return {
+    price: `${formatAmount(t.price, opts.decimals)} ${opts.symbol}`,
+    seller: t.seller,
+    deadline: new Date(t.deadline * 1000).toISOString().replace(".000Z", " UTC").replace("T", " "),
+    reviewWindow: `${duration(t.reviewSecs)} after delivery`,
+    summary: describeTerms(t, opts),
+  };
 }
 
 const tokenAccount = async (owner: string, mint: string) =>

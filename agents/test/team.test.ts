@@ -134,6 +134,25 @@ test("the shipped researcher buys from its mandate's payee with no extra env, an
   assert.match(r.output, /data purchase refused: NO_PAYEE/);
 });
 
+test("the shipped writer turns the research stage's result into a day-by-day plan, not a placeholder", async () => {
+  const c = await chain();
+  const { broker: b, live } = broker(c);
+  const events = await collect(runMission({
+    ctx: c.ctx, buyer: c.buyer, blueprint: blueprint(c.seller.address), goal: "Plan a 3-day trip to Lisbon in May", budget: 10n * USDC, missionId: 12n,
+    expiresAt: c.now() + 3_600n, dealRules: { verifier: c.verifier }, broker: b, capabilities: ["market:read"],
+    workers: { researcher: worker("worker-researcher.mjs"), writer: fileURLToPath(new URL("../workers/writer.mjs", import.meta.url)) },
+    workerEnv: { researcher: { PAYEE: c.seller.address, AMOUNT: String(1n * USDC) } }, approve: async () => true, live, runner: { pollMs: 200 },
+  }));
+  const research = events.find((e) => e.type === "result" && e.role === "researcher") as Extract<MissionEvent, { type: "result" }>;
+  const plan = (events.find((e) => e.type === "result" && e.role === "writer") as Extract<MissionEvent, { type: "result" }>).output;
+  assert.doesNotMatch(plan, /^Report for:/);
+  assert.match(plan, /Destination: Lisbon/);
+  assert.deepEqual(plan.match(/^Day \d+$/gm), ["Day 1", "Day 2", "Day 3"]);
+  assert.match(plan, /Morning: .+\n {2}Afternoon: .+\n {2}Evening: .+/);
+  assert.ok(plan.includes(research.output), "the plan carries the research stage's result");
+  assert.equal(events.at(-1)!.type, "delivered");
+});
+
 test("the mandate's caps bind workers: an over-cap purchase is refused on chain, not by the worker", async () => {
   const c = await chain();
   const { broker: b, live } = broker(c);

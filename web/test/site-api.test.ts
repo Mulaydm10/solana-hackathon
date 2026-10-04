@@ -9,8 +9,9 @@ import { GET as listingRoute } from "../app/api/listings/[address]/route.ts";
 import { GET as llms } from "../app/llms.txt/route.ts";
 import { POST as faucetRoute } from "../app/api/faucet/route.ts";
 import { createDemandStore } from "../lib/demand.ts";
-import { sellerView } from "../lib/dashboard.ts";
+import { connectedSellerHref, sellerView } from "../lib/dashboard.ts";
 import { createFaucet, FAUCET } from "../lib/faucet.ts";
+import { sentSignature } from "../lib/faucet-send.ts";
 import { FIXTURES } from "../lib/registry.ts";
 
 type Item = { address: string; seller: string; kind: string; name: string; grade: string | null; price: string; url: string };
@@ -90,6 +91,14 @@ test("seller dashboard: one seller's listings and its scored record; nothing for
   assert.equal(sellerView(FIXTURES, "../x"), null);
 });
 
+test("seller dashboard: a connected wallet loads its own view unless a seller is already shown", () => {
+  const w = "9hSR6S7WPtxmTojgo6GG3k4yDPecgJY292j7xrsUGWBu";
+  assert.equal(connectedSellerHref(null, w), `/dashboard?seller=${w}`);
+  assert.equal(connectedSellerHref(null, null), null);
+  assert.equal(connectedSellerHref("CKPKJWNdJEqa81x7CkZ14BVPiY6y16Sxs7owznqtWYp5", w), null);
+  assert.equal(connectedSellerHref(null, "../x"), null);
+});
+
 test("faucet: per wallet and per client once a day, a daily cap, and a failed send frees the slot", async () => {
   let t = 1_000_000;
   const sent: string[] = [];
@@ -111,6 +120,11 @@ test("faucet: per wallet and per client once a day, a daily cap, and a failed se
   const g = createFaucet(async () => (await new Promise((r) => setTimeout(r, 10)), { ok: true, signature: "s" }), { now: () => t });
   const both = await Promise.all([g(W[2]!, "a"), g(W[2]!, "b")]);
   assert.deepEqual(both.map((r) => r.ok).sort(), [false, true]);
+});
+
+test("faucet sender reports the transaction signature from Kit's plan result, never [object Object]", () => {
+  const signature = "5xRbAge3KAzc31nDxeTRyPsETjcgQLfi5VUrikb2FTgVE6sWFyEnfv2LDdmJTi2H4q2cKdcSJU8B8STRSFkoU9T6";
+  assert.equal(sentSignature({ kind: "single", status: "successful", context: { signature } } as never), signature);
 });
 
 test("/api/faucet: NOT_CONFIGURED without the server key; the key never appears in a reply", async () => {
