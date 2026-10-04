@@ -2,7 +2,7 @@
 // then driven by a real MCP client over stdio. Proves the package is self-contained and speaks MCP.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -18,6 +18,13 @@ test.after(() => rmSync(dir, { recursive: true, force: true }));
 test("--version and --help work without any dependencies installed", () => {
   assert.match(execFileSync(process.execPath, [cli, "--version"], { cwd: dir }).toString(), /^\d+\.\d+\.\d+/);
   assert.match(execFileSync(process.execPath, [cli, "--help"], { cwd: dir }).toString(), /DEAL_KEYPAIR/);
+});
+
+test("hard rule, bundle: no stage-approval or mandate instruction ships in dist/cli.js", () => {
+  // The IDL (bundled as data) names every instruction, so this looks for the code that builds them, not the names.
+  const banned = /getApproveStageInstruction|getAddMandateInstruction|APPROVE_STAGE_DISCRIMINATOR|ADD_MANDATE_DISCRIMINATOR/;
+  const found = readFileSync(cli, "utf8").match(banned);
+  assert.equal(found, null, `the bundle contains ${found?.[0]}`);
 });
 
 test("refuses to start on mainnet", () => {
