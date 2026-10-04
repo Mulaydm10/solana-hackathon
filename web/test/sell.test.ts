@@ -14,7 +14,7 @@ import { getCreateMintInstructionPlan } from "@solana-program/token";
 import { DEAL_ESCROW_PROGRAM_ADDRESS, getListing, listingAddress, getSetAssessorsInstructionAsync, ListingKind, type DealClient, type DealContext } from "@deal/chain";
 import { PROGRAM_SO } from "@deal/chain/node";
 import { metaHash, sha256Hex, type ListingMeta } from "@deal/core";
-import { acceptCustody, assessAndAttest, draftListing, type AssessDeps } from "../lib/sell.ts";
+import { acceptCustody, assessAndAttest, attestLimiter, draftListing, type AssessDeps } from "../lib/sell.ts";
 import { createListingIxs, type DraftedListing } from "../lib/sell-tx.ts";
 import { docStore, fileBlobs, keyVault, vercelBlobs, type BlobApi, type Blobs } from "../lib/storage.ts";
 import { chainRegistry, type ChainListing, type ChainSource } from "../lib/chain-registry.ts";
@@ -147,6 +147,32 @@ test("the assessor attests its own report (a client's is ignored); the chain reg
   };
   const [shown] = await chainRegistry(source, c.deps.docs).list();
   assert.deepEqual([shown?.meta.name, shown?.report?.grade], [DESC.name, (JSON.parse(stored.report!) as { grade: string }).grade]);
+});
+
+test("re-attesting is bounded (#136): an unchanged report is a no-op (no tx), and re-attests are rate-limited", async () => {
+  const c = await chain();
+  const d = await drafted(c);
+  const listing = await c.list(d.listing);
+  await acceptCustody(c.deps, { listing, seller: c.seller.address, data: b64(CSV) });
+  let t = 1_000;
+  const limit = attestLimiter({ now: () => t, listingSecs: 600, clientMax: 2, windowSecs: 3600 });
+  const deps = { ...c.deps, allowAttest: (l: string, re: boolean) => limit(l, "ip1", re) };
+  const first = await assessAndAttest(deps, { listing, meta: d.meta });
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(typeof first.body.signature, "string");
+  const before = (await getListing(c.ctx, listing))!;
+  // Anyone calling again for the same, unchanged report: no transaction, same answer.
+  const again = await assessAndAttest(deps, { listing });
+  assert.deepEqual([again.status, again.body.attested, again.body.signature, again.body.reportHash], [200, "already", null, first.body.reportHash]);
+  assert.deepEqual(await getListing(c.ctx, listing), before);
+
+  // A changed report on an attested listing: once per listingSecs; and a client cap across listings.
+  assert.equal(limit("L1", "ip2", true), null);
+  assert.equal(limit("L1", "ip3", true)?.reason, "LISTING_LIMIT");
+  assert.equal(limit("L2", "ip2", false), null); // a first attestation is never held by the listing cooldown
+  assert.equal(limit("L3", "ip2", false)?.reason, "CLIENT_LIMIT");
+  t += 3600;
+  assert.equal(limit("L1", "ip3", true), null);
 });
 
 test("a listing that names another assessor is not ours to attest", async () => {

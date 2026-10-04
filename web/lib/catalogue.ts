@@ -50,6 +50,12 @@ export function search(listings: readonly RegistryListing[], query: Query): Rank
       || (a.address < b.address ? -1 : 1));
 }
 
+/** A decimal USDC amount ("2", "2.5") in 6-decimal base units, or undefined if malformed. */
+function usdcToBase(s: string | undefined): bigint | undefined {
+  const m = s?.trim().match(/^(\d{1,14})(?:\.(\d{1,6}))?$/);
+  return m ? BigInt(m[1]!) * 1_000_000n + BigInt((m[2] ?? "").padEnd(6, "0")) : undefined;
+}
+
 /** Reads a query from URL search params, ignoring anything malformed (never throws). */
 export function parseQuery(p: Record<string, string | string[] | undefined>): Query {
   const one = (k: string) => (typeof p[k] === "string" ? (p[k] as string) : undefined);
@@ -60,7 +66,8 @@ export function parseQuery(p: Record<string, string | string[] | undefined>): Qu
     q: one("q")?.slice(0, 200),
     kind: kind === "Data" || kind === "Service" || kind === "Team" ? kind : undefined,
     category: one("category")?.match(/^[a-z0-9-]{1,32}$/)?.[0],
-    maxPrice: max && /^\d{1,20}$/.test(max) ? BigInt(max) : undefined,
+    // `maxPrice` is base units (API, llms.txt); `maxUsdc` is what the catalogue form sends.
+    maxPrice: max && /^\d{1,20}$/.test(max) ? BigInt(max) : usdcToBase(one("maxUsdc")),
     minGrade: grade === "A" || grade === "B" || grade === "C" || grade === "D" ? grade : undefined,
     hideFlagged: one("hideFlagged") === "1",
     attestedOnly: one("attestedOnly") === "1",

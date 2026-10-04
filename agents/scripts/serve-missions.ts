@@ -2,7 +2,7 @@
 //   MISSION_SERVICE_TOKEN   bearer token shared with the site's server env (>= 32 chars)          required
 //   DEAL_VERIFIER           the marketplace verifier named on every agent deal                     required
 //   BROKER_MASTER_KEY       64 hex; unseals provider credentials                                   required
-//   BROKER_CREDENTIALS      path to a JSON array of sealed credentials (sealCredential output)     default: none
+//   BROKER_CREDENTIALS      path to a JSON array of sealed credentials (sealCredential output)     default: placeholders for the mocks
 //   MISSION_FEE_PAYER       path to a keypair file with a little devnet SOL (pays agents' tx fees)  required
 //   MISSION_TEAM_SELLER     path to the team seller's keypair (seller of the Team listings; demo:   optional
 //                           surface/.keys/sellers/<id>.json): accepts fee deals, delivers the product  (no fee deals without it)
@@ -15,7 +15,7 @@ import { solanaRpc } from "@solana/kit-plugin-rpc";
 import { signer as signerPlugin } from "@solana/kit-plugin-signer";
 import type { DealClient, DealContext } from "@deal/chain";
 import {
-  createBroker, createMissionService, createVault, liveFrom, mandateSourceFromChain, masterKeyFromEnv, mockBooking, mockMarketData,
+  createBroker, createMissionService, createVault, liveFrom, mandateSourceFromChain, masterKeyFromEnv, mockBooking, mockMarketData, sealCredential,
   type SealedCredential,
 } from "../src/index.ts";
 
@@ -38,6 +38,9 @@ const teamSeller = env.MISSION_TEAM_SELLER
 const ctx: DealContext = { client: client as unknown as DealClient, mint: (env.DEAL_MINT ?? "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU") as never };
 const master = masterKeyFromEnv(env);
 const sealed: SealedCredential[] = env.BROKER_CREDENTIALS ? JSON.parse(readFileSync(env.BROKER_CREDENTIALS, "utf8")) : [];
+// The providers are mocks with no real account, but the broker still refuses a call without a credential
+// (NO_CREDENTIAL), so each mock without a sealed one gets a placeholder sealed under this master key.
+for (const p of ["market", "booking"]) if (!sealed.some((c) => c.provider === p)) sealed.push(sealCredential(master, p, `mock-${p}-placeholder`));
 const source = mandateSourceFromChain(ctx);
 const broker = createBroker({ vault: createVault(master, sealed), providers: [mockMarketData, mockBooking], mandates: source });
 const workers = Object.fromEntries(["researcher", "writer"].map((r) => [r, fileURLToPath(new URL(`../workers/${r}.mjs`, import.meta.url))]));

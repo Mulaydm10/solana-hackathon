@@ -14,3 +14,9 @@ export function sellerView(all: readonly RegistryListing[], seller: string): Sel
   const score = listings[0] ? repScore(listings[0].rep) : null;
   return { seller, listings, score, summary: score ? describeRep(score) : "no listings yet" };
 }
+
+/** Where the dashboard goes once a wallet connects: that wallet's own view, unless a seller is already shown. */
+export function connectedSellerHref(shown: string | null, connected: string | null): string | null {
+  if (!connected || shown || !ADDRESS.test(connected)) return null;
+  return `/dashboard?seller=${encodeURIComponent(connected)}`;
+}

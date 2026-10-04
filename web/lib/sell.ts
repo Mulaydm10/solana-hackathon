@@ -157,7 +157,40 @@ const sha = async (b: Uint8Array) => new Uint8Array(createHash("sha256").update(
 
 // --------------------------------------------------------------------------------------------------- assess
 
-export type AssessDeps = ChainDeps & { assessor: TransactionSigner; probe?: Probe };
+export type AttestRefusal = { reason: string; message: string; retryAfterSecs?: number };
+/** Asked before the assessor signs an attest tx; `reattest` = the listing is already attested on chain. */
+export type AllowAttest = (listing: string, reattest: boolean) => AttestRefusal | null;
+export type AssessDeps = ChainDeps & { assessor: TransactionSigner; probe?: Probe; allowAttest?: AllowAttest };
+
+/**
+ * The assessor pays every attest tx, and /api/sell/assess is anonymous (#136), so the route bounds it: a listing
+ * already attested is re-attested at most once per `listingSecs`, and one client gets at most `clientMax` attest
+ * txs per `windowSecs`. A first attestation (right after create_listing, which the seller paid for) is never held
+ * back by the listing cooldown. Reserved before sending, like the faucet, so concurrent calls cannot both pass.
+ */
+export function attestLimiter(o: { now?: () => number; listingSecs?: number; clientMax?: number; windowSecs?: number } = {}) {
+  const now = o.now ?? (() => Math.floor(Date.now() / 1000));
+  const listingSecs = o.listingSecs ?? 600;
+  const clientMax = o.clientMax ?? 10;
+  const windowSecs = o.windowSecs ?? 3600;
+  const lastByListing = new Map<string, number>();
+  const byClient = new Map<string, number[]>();
+  return (listing: string, client: string, reattest: boolean): AttestRefusal | null => {
+    const t = now();
+    const last = lastByListing.get(listing);
+    if (reattest && last !== undefined && t - last < listingSecs) {
+      return { reason: "LISTING_LIMIT", message: "this listing was attested a moment ago; try again later", retryAfterSecs: listingSecs - (t - last) };
+    }
+    const recent = (byClient.get(client) ?? []).filter((x) => t - x < windowSecs);
+    if (recent.length >= clientMax) {
+      return { reason: "CLIENT_LIMIT", message: "too many attestations from you; try again later", retryAfterSecs: windowSecs - (t - recent[0]!) };
+    }
+    recent.push(t);
+    byClient.set(client, recent);
+    lastByListing.set(listing, t);
+    return null;
+  };
+}
 
 /**
  * POST /api/sell/assess { listing, contentHash?, report?, reportHash?, meta?, service? } (mcp publish_listing sends
@@ -202,6 +235,14 @@ export async function assessAndAttest(d: AssessDeps, b: { listing?: unknown; con
 
   const reportCanonical = canonicalize(report as unknown as Json);
   const reportHash = sha256Hex(reportCanonical);
+  // The chain already holds exactly this report: nothing to sign, nothing for the assessor to pay.
+  if (l.assessedAt > 0 && l.reportHash === reportHash) {
+    await d.docs.put(listing, { report: reportCanonical });
+    const docs = await d.docs.get(listing);
+    return ok({ listing, grade: report.grade, reportHash, signature: null, attested: "already", shown: Boolean(docs?.meta) });
+  }
+  const refused = d.allowAttest?.(listing, l.assessedAt > 0);
+  if (refused) return { status: 429, body: { ok: false, ...refused } };
   const attested = await listings.attest(d.ctx, d.assessor, listing, hexBytes(l.contentHash), hexBytes(reportHash));
   if (!attested.ok) return no(502, attested.reason, attested.message);
   await d.docs.put(listing, { report: reportCanonical });

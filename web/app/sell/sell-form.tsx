@@ -7,7 +7,7 @@ import { createNoopSigner, type Address } from "@solana/kit";
 import { useWallet } from "../wallet";
 import { confirmSignature, sendWithWallet } from "../../lib/wallet-tx";
 import { PUBLIC_MINT, PUBLIC_RPC } from "../../lib/public-config";
-import { createListingIxs, toBase64, type DraftedListing } from "../../lib/sell-tx";
+import { createListingIxs, MAX_UPLOAD_BYTES, readReply, toBase64, tooLarge, type DraftedListing } from "../../lib/sell-tx";
 
 type Step = { step: string; [k: string]: unknown };
 type Draft = { ok: true; steps: Step[]; meta: Record<string, unknown>; needsConfirmation: boolean; listing: DraftedListing } | { ok: false; reason: string; message: string; steps?: Step[] };
@@ -17,7 +17,7 @@ type Pending = { listing: string; signature?: string; d: Extract<Draft, { ok: tr
 
 const usdc = (base: string) => `${(Number(base) / 1e6).toFixed(2)} USDC`;
 const post = async (path: string, body: unknown) =>
-  (await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json() as Promise<Record<string, unknown>>;
+  readReply(await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
 
 /** One line per seller-chain step, written by code (seller text is never interpreted). */
 export function describeStep(s: Step): string {
@@ -49,6 +49,7 @@ export function SellForm() {
   async function source(): Promise<Source> {
     if (mode === "data") {
       if (!file) throw new Error("choose a file");
+      if (file.size > MAX_UPLOAD_BYTES) throw new Error(tooLarge(file.size));
       return { data: toBase64(new Uint8Array(await file.arrayBuffer())) };
     }
     return { service: { endpoint: service.endpoint, input_schema: JSON.parse(service.input), output_schema: JSON.parse(service.output), example_input: JSON.parse(service.example) } };
