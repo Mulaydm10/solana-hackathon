@@ -9,7 +9,7 @@
   },
   "sideEffects": false,
   "scripts": {
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "tsc --noEmit && node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "codegen": "node --import tsx scripts/codegen.ts"
   },
