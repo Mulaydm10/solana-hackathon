@@ -20,7 +20,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { canonicalize, missionTerms, roleHash, sha256Bytes, validateBlueprint, DEFAULT_LIMITS, type Blueprint, type Json } from "@deal/core";
 import { deals, mandatesDigest, missions, type DealContext, type MandateInput } from "@deal/chain";
 import type { Broker } from "../broker/broker.ts";
-import { createDeterministicReader } from "../reader/reader.ts";
+import { createDeterministicReader, type Reader } from "../reader/reader.ts";
 import { s } from "../reader/schema.ts";
 import { startAgent, type Exit } from "../vm/runner.ts";
 
@@ -47,6 +47,13 @@ export type MissionOptions = {
   missionId: bigint;
   /** Unix seconds (chain clock). */
   expiresAt: bigint;
+  /**
+   * The buyer's protections for every deal its agents open (a verifier it trusts, not itself; minimum
+   * review/resolve windows; maximum invoice tolerance). Agents cannot weaken them on chain.
+   */
+  dealRules: { verifier: Address; minReviewSecs?: bigint; minResolveSecs?: bigint; maxToleranceBps?: number };
+  /** SOL for the rent of deals and records the agents' purchases create. */
+  rentLamports?: bigint;
   broker: Broker;
   /** Capability ids the broker's providers offer (`provider:action`). */
   capabilities: readonly string[];
@@ -69,6 +76,27 @@ export type MissionOptions = {
 const SPEND = s.object({ type: s.oneOf(["spend"] as const), payee: s.address(), amount: s.amount({ max: 10n ** 15n }), receipt: s.hex32() });
 const RESULT = s.object({ type: s.oneOf(["result"] as const), output: s.text({ max: 4_000, multiline: true }) });
 
+export type WorkerMessage =
+  | { kind: "spend"; payee: Address; amount: bigint; receipt: Uint8Array }
+  | { kind: "result"; output: string }
+  | { kind: "refused"; reason: string };
+
+/**
+ * The only door from a worker to the orchestrator: whatever the worker sent (any value, any text) goes
+ * through the quarantined reader against the two allowed shapes. A well-formed spend is still only a
+ * request: the chain mandate (payees, caps, stage, revoke) decides whether money moves.
+ */
+export async function readWorkerMessage(reader: Reader, message: unknown): Promise<WorkerMessage> {
+  const text = typeof message === "string" ? message : JSON.stringify(message ?? null);
+  const asSpend = await reader.read(text, SPEND);
+  if (asSpend.ok) {
+    return { kind: "spend", payee: asSpend.value.payee as Address, amount: asSpend.value.amount, receipt: Uint8Array.from(Buffer.from(asSpend.value.receipt, "hex")) };
+  }
+  const asResult = await reader.read(text, RESULT);
+  if (asResult.ok) return { kind: "result", output: asResult.value.output };
+  return { kind: "refused", reason: asSpend.reason };
+}
+
 export async function* runMission(o: MissionOptions): AsyncGenerator<MissionEvent> {
   const v = validateBlueprint(o.blueprint, { limits: DEFAULT_LIMITS, capabilities: o.capabilities });
   if (!v.ok) return yield { type: "failed", reason: v.reason, message: `blueprint refused at ${v.at}` };
@@ -79,6 +107,8 @@ export async function* runMission(o: MissionOptions): AsyncGenerator<MissionEven
 
   const created = await missions.create(o.ctx, o.buyer, {
     missionId: o.missionId, budget: o.budget, termsHash: t.value.hash, stageCaps: bp.stages.map((st) => st.cap), expiresAt: o.expiresAt,
+    verifier: o.dealRules.verifier, minReviewSecs: o.dealRules.minReviewSecs, minResolveSecs: o.dealRules.minResolveSecs,
+    maxToleranceBps: o.dealRules.maxToleranceBps, rentLamports: o.rentLamports,
   });
   if (!created.ok) return yield { type: "failed", reason: created.reason, message: created.message };
   const mission = created.mission;
@@ -142,20 +172,18 @@ export async function* runMission(o: MissionOptions): AsyncGenerator<MissionEven
           live: o.live,
           call: async (token, action, args) => o.broker.call(token, action, args),
           onMessage: async (_a, message) => {
-            const text = JSON.stringify(message ?? null);
-            const asSpend = await reader.read(text, SPEND);
-            if (asSpend.ok) {
-              const r = await missions.spend(o.ctx, agent, mission, asSpend.value.payee as Address, asSpend.value.amount, Uint8Array.from(Buffer.from(asSpend.value.receipt, "hex")));
-              events.push({ type: "spend", role: roleName, payee: asSpend.value.payee, amount: asSpend.value.amount.toString(), ok: r.ok, reason: r.ok ? undefined : r.reason });
+            const m = await readWorkerMessage(reader, message);
+            if (m.kind === "spend") {
+              const r = await missions.spend(o.ctx, agent, mission, m.payee, m.amount, m.receipt);
+              events.push({ type: "spend", role: roleName, payee: m.payee, amount: m.amount.toString(), ok: r.ok, reason: r.ok ? undefined : r.reason });
               return r.ok ? { ok: true } : { ok: false, reason: r.reason };
             }
-            const asResult = await reader.read(text, RESULT);
-            if (asResult.ok) {
-              results.push({ role: roleName, output: asResult.value.output });
-              events.push({ type: "result", role: roleName, output: asResult.value.output });
+            if (m.kind === "result") {
+              results.push({ role: roleName, output: m.output });
+              events.push({ type: "result", role: roleName, output: m.output });
               return { ok: true };
             }
-            events.push({ type: "refused", role: roleName, reason: asSpend.reason });
+            events.push({ type: "refused", role: roleName, reason: m.reason });
             return { ok: false, reason: "UNREADABLE" };
           },
           mode: o.runner?.mode,

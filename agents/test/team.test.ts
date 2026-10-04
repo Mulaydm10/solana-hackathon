@@ -11,7 +11,8 @@ import { fetchToken, findAssociatedTokenPda, getCreateMintInstructionPlan, getMi
 import { DEAL_ESCROW_PROGRAM_ADDRESS, deals, getInitPolicyInstructionAsync, getMission, type DealClient, type DealContext } from "@deal/chain";
 import { PROGRAM_SO } from "@deal/chain/node";
 import type { Blueprint } from "@deal/core";
-import { createBroker, createVault, liveFrom, mandateSourceFromChain, mockBooking, mockMarketData, runMission, sealCredential, type MissionEvent } from "../src/index.ts";
+import { createBroker, createDeterministicReader, createVault, liveFrom, mandateSourceFromChain, mockBooking, mockMarketData, readWorkerMessage, runMission, sealCredential, type MissionEvent } from "../src/index.ts";
+import { ATTACKER, LISTINGS, REPLIES, WEB } from "./injection/corpus.ts";
 
 const USDC = 1_000_000n;
 const worker = (n: string) => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url));
@@ -42,7 +43,8 @@ async function chain() {
   const balance = async (owner: Address) =>
     (await fetchToken(client.rpc, (await findAssociatedTokenPda({ owner, mint: mint.address, tokenProgram: TOKEN_PROGRAM_ADDRESS }))[0])).data.amount;
   const now = () => client.svm.getClock().unixTimestamp;
-  return { client, ctx, buyer, seller, mint, balance, now };
+  const verifier = (await generateKeyPairSigner()).address;
+  return { client, ctx, buyer, seller, mint, balance, now, verifier };
 }
 
 function blueprint(seller: Address): Blueprint {
@@ -83,7 +85,7 @@ test("a team mission end to end: approved stages, isolated workers, a spend judg
   const events = await collect(
     runMission({
       ctx: c.ctx, buyer: c.buyer, blueprint: blueprint(c.seller.address), goal: "One-page brief on EURUSD", budget: 10n * USDC,
-      missionId: 1n, expiresAt: c.now() + 3_600n, broker: b, capabilities: ["market:read", "booking:quote", "booking:pay"],
+      missionId: 1n, expiresAt: c.now() + 3_600n, dealRules: { verifier: c.verifier }, broker: b, capabilities: ["market:read", "booking:quote", "booking:pay"],
       workers: { researcher: worker("worker-researcher.mjs"), writer: worker("worker-writer.mjs") },
       workerEnv: { researcher: { PAYEE: c.seller.address, AMOUNT: String(1n * USDC) } },
       approve: async (stage) => { approvals.push(stage); return true; }, live, runner: { pollMs: 200 },
@@ -114,7 +116,7 @@ test("the mandate's caps bind workers: an over-cap purchase is refused on chain,
   const events = await collect(
     runMission({
       ctx: c.ctx, buyer: c.buyer, blueprint: blueprint(c.seller.address), goal: "Brief", budget: 10n * USDC, missionId: 2n,
-      expiresAt: c.now() + 3_600n, broker: b, capabilities: ["market:read"],
+      expiresAt: c.now() + 3_600n, dealRules: { verifier: c.verifier }, broker: b, capabilities: ["market:read"],
       workers: { researcher: worker("worker-researcher.mjs"), writer: worker("worker-writer.mjs") },
       workerEnv: { researcher: { PAYEE: c.seller.address, AMOUNT: String(3n * USDC) } }, // per-payment cap is 2
       approve: async () => true, live, runner: { pollMs: 200 },
@@ -132,7 +134,7 @@ test("the human declines a stage: nothing runs, the mission closes, the budget c
   const events = await collect(
     runMission({
       ctx: c.ctx, buyer: c.buyer, blueprint: blueprint(c.seller.address), goal: "Brief", budget: 10n * USDC, missionId: 3n,
-      expiresAt: c.now() + 3_600n, broker: b, capabilities: ["market:read"],
+      expiresAt: c.now() + 3_600n, dealRules: { verifier: c.verifier }, broker: b, capabilities: ["market:read"],
       workers: { researcher: worker("worker-researcher.mjs"), writer: worker("worker-writer.mjs") },
       approve: async () => false, live,
     }),
@@ -149,7 +151,7 @@ test("a blueprint asking for a capability the platform does not offer is refused
   bp.roles[0]!.capabilities = ["shell:exec"];
   const events = await collect(
     runMission({
-      ctx: c.ctx, buyer: c.buyer, blueprint: bp, goal: "Brief", budget: 10n * USDC, missionId: 4n, expiresAt: c.now() + 3_600n,
+      ctx: c.ctx, buyer: c.buyer, blueprint: bp, goal: "Brief", budget: 10n * USDC, missionId: 4n, expiresAt: c.now() + 3_600n, dealRules: { verifier: c.verifier },
       broker: b, capabilities: ["market:read"], workers: {}, approve: async () => true, live,
     }),
   );
@@ -157,3 +159,39 @@ test("a blueprint asking for a capability the platform does not offer is refused
   assert.equal((events[0] as { reason: string }).reason, "UNKNOWN_CAPABILITY");
   void deals;
 });
+
+test("the injection corpus through the orchestrator's only door: nothing in it becomes a spend", async () => {
+  const reader = createDeterministicReader();
+  for (const c of [...LISTINGS, ...REPLIES, ...WEB]) {
+    const m = await readWorkerMessage(reader, c.text);
+    assert.notEqual(m.kind, "spend", `corpus case "${c.name}" became a spend`);
+  }
+  // Wrapped as a worker message too (text inside an otherwise valid shape is just output, never a command).
+  for (const c of LISTINGS) {
+    const m = await readWorkerMessage(reader, { type: "spend", payee: ATTACKER, amount: "1", receipt: "zz", note: c.text });
+    assert.equal(m.kind, "refused", c.name);
+  }
+});
+
+test("a well-formed spend to an attacker is refused by the chain mandate, not by hoping the worker behaves", async () => {
+  const c = await chain();
+  const { broker: b, live } = broker(c);
+  const attacker = (await generateKeyPairSigner()).address;
+  // The attacker needs a token account to be payable at all; give it one so only the mandate can stop it.
+  await c.client.sendTransaction(await getMintToATAInstructionPlanAsync({ payer: c.buyer, owner: attacker, mint: c.mint.address, mintAuthority: c.buyer, amount: 1n, decimals: 6 }));
+  const before = await c.balance(attacker);
+  const events = await collect(
+    runMission({
+      ctx: c.ctx, buyer: c.buyer, blueprint: blueprint(c.seller.address), goal: "Brief", budget: 10n * USDC, missionId: 5n,
+      expiresAt: c.now() + 3_600n, dealRules: { verifier: c.verifier }, broker: b, capabilities: ["market:read"],
+      workers: { researcher: worker("worker-researcher.mjs"), writer: worker("worker-writer.mjs") },
+      workerEnv: { researcher: { PAYEE: attacker, AMOUNT: String(1n * USDC) } }, // a compromised worker
+      approve: async () => true, live, runner: { pollMs: 200 },
+    }),
+  );
+  const spend = events.find((e) => e.type === "spend") as Extract<MissionEvent, { type: "spend" }>;
+  assert.equal(spend.ok, false);
+  assert.equal(spend.reason, "PayeeNotAllowed");
+  assert.equal(await c.balance(attacker), before);
+});
+
