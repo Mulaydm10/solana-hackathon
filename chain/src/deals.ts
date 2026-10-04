@@ -290,6 +290,18 @@ const statusIs = (ctx: DealContext, deal: Address, ...names: string[]) => async 
   return d !== null && names.includes(STATUS_NAMES[d.status] ?? "");
 };
 
+/**
+ * Did *this* open land? With `want`: the deal at the PDA has exactly our seller, amount and terms hash (an id
+ * collision with another deal is not success). With `null`: does any deal exist there yet.
+ */
+export async function isOurs(ctx: DealContext, deal: Address, want: { seller: Address; amount: bigint; termsHash: Uint8Array } | null): Promise<boolean> {
+  const d = await rawDeal(ctx, deal);
+  if (!d) return false;
+  if (!want) return true;
+  return d.seller === want.seller && d.amount === want.amount && d.termsHash.length === want.termsHash.length
+    && d.termsHash.every((b, i) => b === want.termsHash[i]);
+}
+
 /** Accounts every payout instruction needs; payouts can only reach the deal's own parties. */
 async function settleAccounts(ctx: DealContext, actor: TransactionSigner, deal: Address) {
   const d = await rawDeal(ctx, deal);
@@ -326,7 +338,12 @@ export const deals = {
   /** Buyer opens a deal; the order amount moves into escrow. Checked against the buyer's policy. */
   async open(ctx: DealContext, buyer: TransactionSigner, p: OpenParams): Promise<Sent<{ deal: Address }>> {
     const deal = await dealAddress(buyer.address, p.dealId);
-    const r = await safeSend(ctx, deal, async () => (await rawDeal(ctx, deal)) !== null, async () => [
+    // Pre-existing deal at this id (an id collision, or someone else's earlier deal): refuse instead of
+    // letting `landed` mistake it for ours.
+    if (await isOurs(ctx, deal, null)) {
+      return refuse("DEAL_ID_TAKEN", "A deal with this id already exists; choose another id.");
+    }
+    const r = await safeSend(ctx, deal, async () => isOurs(ctx, deal, { seller: p.seller, amount: p.amount, termsHash: p.termsHash }), async () => [
       await getCreateDealInstructionAsync({
         buyer, seller: p.seller, approver: p.approver, mint: ctx.mint, buyerToken: await ata(ctx, buyer.address),
         dealId: p.dealId, amount: p.amount, deadline: BigInt(p.deadline), reviewSecs: BigInt(p.reviewSecs),

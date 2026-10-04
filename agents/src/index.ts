@@ -5,4 +5,5 @@ export * from "./reader/index.ts";
 export * from "./custody/index.ts";
 export * from "./seller/index.ts";
 export * from "./vm/index.ts";
+export * from "./team/index.ts";
 export * from "./verifier/index.ts";

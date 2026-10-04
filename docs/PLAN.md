@@ -229,6 +229,11 @@ runner. Adding a lane edits `docs/STATE.md`, `docs/verify.txt` and `docs/setup.s
   - The data is stored encrypted: AES-256-GCM with a key per listing.
   - On a sale, the key is sealed to the buyer's wallet key (ed25519 converted to x25519) once the escrow holds the
     money. The buyer checks that the sha256 of the decrypted data equals the on-chain `content_hash`.
+- **Delivery vs key receipt (from #101 review):** `submit_delivery` with the content hash proves the *right data*
+  was delivered, not that the buyer *received the key*. The seller chain delivers first and releases the key second,
+  but a verifier cannot tell "the buyer never got the key" from a dishonest challenge. This is fair only because
+  custody is run by the marketplace, never by the seller: the site shows the buyer "key received" before release,
+  and the custody service re-sends the sealed key on request.
 - **Honest limit:** the assessor sees the plaintext. Options, in increasing order of effort:
   1. **Sample-only assessment:** the seller uploads a sample and the full data's hash; the report says "sample".
   2. **Assessor as an independent key:** the marketplace runs it, but anyone can run their own.

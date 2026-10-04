@@ -10,6 +10,7 @@
     "test": "tsc --noEmit && node --import tsx --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "spike:x402": "node --import tsx scripts/x402-spike.ts",
+    "serve:missions": "node --import tsx scripts/serve-missions.ts",
     "serve:verifier": "node --import tsx scripts/serve-verifier.ts"
   },
   "dependencies": {

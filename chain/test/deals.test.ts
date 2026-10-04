@@ -216,3 +216,16 @@ test("library: open from a listing, deliver the listed content, the sale is coun
   assert.equal((await deals.release(ctx, t.buyer, deal, hash(20))).ok, true);
   assert.equal((await fetchListing(t.client.rpc, listing)).data.sales, 1n);
 });
+
+test("library: an id collision is refused up front, and a lost race is never reported as our deal", async () => {
+  const { t, ctx, open } = await lib();
+  const first = await open({ dealId: 7n });
+  assert.ok(first.ok);
+  const again = await open({ dealId: 7n, amount: 3n * USDC });
+  assert.deepEqual(!again.ok && again.reason, "DEAL_ID_TAKEN");
+  // A send that "fails" after someone else's deal appeared at our PDA: landed must say no (not ours).
+  const { isOurs } = await import("../src/index.ts");
+  const deal = (first as { deal: Address }).deal;
+  assert.equal(await isOurs(ctx, deal, { seller: t.seller.address, amount: 3n * USDC, termsHash: hash(7) }), false);
+  assert.equal(await isOurs(ctx, deal, { seller: t.seller.address, amount: 5n * USDC, termsHash: hash(7) }), true);
+});
