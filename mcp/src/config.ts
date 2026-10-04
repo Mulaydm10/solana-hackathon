@@ -8,13 +8,24 @@ const Env = z.object({
   DEAL_RPC_URL: z.string().url().optional(),
   /** Path to the agent's own Solana keypair file. Only tools that sign need it. */
   DEAL_KEYPAIR: z.string().min(1).optional(),
+  /** The token deals settle in (default: Circle devnet USDC, the same as x402 calls). */
+  DEAL_MINT: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(),
+  /** The marketplace verifier to name on deals (challenges need one). */
+  DEAL_VERIFIER: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(),
+  /** The marketplace site, for search and for links a human must open (approvals). */
+  DEAL_SITE_URL: z.string().url().optional(),
 });
 
 export type Config = {
   cluster: "devnet" | "localnet";
   rpcUrl: string;
   keypairPath: string | null;
+  mint: string;
+  verifier: string | null;
+  siteUrl: string | null;
 };
+
+export const DEVNET_USDC = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 
 const DEFAULT_RPC = { devnet: "https://api.devnet.solana.com", localnet: "http://127.0.0.1:8899" } as const;
 
@@ -29,5 +40,11 @@ export function loadConfig(env: Record<string, string | undefined>): ConfigResul
     return { ok: false, reason: "BAD_CONFIG", message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
   }
   const e = parsed.data;
-  return { ok: true, config: { cluster: e.DEAL_CLUSTER, rpcUrl: e.DEAL_RPC_URL ?? DEFAULT_RPC[e.DEAL_CLUSTER], keypairPath: e.DEAL_KEYPAIR ?? null } };
+  return {
+    ok: true,
+    config: {
+      cluster: e.DEAL_CLUSTER, rpcUrl: e.DEAL_RPC_URL ?? DEFAULT_RPC[e.DEAL_CLUSTER], keypairPath: e.DEAL_KEYPAIR ?? null,
+      mint: e.DEAL_MINT ?? DEVNET_USDC, verifier: e.DEAL_VERIFIER ?? null, siteUrl: e.DEAL_SITE_URL ?? null,
+    },
+  };
 }
