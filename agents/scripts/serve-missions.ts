@@ -10,6 +10,8 @@
 //                           sealed into the broker vault at start and removed from this process's env; without it
 //                           the workers produce their deterministic output (roles may still list llm:complete)
 //   LLM_MODEL               model id for the workers                                                   default: claude-opus-5-5
+//   MISSION_STORE           directory for each mission's public view (no keys), so the site still shows   default: ./demo-runs/missions
+//                           missions after a restart, and scripted demo runs (demo:mission) appear too
 //   DEAL_RPC_URL / DEAL_MINT / HOST / PORT                                                          devnet, Circle USDC, 127.0.0.1, 3320
 // Mainnet is refused. Workers in ../workers use Claude through the broker when the key is set.
 import { readFileSync } from "node:fs";
@@ -19,7 +21,7 @@ import { solanaRpc } from "@solana/kit-plugin-rpc";
 import { signer as signerPlugin } from "@solana/kit-plugin-signer";
 import type { DealClient, DealContext } from "@deal/chain";
 import {
-  claudeProvider, createBroker, createMissionService, createVault, liveFrom, mandateSourceFromChain, masterKeyFromEnv, mockBooking, mockMarketData, sealCredential,
+  claudeProvider, createBroker, createMissionService, fileMissionStore, createVault, liveFrom, mandateSourceFromChain, masterKeyFromEnv, mockBooking, mockMarketData, sealCredential,
   type SealedCredential,
 } from "../src/index.ts";
 
@@ -57,6 +59,7 @@ const workers = Object.fromEntries(["researcher", "writer"].map((r) => [r, fileU
 const svc = createMissionService({
   ctx, broker, capabilities: ["market:read", "booking:quote", "booking:pay", "llm:complete"], workers, live: liveFrom(source),
   dealRules: { verifier: verifier as never }, token, team: teamSeller ? { seller: teamSeller } : undefined,
+  store: fileMissionStore(env.MISSION_STORE ?? fileURLToPath(new URL("../demo-runs/missions", import.meta.url))),
 });
 const host = env.HOST ?? "127.0.0.1";
 const port = Number(env.PORT ?? 3320);

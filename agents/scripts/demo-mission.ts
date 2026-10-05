@@ -11,6 +11,8 @@
 //   ANTHROPIC_API_KEY  optional: Claude researcher and writer through the broker (llm:complete); the key is
 //                      sealed into the broker's vault and removed from this process's env before any worker runs
 //   DEMO_BUYER         keypair file of the buyer (devnet; default .keys/demo-buyer.json)
+//   MISSION_STORE      the mission service's store directory (default ./demo-runs/missions, the service's default):
+//                      the run is saved there so the site's /missions?m=<mission>&fee=<deal> shows it
 //   DEAL_RPC_URL / DEAL_MINT / DEAL_VERIFIER / LLM_MODEL   devnet RPC, Circle devnet USDC, a fresh address, claude-opus-5-5
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
@@ -31,7 +33,7 @@ import { DEAL_ESCROW_PROGRAM_ADDRESS, deals, fetchMaybeBuyerPolicy, getInitPolic
 import { PROGRAM_SO } from "@deal/chain/node";
 import { formatAmount, type Blueprint } from "@deal/core";
 import {
-  claudeProvider, createBroker, createVault, liveFrom, mandateSourceFromChain, mockBooking, mockMarketData, prepareMission, runStages, sealCredential,
+  claudeProvider, createBroker, createVault, fileMissionStore, publicView, liveFrom, mandateSourceFromChain, mockBooking, mockMarketData, prepareMission, runStages, sealCredential,
   LLM_MODEL, type MissionEvent,
 } from "../src/index.ts";
 
@@ -192,6 +194,7 @@ const workers = Object.fromEntries(["researcher", "writer"].map((r) => [r, fileU
 const approved = new Set<number>();
 const rl = step ? createInterface({ input: process.stdin, output: process.stdout }) : null;
 let productHash = "";
+const shown: MissionEvent[] = [];
 for await (const e of runStages({
   ctx, broker, workers, live: liveFrom(source), prepared: p, pollMs: local ? 10 : 2_000, runner: { pollMs: local ? 200 : 2_000, maxSecs: 300 },
   workerEnv: { researcher: { TRY_OVER_CAP: "1" } },
@@ -205,6 +208,7 @@ for await (const e of runStages({
     say(`Human approved stage ${i} (${p.blueprint.stages[i]!.name}), plan hash ${Buffer.from(plan.planHash).toString("hex").slice(0, 16)}...: ${link(a.signature)}`);
   },
 }) as AsyncGenerator<MissionEvent>) {
+  shown.push(e);
   if (e.type === "plan") say(`\nStage ${e.stage} plan (rendered in code, hash ${e.planHash.slice(0, 16)}...):\n  ${e.plan}`);
   else if (e.type === "spend") say(e.ok
     ? `Agent ${e.role} paid ${usdc(BigInt(e.amount))} to ${e.payee} within its mandate: ${link(e.signature ?? "")}`
@@ -224,6 +228,11 @@ if (!productHash) fail("no product was delivered");
 const released = ok(await deals.release(ctx, buyer, feeDeal.deal, Uint8Array.from(Buffer.from(productHash, "hex"))), "release");
 say(`Buyer released the team fee (${usdc(fee)}) for exactly that product: ${link(released.signature)}`);
 say(`Team seller balance ${usdc(await tokenOf(teamSeller.address))} · data seller balance ${usdc(await tokenOf(dataSeller.address))}`);
+
+// The mission service serves this run to the site (read-only), from the same store directory.
+const events: MissionEvent[] = shown;
+fileMissionStore(env.MISSION_STORE ?? join(here, "../demo-runs/missions")).save(p.mission, { ...publicView(p), state: "done", events });
+say(`Watch it on the site: /missions?m=${p.mission}&fee=${feeDeal.deal}`);
 
 const dir = join(here, "../demo-runs");
 mkdirSync(dir, { recursive: true });

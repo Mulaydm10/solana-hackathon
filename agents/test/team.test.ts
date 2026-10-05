@@ -291,7 +291,12 @@ test("mission service over HTTP: token required, prepare -> buyer signs -> start
   const c = await chain();
   const { broker: b, live } = broker(c);
   const token = "t".repeat(48);
+  const { fileMissionStore } = await import("../src/index.ts");
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const storeDir = mkdtempSync(`${tmpdir()}/missions-`);
   const svc = createMissionService({
+    store: fileMissionStore(storeDir),
     ctx: c.ctx, broker: b, capabilities: ["market:read"], live, dealRules: { verifier: c.verifier }, token, pollMs: 5,
     workers: { researcher: worker("worker-researcher.mjs"), writer: worker("worker-writer.mjs") },
     workerEnv: { researcher: { PAYEE: c.seller.address, AMOUNT: String(1n * USDC) } }, runner: { pollMs: 200 },
@@ -340,6 +345,51 @@ test("mission service over HTTP: token required, prepare -> buyer signs -> start
       await new Promise((r) => setTimeout(r, 25));
     }
     assert.equal(state, "done");
+
+    // A restarted service (empty memory, same store) still shows the finished mission, read-only and keyless.
+    const svc2 = createMissionService({ store: fileMissionStore(storeDir), ctx: c.ctx, broker: b, capabilities: ["market:read"], live, dealRules: { verifier: c.verifier }, token, workers: {} });
+    await new Promise<void>((r) => svc2.listen(0, "127.0.0.1", r));
+    try {
+      const base2 = `http://127.0.0.1:${(svc2.address() as { port: number }).port}`;
+      const kept = await (await fetch(`${base2}/missions/${prep.mission}`, { headers: { authorization: `Bearer ${token}` } })).json();
+      assert.equal(kept.ok, true);
+      assert.equal(kept.stored, true);
+      assert.equal(kept.state, "done");
+      assert.ok(kept.events.some((e: { type: string }) => e.type === "delivered"));
+      assert.deepEqual(kept.roles.map((r: { agent: string }) => r.agent), prep.roles.map((r: { agent: string }) => r.agent));
+      const raw = JSON.stringify(kept);
+      assert.ok(!/privateKey|secretKey|keyPair/i.test(raw));
+      assert.equal((await fetch(`${base2}/missions/${prep.mission}/start`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: "{}" })).status, 404);
+      assert.equal((await fetch(`${base2}/missions/${prep.mission}`)).status, 401);
+    } finally {
+      svc2.close();
+    }
+  } finally {
+    svc.close();
+  }
+});
+
+test("mission store: a mission still running when the service stopped comes back as interrupted; bad names are ignored", async () => {
+  const { fileMissionStore } = await import("../src/index.ts");
+  const { mkdtempSync, readdirSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(`${tmpdir()}/missions-`);
+  const store = fileMissionStore(dir);
+  const m = "8iUKNnoQmYWnUQTtR8TVDZvCJKi2YFAYxLZo3ggb5UjM";
+  store.save(m, { mission: m, state: "running", events: [] } as never);
+  store.save("../../etc/passwd", { state: "done" } as never);
+  assert.deepEqual(readdirSync(dir), [`${m}.json`]);
+  assert.equal(store.load("../x"), null);
+  const c = await chain();
+  const { broker: b, live } = broker(c);
+  const { createMissionService } = await import("../src/index.ts");
+  const token = "s".repeat(48);
+  const svc = createMissionService({ store, ctx: c.ctx, broker: b, capabilities: [], live, dealRules: { verifier: c.verifier }, token, workers: {} });
+  await new Promise<void>((r) => svc.listen(0, "127.0.0.1", r));
+  try {
+    const base = `http://127.0.0.1:${(svc.address() as { port: number }).port}`;
+    const r = await (await fetch(`${base}/missions/${m}`, { headers: { authorization: `Bearer ${token}` } })).json();
+    assert.equal(r.state, "interrupted");
   } finally {
     svc.close();
   }
