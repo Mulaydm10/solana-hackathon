@@ -45,6 +45,8 @@ export type DealContext = {
   /** Send attempts on rate limits / timeouts. Default 6. */
   attempts?: number;
   sleep?: (ms: number) => Promise<void>;
+  /** exactlyOnce sends: the longest wait for a blockhash window to pass. Default 240 s (120 s without block heights). */
+  expiryWaitMs?: number;
 };
 
 /** "Pubkey::default()": no verifier / no approver. */
@@ -150,23 +152,60 @@ export function toRefusal(e: unknown): Refusal {
   return refuse("CHAIN_ERROR", e instanceof Error ? e.message.slice(0, 300) : String(e));
 }
 
+/** A transaction's blockhash stays valid for 150 blocks; past this many blocks after it was built it can never land. */
+export const BLOCKHASH_WINDOW = 150n + 30n;
+
+type BlockHeightRpc = { getBlockHeight(c?: { commitment?: "confirmed" }): { send(): Promise<bigint> } };
+
+/** The current block height, or null when the RPC can't say (e.g. some test clients). */
+async function blockHeight(ctx: DealContext): Promise<bigint | null> {
+  const rpc = ctx.client.rpc as unknown as Partial<BlockHeightRpc>;
+  if (typeof rpc.getBlockHeight !== "function") return null;
+  try {
+    return BigInt(await rpc.getBlockHeight({ commitment: "confirmed" }).send());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Waits until a transaction built at block height `builtAt` can no longer land (its blockhash window has passed),
+ * so a "not landed" read after this is final. Without block heights it waits a conservative fixed time.
+ */
+async function waitUntilExpired(ctx: DealContext, builtAt: bigint | null, sleep: (ms: number) => Promise<void>): Promise<void> {
+  if (builtAt === null) return sleep(ctx.expiryWaitMs ?? 120_000);
+  // Counted in polls, not wall time, so an injected `sleep` (tests) behaves the same.
+  const polls = Math.ceil((ctx.expiryWaitMs ?? 240_000) / 2_000);
+  for (let i = 0; i < polls; i++) {
+    const h = await blockHeight(ctx);
+    if (h !== null && h > builtAt + BLOCKHASH_WINDOW) return;
+    await sleep(2_000);
+  }
+}
+
 /**
  * Send once, safely. A 429 can arrive after the transaction landed, and a confirmation can stall
  * even though the transaction is finalized. After either, `landed()` reads the chain: if the action
- * took effect we return its latest signature; otherwise we resend. A resend of something that did
- * land fails on chain and is caught by the same check, so nothing ever happens twice.
+ * took effect we return its latest signature; otherwise we resend. For actions whose resend would fail
+ * on chain (create, accept, deliver, release…) that check is enough.
+ *
+ * `exactlyOnce` is for actions the program does NOT reject when repeated (agent_spend, #210): a resend would be
+ * a second valid payment. Then, after an uncertain failure, nothing is resent while the first transaction could
+ * still land: we wait until its blockhash window has passed, and only a `landed()` read after that decides.
  */
 export async function safeSend(
   ctx: DealContext,
   watch: Address,
   landed: () => Promise<boolean>,
   build: () => Promise<Instruction[]>,
+  o: { exactlyOnce?: boolean } = {},
 ): Promise<Sent> {
   const sleep = ctx.sleep ?? defaultSleep;
   const attempts = ctx.attempts ?? 6;
   const timeoutMs = ctx.confirmTimeoutMs ?? 45_000;
   let uncertain = false;
   for (let attempt = 1; ; attempt++) {
+    const builtAt = o.exactlyOnce ? await blockHeight(ctx) : null;
     try {
       const sent = ctx.client.sendTransaction(await build());
       sent.catch(() => {}); // may be abandoned on timeout
@@ -192,6 +231,12 @@ export async function safeSend(
       if (uncertain || !programRefused) {
         await sleep(1_500);
         if (await readWithRetry(ctx, landed)) return { ok: true, signature: await latestSignature(ctx, watch) };
+        // Not visible yet. For an action the program would accept twice, a stale read must not cause a resend:
+        // wait until the first transaction can no longer land, then the chain's answer is final.
+        if (o.exactlyOnce && transient) {
+          await waitUntilExpired(ctx, builtAt, sleep);
+          if (await readWithRetry(ctx, landed)) return { ok: true, signature: await latestSignature(ctx, watch) };
+        }
       }
       if (!transient) return toRefusal(e); // unknown errors: reported, never resent
       if (attempt >= attempts) {
@@ -221,7 +266,7 @@ export async function readWithRetry<T>(ctx: DealContext, read: () => Promise<T>)
 }
 
 async function latestSignature(ctx: DealContext, address: Address): Promise<string> {
-  const [last] = await readWithRetry(ctx, () => ctx.client.rpc.getSignaturesForAddress(address, { limit: 1 }).send());
+  const [last] = await readWithRetry(ctx, () => ctx.client.rpc.getSignaturesForAddress(address, { limit: 1, commitment: "confirmed" }).send());
   return String(last?.signature ?? "landed");
 }
 

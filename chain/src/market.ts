@@ -244,9 +244,9 @@ async function rawMission(ctx: DealContext, mission: Address) {
   return m.exists ? m.data : null;
 }
 
-async function rawMandate(ctx: DealContext, mission: Address, agent: Address) {
+async function rawMandate(ctx: DealContext, mission: Address, agent: Address, commitment?: "confirmed") {
   const [address] = await findMandatePda({ mission, agent });
-  const m = await readWithRetry(ctx, () => fetchMaybeMandate(ctx.client.rpc, address));
+  const m = await readWithRetry(ctx, () => fetchMaybeMandate(ctx.client.rpc, address, commitment ? { commitment } : undefined));
   return { address, data: m.exists ? m.data : null };
 }
 
@@ -322,17 +322,22 @@ function serialized<T>(key: string, fn: () => Promise<T>): Promise<T> {
 async function spendOnce(
   ctx: DealContext, agent: TransactionSigner, mission: Address, payee: Address, amount: bigint, receiptHash: Uint8Array, listing?: Address,
 ): Promise<Sent> {
-  const before = (await rawMandate(ctx, mission, agent.address)).data;
-  if (!before) return refuse("MANDATE_NOT_FOUND", "This agent has no mandate on that mission.");
-  return safeSend(ctx, mission, async () => {
-    const now = (await rawMandate(ctx, mission, agent.address)).data;
-    return now !== null && now.spent >= before.spent + amount;
+  const before = await rawMandate(ctx, mission, agent.address, "confirmed");
+  if (!before.data) return refuse("MANDATE_NOT_FOUND", "This agent has no mandate on that mission.");
+  const spentBefore = before.data.spent;
+  // A repeated agent_spend is a second valid payment (no on-chain idempotency), so this send is exactly-once (#210):
+  // landed() reads at "confirmed" (a finalized read lags and looked like "not landed"), and after an uncertain
+  // failure nothing is resent until the first transaction can no longer land. The signature reported is the
+  // mandate's latest transaction, i.e. this spend.
+  return safeSend(ctx, before.address, async () => {
+    const now = (await rawMandate(ctx, mission, agent.address, "confirmed")).data;
+    return now !== null && now.spent >= spentBefore + amount;
   }, async () => [
     await getAgentSpendInstructionAsync({
       agent, mission, mint: ctx.mint, payeeToken: await ata(ctx, payee), listing, amount, receiptHash,
       registry: listing ? await registryAddress() : undefined,
     }),
-  ]);
+  ], { exactlyOnce: true });
 }
 
 const statusOf = async (ctx: DealContext, deal: Address) => {
