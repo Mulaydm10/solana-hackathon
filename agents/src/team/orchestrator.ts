@@ -169,6 +169,8 @@ export type RunStagesOptions = Pick<MissionOptions, "ctx" | "broker" | "workers"
   approvalTimeoutMs?: number;
   /** Test hook: called while waiting for stage i's approval. */
   onWaiting?: (stage: number) => Promise<void> | void;
+  /** Test hook: how the mission is read while waiting for an approval. Default `getMission`. */
+  readMission?: typeof getMission;
 };
 
 /**
@@ -189,7 +191,16 @@ export async function* runStages(o: RunStagesOptions): AsyncGenerator<MissionEve
     // Wait for the buyer's own approval of this exact plan, on chain.
     const started = Date.now();
     for (;;) {
-      const m = await getMission(o.ctx, mission);
+      // A read that fails (e.g. the public devnet RPC rate-limiting, HTTP 429) is not an answer: wait and read again
+      // on the next poll instead of failing the whole mission (#222). The approval timeout still bounds the wait.
+      let m: Awaited<ReturnType<typeof getMission>>;
+      try {
+        m = await (o.readMission ?? getMission)(o.ctx, mission);
+      } catch {
+        if (o.approvalTimeoutMs !== undefined && Date.now() - started > o.approvalTimeoutMs) return yield { type: "failed", reason: "APPROVAL_TIMEOUT", message: `no approval for stage ${i}` };
+        await sleep(o.pollMs ?? 2_000);
+        continue;
+      }
       if (!m) return yield { type: "failed", reason: "MISSION_NOT_FOUND", message: "the mission is not on chain" };
       if (m.closed) return yield { type: "declined", stage: i };
       const st = m.stages[i];

@@ -286,6 +286,33 @@ test("a stage approved for a different plan never runs", async () => {
 });
 
 
+test("#222: rate-limited reads while waiting for an approval don't fail the mission", async () => {
+  const c = await chain();
+  const { broker: b, live } = broker(c);
+  const prep = await prepareMission({
+    blueprint: blueprint(c.seller.address), goal: "Brief", budget: 10n * USDC, missionId: 8n, expiresAt: c.now() + 3_600n,
+    capabilities: ["market:read"], dealRules: { verifier: c.verifier }, buyer: c.buyer.address,
+  });
+  assert.ok(prep.ok);
+  const p = prep.value;
+  await missions.create(c.ctx, c.buyer, p.createParams);
+  for (const r of p.roles) await missions.addMandate(c.ctx, c.buyer, p.mission, r.mandate);
+  await missions.approveStage(c.ctx, c.buyer, p.mission, 0, p.plans[0]!.planHash, p.digest);
+  const { getMission } = await import("@deal/chain");
+  let failures = 4;
+  const flaky: typeof getMission = async (ctx, m) => {
+    if (failures-- > 0) throw Object.assign(new Error("HTTP error (429): Too Many Requests"), { context: { statusCode: 429 } });
+    return getMission(ctx, m);
+  };
+  const events: MissionEvent[] = [];
+  for await (const e of runStages({ ctx: c.ctx, prepared: p, broker: b, live, pollMs: 5, readMission: flaky, approvalTimeoutMs: 2_000, workers: { researcher: worker("worker-researcher.mjs"), writer: worker("worker-writer.mjs") } })) {
+    events.push(e);
+    if (e.type === "approved") break;
+  }
+  assert.ok(failures < 0, "the reads really failed first");
+  assert.deepEqual(events.map((e) => e.type), ["plan", "approved"]);
+});
+
 test("mission service over HTTP: token required, prepare -> buyer signs -> start -> delivered", async () => {
   const { createMissionService } = await import("../src/index.ts");
   const c = await chain();
