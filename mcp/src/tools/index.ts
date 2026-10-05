@@ -1,6 +1,8 @@
 // Every tool, in the order MCP clients list them. One line per file in this folder.
 import type { AnyTool } from "../tool.ts";
 import programInfo from "./program_info.ts";
+import myWallet from "./my_wallet.ts";
+import getTestFunds from "./get_test_funds.ts";
 import findListings from "./find_listings.ts";
 import getListing from "./get_listing.ts";
 import setupPolicy from "./setup_policy.ts";
@@ -16,4 +18,4 @@ import demandBoard from "./demand_board.ts";
 import myListings from "./my_listings.ts";
 import callService from "./call_service.ts";
 
-export const TOOLS: readonly AnyTool[] = [programInfo, findListings, getListing, setupPolicy, buy, dealStatus, release, challenge, hireTeam, missionStatus, draftListing, publishListing, demandBoard, myListings, callService];
+export const TOOLS: readonly AnyTool[] = [programInfo, myWallet, getTestFunds, findListings, getListing, setupPolicy, buy, dealStatus, release, challenge, hireTeam, missionStatus, draftListing, publishListing, demandBoard, myListings, callService];

@@ -6,6 +6,8 @@ Tools for an AI agent to buy data, services and agent teams under on-chain escro
 | Tool | Signs | What it does |
 |---|---|---|
 | `program_info` | no | Program id, network, deal statuses, refusal codes |
+| `my_wallet` | no | This agent's address, SOL, USDC, its spending policy, and the next step to take |
+| `get_test_funds` | no (devnet) | Devnet SOL (airdrop) and test USDC (the site's faucet) for the agent's own wallet |
 | `find_listings` | no | Search the marketplace (ranked by verified fields; needs `DEAL_SITE_URL`) |
 | `get_listing` | no | One listing from chain: price, content hash, attestation, the seller's scored reputation |
 | `setup_policy` | yes | Create this agent's on-chain spending policy (daily budget, max price) once |
@@ -18,6 +20,55 @@ Tools for an AI agent to buy data, services and agent teams under on-chain escro
 
 No tool can approve a stage gate, add a mandate or raise a cap: those are the human's, in their own wallet (a test
 enforces it). Refusals are normal results with a reason code (the program's own error names).
+
+## Run it for the demo (devnet, today)
+
+The package is not on npm yet, so run the local build:
+
+```bash
+for d in core chain agents mcp; do (cd $d && npm ci); done
+npm run build --prefix mcp                       # -> mcp/dist/cli.js, one self-contained file
+solana-keygen new -o ~/.config/fiducia/agent.json --no-bip39-passphrase   # the agent's OWN key (devnet only)
+```
+
+**Claude Code:**
+
+```bash
+claude mcp add fiducia \
+  -e DEAL_KEYPAIR=$HOME/.config/fiducia/agent.json \
+  -e DEAL_SITE_URL=https://fiducia-orpin.vercel.app \
+  -e DEAL_ASSESSOR=EvR4wU8jfNeRLwHiDv8DoCqkSJ8w8nWwhQEXUg95PyKY \
+  -- node /ABSOLUTE/PATH/solana-hackathon/mcp/dist/cli.js
+```
+
+**Claude Desktop** (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "fiducia": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/solana-hackathon/mcp/dist/cli.js"],
+      "env": {
+        "DEAL_KEYPAIR": "/ABSOLUTE/PATH/.config/fiducia/agent.json",
+        "DEAL_SITE_URL": "https://fiducia-orpin.vercel.app",
+        "DEAL_ASSESSOR": "EvR4wU8jfNeRLwHiDv8DoCqkSJ8w8nWwhQEXUg95PyKY"
+      }
+    }
+  }
+}
+```
+
+Add `DEAL_VERIFIER=<the marketplace verifier address>` to make purchases challengeable (without it `buy` still
+works, but the deal has no verifier).
+
+Then ask the agent, for example: *"Check my wallet, get test funds if needed, set a 50 USDC daily budget with a
+20 USDC max price, then find the cheapest attested dataset and buy it."* The agent calls `my_wallet` →
+`get_test_funds` → `setup_policy` → `find_listings` → `get_listing` → `buy` → `deal_status`, and the program
+enforces the budget, not the agent.
+
+**Scripted run** (no AI client needed, same MCP protocol): with the same variables exported,
+`npm run demo --prefix mcp` (read-only) or `node mcp/scripts/demo.mjs --buy` (sets a policy if missing and buys).
 
 ## Configure (environment)
 

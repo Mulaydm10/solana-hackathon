@@ -13,7 +13,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "tsc --noEmit && node --import tsx --test test/*.test.ts && node scripts/build.mjs && node --test test/smoke.test.mjs"
+    "test": "tsc --noEmit && node --import tsx --test test/*.test.ts && node scripts/build.mjs && node --test test/smoke.test.mjs",
+    "demo": "node scripts/build.mjs && node scripts/demo.mjs"
   },
   "dependencies": {
     "@deal/agents": "file:../agents",
