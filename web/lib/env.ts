@@ -36,6 +36,8 @@ const Schema = z.object({
   MISSION_SERVICE_URL: z.string().url().optional(),
   /** Bearer token for the mission service; server routes only. */
   MISSION_SERVICE_TOKEN: z.string().min(32).optional(),
+  /** Demo buyer for judges (64-byte JSON array), devnet only: signs demo missions it creates (#183). Server only. */
+  DEMO_BUYER_KEY: keypairBytes.optional(),
 });
 
 export type ServerEnv = z.infer<typeof Schema> & { rpcUrl: string };
@@ -54,18 +56,21 @@ export function parseEnv(raw: Record<string, string | undefined>): EnvResult {
   return { ok: true, env: { ...r.data, rpcUrl: r.data.DEAL_RPC_URL ?? DEFAULT_RPC[r.data.DEAL_CLUSTER] } };
 }
 
-export type Capability = "drafting" | "verifier" | "missions" | "faucet" | "sell";
+export type Capability = "drafting" | "verifier" | "missions" | "faucet" | "sell" | "demo";
 const NEEDS: Record<Capability, (keyof ServerEnv)[]> = {
   drafting: ["ANTHROPIC_API_KEY"],
   verifier: ["DEAL_VERIFIER_KEY"],
   missions: ["MISSION_SERVICE_URL", "MISSION_SERVICE_TOKEN"],
   faucet: ["DEAL_FAUCET_KEY"],
   sell: ["DEAL_ASSESSOR_KEY", "DEAL_CUSTODY_KEY"],
+  demo: ["DEMO_BUYER_KEY", "MISSION_SERVICE_URL", "MISSION_SERVICE_TOKEN"],
 };
 
 /** For routes that cannot run without a secret: a typed refusal instead of a half-configured run. */
 export function requireEnv(r: EnvResult, cap: Capability): { ok: true; env: ServerEnv } | { ok: false; status: number; body: { ok: false; reason: string; message: string } } {
   if (!r.ok) return { ok: false, status: 500, body: { ok: false, reason: r.reason, message: r.message } };
+  // The demo buyer signs with a server key: devnet only, never localnet tricks or anything else.
+  if (cap === "demo" && r.env.DEAL_CLUSTER !== "devnet") return { ok: false, status: 503, body: { ok: false, reason: "NOT_CONFIGURED", message: "the demo runs on devnet only" } };
   if (NEEDS[cap].some((k) => !r.env[k])) return { ok: false, status: 503, body: { ok: false, reason: "NOT_CONFIGURED", message: `${cap} is not configured on this deployment` } };
   return { ok: true, env: r.env };
 }
@@ -82,6 +87,10 @@ export function health(r: EnvResult) {
       missions: Boolean(r.env.MISSION_SERVICE_URL && r.env.MISSION_SERVICE_TOKEN),
       faucet: Boolean(r.env.DEAL_FAUCET_KEY),
       sell: Boolean(r.env.DEAL_ASSESSOR_KEY && r.env.DEAL_CUSTODY_KEY),
+      demo: demoAvailable(r),
     },
   };
 }
+
+/** Whether "Try the demo" is offered: the demo buyer key and the mission service are configured, on devnet. */
+export const demoAvailable = (r: EnvResult) => requireEnv(r, "demo").ok;

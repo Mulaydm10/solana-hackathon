@@ -7,7 +7,7 @@ const KEY = JSON.stringify(Array.from({ length: 64 }, (_, i) => i));
 test("defaults: devnet, public RPC, no capabilities", () => {
   const r = parseEnv({});
   assert.equal(r.ok && r.env.rpcUrl, "https://api.devnet.solana.com");
-  assert.deepEqual(health(r), { ok: true, cluster: "devnet", capabilities: { drafting: false, verifier: false, missions: false, faucet: false, sell: false } });
+  assert.deepEqual(health(r), { ok: true, cluster: "devnet", capabilities: { drafting: false, verifier: false, missions: false, faucet: false, sell: false, demo: false } });
 });
 
 test("empty strings mean unset (Vercel)", () => {

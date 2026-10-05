@@ -25,7 +25,9 @@ const CANARY_FAUCET = JSON.stringify(CANARY_FAUCET_BYTES);
 const CANARY_ASSESSOR_BYTES = Array.from(randomBytes(64));
 const CANARY_ASSESSOR = JSON.stringify(CANARY_ASSESSOR_BYTES);
 const CANARY_CUSTODY = randomBytes(32).toString("hex");
-const env = { ...process.env, DEAL_CLUSTER: "devnet", ANTHROPIC_API_KEY: CANARY_KEY, DEAL_VERIFIER_KEY: CANARY_VERIFIER, MISSION_SERVICE_URL: "http://127.0.0.1:9", MISSION_SERVICE_TOKEN: CANARY_MISSION_TOKEN, DEAL_FAUCET_KEY: CANARY_FAUCET, DEAL_ASSESSOR_KEY: CANARY_ASSESSOR, DEAL_CUSTODY_KEY: CANARY_CUSTODY, NEXT_TELEMETRY_DISABLED: "1" };
+const CANARY_DEMO_BYTES = Array.from(randomBytes(64));
+const CANARY_DEMO = JSON.stringify(CANARY_DEMO_BYTES);
+const env = { ...process.env, DEAL_CLUSTER: "devnet", ANTHROPIC_API_KEY: CANARY_KEY, DEAL_VERIFIER_KEY: CANARY_VERIFIER, MISSION_SERVICE_URL: "http://127.0.0.1:9", MISSION_SERVICE_TOKEN: CANARY_MISSION_TOKEN, DEAL_FAUCET_KEY: CANARY_FAUCET, DEAL_ASSESSOR_KEY: CANARY_ASSESSOR, DEAL_CUSTODY_KEY: CANARY_CUSTODY, DEMO_BUYER_KEY: CANARY_DEMO, NEXT_TELEMETRY_DISABLED: "1" };
 
 /**
  * String literals from agents' seller chain and custody (#110): server-only code, so never in the browser.
@@ -148,8 +150,8 @@ function files(dir: string): string[] {
 test("no server secret, secret name or server-only module text reaches the browser", async () => {
   const forbidden = [
     CANARY_KEY, CANARY_VERIFIER, CANARY_BYTES.slice(0, 16).join(","), CANARY_MISSION_TOKEN, CANARY_FAUCET, CANARY_FAUCET_BYTES.slice(0, 16).join(","),
-    CANARY_ASSESSOR, CANARY_ASSESSOR_BYTES.slice(0, 16).join(","), CANARY_CUSTODY,
-    "ANTHROPIC_API_KEY", "DEAL_VERIFIER_KEY", "MISSION_SERVICE_TOKEN", "DEAL_FAUCET_KEY", "DEAL_ASSESSOR_KEY", "DEAL_CUSTODY_KEY", "BLOB_READ_WRITE_TOKEN",
+    CANARY_ASSESSOR, CANARY_ASSESSOR_BYTES.slice(0, 16).join(","), CANARY_CUSTODY, CANARY_DEMO, CANARY_DEMO_BYTES.slice(0, 16).join(","),
+    "DEMO_BUYER_KEY", "ANTHROPIC_API_KEY", "DEAL_VERIFIER_KEY", "MISSION_SERVICE_TOKEN", "DEAL_FAUCET_KEY", "DEAL_ASSESSOR_KEY", "DEAL_CUSTODY_KEY", "BLOB_READ_WRITE_TOKEN",
     "must be a JSON array of 64 bytes", // lib/env.ts is server-only
     // The agents lane's seller chain and custody (#110) run on the server only: none of their code may ship.
     ...AGENTS_MARKERS,
@@ -166,7 +168,11 @@ test("no server secret, secret name or server-only module text reaches the brows
   }
   // Health says the capabilities exist, without their values.
   const h = (await (await fetch(`${base}/api/health`)).json()) as { capabilities: Record<string, boolean> };
-  assert.deepEqual(h.capabilities, { drafting: true, verifier: true, missions: true, faucet: true, sell: true });
+  assert.deepEqual(h.capabilities, { drafting: true, verifier: true, missions: true, faucet: true, sell: true, demo: true });
+  // With the demo buyer configured, /hire offers "Try the demo"; the page carries no part of the key.
+  const hire = (await page("/hire")).html;
+  assert.ok(hire.includes('data-testid="try-demo"'), "the Try the demo button is missing although DEMO_BUYER_KEY is set");
+  assert.ok(!hire.includes(CANARY_DEMO));
 });
 
 test("the agents markers are real: the server bundle has them (so their absence from the browser means something)", () => {
