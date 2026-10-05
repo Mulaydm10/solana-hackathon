@@ -5,6 +5,7 @@
 <p align="center">
   <a href="https://fiducia-orpin.vercel.app"><img alt="Live demo" src="https://img.shields.io/badge/live-fiducia--orpin.vercel.app-2DD4BF?style=for-the-badge"></a>
   <a href="https://explorer.solana.com/address/CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV?cluster=devnet"><img alt="Solana devnet program" src="https://img.shields.io/badge/Solana-devnet-9945FF?style=for-the-badge&logo=solana&logoColor=white"></a>
+  <a href="https://youtu.be/L7-ofBtbwRA"><img alt="Demo video" src="https://img.shields.io/badge/demo-video-FF0000?style=for-the-badge&logo=youtube&logoColor=white"></a>
   <a href="https://github.com/Mulaydm10/solana-hackathon/blob/design/pitch-deck/docs/pitch/Fiducia-pitch-deck.pdf"><img alt="Pitch deck" src="https://img.shields.io/badge/pitch-deck-E8B04B?style=for-the-badge"></a>
 </p>
 
@@ -59,7 +60,7 @@ Fiducia makes the rules part of the chain, so agents can spend and you keep cont
 - **Prompt-injection quarantine.** Outside content is read by a quarantined reader; numbers are computed in code, never by the model.
 
 ### For AI agents
-- An **MCP server** with buyer and seller tools: `find_listings`, `get_listing`, `setup_policy`, `buy`, `deal_status`, `release`, `challenge`, `hire_team`, `mission_status`, `draft_listing`, `publish_listing`, `my_listings`, `demand_board`, `call_service`.
+- An **MCP server** with buyer and seller tools: `my_wallet`, `get_test_funds`, `find_listings`, `get_listing`, `setup_policy`, `buy`, `deal_status`, `release`, `challenge`, `hire_team`, `mission_status`, `draft_listing`, `publish_listing`, `my_listings`, `demand_board`, `call_service`.
 - **x402 pay-per-call** in USDC on Solana: no answer, no charge.
 - **`/llms.txt`** and **`/api/catalogue`**: the same registry the site shows.
 
@@ -122,6 +123,31 @@ flowchart LR
    - **Hire** the Trip planner team and approve its stages on `/missions`.
 
 Every flow (sell, buy, sealed delivery, hire a team with a mandate-bound spend, and x402 pay-per-call) is **verified end to end on devnet**.
+
+---
+
+## 📍 Deployment
+
+| | |
+|---|---|
+| Network | **Solana devnet** (mainnet is refused by the MCP server and not deployed) |
+| Program `deal_escrow` | [`CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV`](https://explorer.solana.com/address/CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV?cluster=devnet) |
+| v3 upgrade transaction | [`2i7r7iCz…HBanQuwC3`](https://explorer.solana.com/tx/2i7r7iCz3CkrYfcuvTVUd3cpxEm7GveWqYNtiiEG3guBkjAGcdQPnsQyUi3W7RsW6sYvR2fqRNqiWKHHBanQuwC3?cluster=devnet) (slot 507459446) |
+| Deployed binary | sha256 `d437551261d8a438b41b9e0ecc60994ccc9db4df3cfbeab322b226c31b1f7e8c`; `chain/scripts/verify-deployed.ts` checks it against the committed build |
+| Registered assessor | [`EvR4wU8jfNeRLwHiDv8DoCqkSJ8w8nWwhQEXUg95PyKY`](https://explorer.solana.com/address/EvR4wU8jfNeRLwHiDv8DoCqkSJ8w8nWwhQEXUg95PyKY?cluster=devnet) |
+| Settlement token | Circle devnet USDC [`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`](https://explorer.solana.com/address/4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU?cluster=devnet) |
+| Live site | https://fiducia-orpin.vercel.app (Vercel) |
+| Demo video | https://youtu.be/L7-ofBtbwRA |
+
+## 🤖 Use it from an AI agent (MCP)
+
+Fiducia ships an MCP server so Claude (Desktop or Code) or any MCP client can buy under an on-chain budget, signing
+with the agent's own key. Setup takes two minutes: see [`mcp/README.md`](mcp/README.md#run-it-for-the-demo-devnet-today).
+
+```bash
+for d in core chain agents mcp; do (cd $d && npm ci); done
+npm run build --prefix mcp && npm run demo --prefix mcp   # a scripted agent session over MCP
+```
 
 ---
 
