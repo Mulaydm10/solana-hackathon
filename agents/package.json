@@ -13,9 +13,11 @@
     "typecheck": "tsc --noEmit",
     "spike:x402": "node --import tsx scripts/x402-spike.ts",
     "serve:missions": "node --import tsx scripts/serve-missions.ts",
-    "serve:verifier": "node --import tsx scripts/serve-verifier.ts"
+    "serve:verifier": "node --import tsx scripts/serve-verifier.ts",
+    "demo:mission": "node --import tsx scripts/demo-mission.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@deal/chain": "file:../chain",
     "@deal/core": "file:../core",
     "@noble/curves": "^2.4.0",

@@ -31,11 +31,11 @@ export type MissionEvent =
   | { type: "plan"; stage: number; planHash: string; plan: string }
   | { type: "approved"; stage: number }
   | { type: "declined"; stage: number }
-  | { type: "spend"; role: string; payee: string; amount: string; ok: boolean; reason?: string }
+  | { type: "spend"; role: string; payee: string; amount: string; ok: boolean; reason?: string; signature?: string }
   | { type: "result"; role: string; output: string }
   | { type: "worker-exit"; role: string; exit: Exit }
   | { type: "refused"; role: string; reason: string }
-  | { type: "delivered"; deliverableHash: string }
+  | { type: "delivered"; deliverableHash: string; signature?: string }
   | { type: "failed"; reason: string; message: string };
 
 export type MissionOptions = {
@@ -236,7 +236,7 @@ export async function* runStages(o: RunStagesOptions): AsyncGenerator<MissionEve
             const msg = await readWorkerMessage(reader, message);
             if (msg.kind === "spend") {
               const r = await missions.spend(o.ctx, agent, mission, msg.payee, msg.amount, msg.receipt);
-              events.push({ type: "spend", role: roleName, payee: msg.payee, amount: msg.amount.toString(), ok: r.ok, reason: r.ok ? undefined : r.reason });
+              events.push({ type: "spend", role: roleName, payee: msg.payee, amount: msg.amount.toString(), ok: r.ok, reason: r.ok ? undefined : r.reason, signature: r.ok ? r.signature : undefined });
               return r.ok ? { ok: true } : { ok: false, reason: r.reason };
             }
             if (msg.kind === "result") {
@@ -264,6 +264,7 @@ export async function* runStages(o: RunStagesOptions): AsyncGenerator<MissionEve
     const acc = await deals.accept(o.ctx, o.team.seller, o.team.feeDeal);
     const del = acc.ok ? await deals.deliver(o.ctx, o.team.seller, o.team.feeDeal, productHash, o.team.invoice) : acc;
     if (!del.ok) return yield { type: "failed", reason: del.reason, message: del.message };
+    return yield { type: "delivered", deliverableHash: bytesToHex(productHash), signature: del.signature };
   }
   yield { type: "delivered", deliverableHash: bytesToHex(productHash) };
 }
