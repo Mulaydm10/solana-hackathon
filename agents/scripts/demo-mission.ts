@@ -33,7 +33,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
-  createClient, createKeyPairSignerFromBytes, generateKeyPairSigner, lamports, type Address, type KeyPairSigner, type TransactionSigner,
+  createClient, createKeyPairSignerFromBytes, createSolanaRpc, generateKeyPairSigner, lamports, type Address, type KeyPairSigner, type TransactionSigner,
 } from "@solana/kit";
 import { solanaRpc } from "@solana/kit-plugin-rpc";
 import { airdropSigner, generatedSigner, signer as signerPlugin } from "@solana/kit-plugin-signer";
@@ -42,7 +42,7 @@ import {
   fetchMaybeToken, findAssociatedTokenPda, getCreateAssociatedTokenIdempotentInstructionAsync, getCreateMintInstructionPlan,
   getMintToATAInstructionPlanAsync, TOKEN_PROGRAM_ADDRESS,
 } from "@solana-program/token";
-import { DEAL_ESCROW_PROGRAM_ADDRESS, deals, fetchMaybeBuyerPolicy, getInitPolicyInstructionAsync, missions, policyAddress, type DealClient, type DealContext } from "@deal/chain";
+import { DEAL_ESCROW_PROGRAM_ADDRESS, deals, fetchMaybeBuyerPolicy, findMandatePda, getInitPolicyInstructionAsync, missions, policyAddress, type DealClient, type DealContext } from "@deal/chain";
 import { PROGRAM_SO } from "@deal/chain/node";
 import { formatAmount, type Blueprint } from "@deal/core";
 import {
@@ -50,6 +50,7 @@ import {
   type MissionEvent,
 } from "../src/index.ts";
 import { demoEnv, preflight, readKeypairFile, safeUrl } from "./demo-setup.ts";
+import { landedSpends, unreported, type AuditRpc } from "./spend-audit.ts";
 
 const USDC = 1_000_000n;
 const args = new Set(process.argv.slice(2));
@@ -283,6 +284,23 @@ try {
   say(`Team seller balance ${usdc(await tokenOf(teamSeller.address))} · data seller balance ${usdc(await tokenOf(dataSeller.address))}`);
 } catch {
   say("(balances not read: the RPC is rate-limiting; the Explorer links above are the record)");
+}
+
+// Every agent payment that LANDED on chain, read back from each mandate's history, so the evidence always matches
+// the chain (#211). Devnet only: LiteSVM keeps no transaction history.
+if (!local) {
+  try {
+    const mandates = await Promise.all(p.roles.map(async (r) => (await findMandatePda({ mission: p.mission as never, agent: r.agent.address as never }))[0] as string));
+    const landed = await landedSpends(createSolanaRpc(rpcUrl) as unknown as AuditRpc, mandates);
+    const reported = shown.filter((e) => e.type === "spend" && e.ok && e.signature).map((e) => (e as { signature: string }).signature);
+    say(`\nOn-chain record: ${landed.length} agent payment(s) landed for this mission (read back from the chain):`);
+    for (const l of landed) say(`  ${usdc(l.amount)} · slot ${l.slot}: ${link(l.signature)}`);
+    const missing = unreported(landed, reported);
+    if (missing.length) say(`WARNING: ${missing.length} landed payment(s) were not reported by the mission events: ${missing.map((m) => m.signature).join(", ")}`);
+    else say("Every landed payment matches the mission events.");
+  } catch {
+    say("(on-chain payment read-back skipped: the RPC is rate-limiting; check the mandates in Explorer)");
+  }
 }
 
 // The mission service serves this run to the site (read-only), from the same store directory.
