@@ -247,7 +247,7 @@ const rl = step ? createInterface({ input: process.stdin, output: process.stdout
 let productHash = "";
 const shown: MissionEvent[] = [];
 for await (const e of runStages({
-  ctx, broker, workers, live: liveFrom(source), prepared: p, pollMs: local ? 10 : 2_000, runner: { pollMs: local ? 200 : 2_000, maxSecs: 300 },
+  ctx, broker, workers, live: liveFrom(source), prepared: p, pollMs: local ? 10 : 5_000, runner: { pollMs: local ? 200 : 5_000, maxSecs: 300 },
   workerEnv: { researcher: { TRY_OVER_CAP: "1" } },
   team: { seller: teamSeller, feeDeal: feeDeal.deal, invoice: fee },
   onWaiting: async (i) => {
@@ -278,7 +278,12 @@ if (!productHash) fail("no product was delivered");
 // 5. The buyer checks the product hash and releases the team's fee.
 const released = ok(await deals.release(ctx, buyer, feeDeal.deal, Uint8Array.from(Buffer.from(productHash, "hex"))), "release");
 say(`Buyer released the team fee (${usdc(fee)}) for exactly that product: ${link(released.signature)}`);
-say(`Team seller balance ${usdc(await tokenOf(teamSeller.address))} · data seller balance ${usdc(await tokenOf(dataSeller.address))}`);
+// Balances are informational: a rate-limited read must not fail a finished run (#208).
+try {
+  say(`Team seller balance ${usdc(await tokenOf(teamSeller.address))} · data seller balance ${usdc(await tokenOf(dataSeller.address))}`);
+} catch {
+  say("(balances not read: the RPC is rate-limiting; the Explorer links above are the record)");
+}
 
 // The mission service serves this run to the site (read-only), from the same store directory.
 const events: MissionEvent[] = shown;
