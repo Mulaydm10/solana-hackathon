@@ -3,6 +3,7 @@
 import { siteRegistry } from "../../lib/site-registry";
 import { blueprintFor } from "../../lib/teams";
 import { HireForm, type TeamOption } from "./hire-form";
+import { demoMissionLink } from "../../lib/public-config";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default async function Hire() {
       listing: l.address, name: l.meta.name, description: l.meta.description, roles: blueprintFor(l.contentHash)!.roles.map((r) => r.name),
       seller: l.seller, price: l.price.toString(), contentHash: l.contentHash,
     }));
+  const demo = demoMissionLink();
   return (
     <main>
       <header className="page-head">
@@ -23,6 +25,7 @@ export default async function Hire() {
           agent can spend until you approve each stage&apos;s plan in your wallet, and you can revoke any agent in one
           transaction.
         </p>
+        {demo ? <p data-testid="demo-mission"><a href={demo}>Watch the demo mission</a>: a real team on devnet, read-only, no wallet needed.</p> : null}
       </header>
       <HireForm teams={teams} />
     </main>
