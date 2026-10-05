@@ -406,28 +406,28 @@ html[data-intro="1"] .ink-sheet { clip-path: inset(0 0 0 0); }
 .page-head > p { animation-delay: .14s; color: var(--ink2); max-width: 72ch; font-size: 17px; margin: 0; }
 .page-head h1 em { color: var(--ink2); }
 .page-addr code { word-break: break-all; }
-main section.sell, main section.hire, main section.deal { display: grid; gap: 18px; }
+main section.sell, main section.hire, main section.deal { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
 main section.sell > *, main section.hire > *, main section.deal > * { margin: 0; }
 .flow-track { padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .flow-track::before { left: 40px; right: 40px; top: 37px; }
 .flow-track > li + li { border-top: 0; }
 .flow-track .stage-name { font-size: 19px; }
 .flow-track .stage.is-queued .stage-name { color: var(--ink3); }
-main section .sheet-form { padding: 0; gap: 0; overflow: hidden; }
-.sheet-part { position: relative; display: grid; gap: 12px; padding: 20px 20px 20px 72px; border-bottom: 1px dashed var(--line); }
+main section .sheet-form { grid-template-columns: minmax(0, 1fr); min-width: 0; padding: 0; gap: 0; overflow: hidden; }
+.sheet-part { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 20px 20px 20px 72px; border-bottom: 1px dashed var(--line); }
 .part-no { position: absolute; left: 20px; top: 14px; font: 400 36px/1 var(--display); color: transparent; -webkit-text-stroke: 1px var(--line2); }
 .sheet-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 18px 20px; }
 .sheet-actions .fine { max-width: 60ch; }
-.choice-set { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; border: 0; padding: 0; }
+.choice-set { grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); min-width: 0; gap: 12px; border: 0; padding: 0; }
 .choice-set legend { padding: 0 0 8px; }
-.choice { display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); cursor: pointer; transition: border-color .3s var(--ease), box-shadow .3s var(--ease), transform .3s var(--ease); }
+.choice { display: flex; min-width: 0; gap: 10px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); cursor: pointer; transition: border-color .3s var(--ease), box-shadow .3s var(--ease), transform .3s var(--ease); }
 .choice:hover { border-color: var(--line2); transform: translateY(-1px); }
 .choice:has(input:checked) { border-color: var(--ink); box-shadow: 4px 4px 0 var(--ink); background: var(--surface); }
 .choice input { margin-top: 3px; }
 .choice > span { display: grid; gap: 4px; }
 .choice strong { font: 400 24px/1 var(--display); color: var(--ink); }
 .choice small { font-size: 13px; }
-.dropzone input[type="file"] { min-height: 64px; padding: 16px; }
+.dropzone input[type="file"] { width: 100%; min-width: 0; box-sizing: border-box; min-height: 64px; padding: 16px; }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
 .field-grid .span-2 { grid-column: 1 / -1; }
 .field-grid input, .field-grid textarea { width: 100%; min-width: 0; }
@@ -475,7 +475,7 @@ dd.is-yes { color: var(--ok); }
 .action-row button + button { margin: 0; }
 
 /* Hire: the brief and the contract */
-.hire .team-set { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; border: 0; padding: 0; }
+.hire .team-set { grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); min-width: 0; gap: 12px; border: 0; padding: 0; }
 .hire .team-set legend { padding: 0 0 8px; }
 .hire .team-set .team-choice { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px; }
 .team-choice input { margin-top: 6px; }
