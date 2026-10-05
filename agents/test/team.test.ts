@@ -354,6 +354,7 @@ test("mission service over HTTP: token required, prepare -> buyer signs -> start
       const kept = await (await fetch(`${base2}/missions/${prep.mission}`, { headers: { authorization: `Bearer ${token}` } })).json();
       assert.equal(kept.ok, true);
       assert.equal(kept.stored, true);
+      assert.equal(kept.aiProvider, "none"); // the site labels the mission's text source from this
       assert.equal(kept.state, "done");
       assert.ok(kept.events.some((e: { type: string }) => e.type === "delivered"));
       assert.deepEqual(kept.roles.map((r: { agent: string }) => r.agent), prep.roles.map((r: { agent: string }) => r.agent));

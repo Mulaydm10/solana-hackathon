@@ -38,10 +38,12 @@ export type ServiceOptions = {
   team?: { seller: TransactionSigner };
   /** Keeps each mission's public view (never agent keys) so the site still shows it after a restart. */
   store?: MissionStore;
+  /** Which text source the workers' llm:complete uses ("simulated" is shown as Simulated AI demo). Default "none". */
+  aiProvider?: "anthropic" | "simulated" | "none";
 };
 
 /** What the site shows for a mission: its public terms, plans, state and events. Never a key. */
-export type StoredMission = ReturnType<typeof publicView> & { state: string; events: MissionEvent[] };
+export type StoredMission = ReturnType<typeof publicView> & { state: string; events: MissionEvent[]; aiProvider?: string };
 
 export type MissionStore = {
   save(mission: string, view: StoredMission): void;
@@ -132,7 +134,7 @@ export function createMissionService(o: ServiceOptions): Server {
     const e = missions.get(mission);
     if (!e || !o.store) return;
     try {
-      o.store.save(mission, { ...publicView(e.prepared), state: e.state, events: e.events });
+      o.store.save(mission, { ...publicView(e.prepared), state: e.state, events: e.events, aiProvider: o.aiProvider ?? "none" });
     } catch (err) {
       console.error(`[missions] could not store ${mission}:`, err instanceof Error ? err.message : err);
     }
@@ -221,7 +223,7 @@ export function createMissionService(o: ServiceOptions): Server {
       }
 
       if (req.method === "GET" && parts.length === 2) {
-        return json(res, 200, { ok: true, state: entry.state, events: entry.events, ...publicView(entry.prepared) });
+        return json(res, 200, { ok: true, state: entry.state, events: entry.events, ...publicView(entry.prepared), aiProvider: o.aiProvider ?? "none" });
       }
       return json(res, 404, { ok: false, reason: "NOT_FOUND" });
     } catch (e) {
