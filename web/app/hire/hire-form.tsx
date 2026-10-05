@@ -1,6 +1,7 @@
 "use client";
 // The hire flow in the browser. Everything the buyer signs is built here from the program's generated builders
 // and shown by its wallet; the server never holds the buyer's key.
+import type { HirePrefill } from "../../lib/hire-prefill";
 import { useState } from "react";
 import { createNoopSigner, createSolanaRpc, type Address, type Instruction } from "@solana/kit";
 import { fetchMaybeBuyerPolicy, findMandatePda, getAddMandateInstruction, getInitPolicyInstructionAsync, policyAddress, type BuyerPolicy } from "@deal/chain";
@@ -26,11 +27,11 @@ const usdc = (base: string) => `${(Number(base) / 1e6).toFixed(2)} USDC`;
 
 
 
-export function HireForm({ teams, demo = false }: { teams: TeamOption[]; demo?: boolean }) {
+export function HireForm({ teams, demo = false, initial = {} }: { teams: TeamOption[]; demo?: boolean; initial?: HirePrefill }) {
   const connected = useWallet();
-  const [team, setTeam] = useState(teams[0]?.listing ?? "");
-  const [goal, setGoal] = useState("");
-  const [budget, setBudget] = useState("10");
+  const [team, setTeam] = useState(initial.team ?? teams[0]?.listing ?? "");
+  const [goal, setGoal] = useState(initial.goal ?? "");
+  const [budget, setBudget] = useState(initial.budget ?? "10");
   const [prep, setPrep] = useState<Prepared | null>(null);
   const [step, setStep] = useState<"form" | "review" | "funded" | "started">("form");
   const [feeDeal, setFeeDeal] = useState<string | null>(null);
