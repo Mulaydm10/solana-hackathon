@@ -5,16 +5,19 @@ import { blueprintFor } from "../../lib/teams";
 import { HireForm, type TeamOption } from "./hire-form";
 import { demoMissionLink } from "../../lib/public-config";
 import { demoAvailable, parseEnv } from "../../lib/env";
+import { hirePrefill } from "../../lib/hire-prefill";
 
 export const dynamic = "force-dynamic";
 
-export default async function Hire() {
+export default async function Hire({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const teams: TeamOption[] = (await siteRegistry().list())
     .filter((l) => l.kind === "Team" && blueprintFor(l.contentHash))
     .map((l) => ({
       listing: l.address, name: l.meta.name, description: l.meta.description, roles: blueprintFor(l.contentHash)!.roles.map((r) => r.name),
       seller: l.seller, price: l.price.toString(), contentHash: l.contentHash,
     }));
+  // /hire?team=&goal=&budget= from MCP hire_team (#216): validated starting values; the human still signs.
+  const initial = hirePrefill(await searchParams, teams.map((t) => t.listing));
   const demo = demoMissionLink();
   return (
     <main>
@@ -28,7 +31,7 @@ export default async function Hire() {
         </p>
         {demo ? <p data-testid="demo-mission"><a href={demo}>Watch the demo mission</a>: a real team on devnet, read-only, no wallet needed.</p> : null}
       </header>
-      <HireForm teams={teams} demo={demoAvailable(parseEnv(process.env))} />
+      <HireForm teams={teams} demo={demoAvailable(parseEnv(process.env))} initial={initial} />
     </main>
   );
 }
