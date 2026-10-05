@@ -113,3 +113,30 @@ test("hard rule: nothing in the package's source can approve a stage gate or add
   const walk = (dir: URL): URL[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(new URL(`${e.name}/`, dir)) : [new URL(e.name, dir)]));
   for (const f of walk(new URL("../src/", import.meta.url))) assert.ok(!banned.test(strip(readFileSync(f, "utf8"))), `${f.pathname} reaches for an approval or mandate instruction`);
 });
+
+test("my_wallet: the agent's own address, balances and policy, and what to do next", async () => {
+  const { t, ctx } = await market();
+  const before = data(await tool("my_wallet").run({}, ctx()));
+  assert.equal(before.address, t.buyer.address);
+  assert.ok(Number(before.usdc) > 0);
+  assert.equal(before.policy === null ? "setup_policy" : "find_listings", before.next);
+  assert.equal(reason(await tool("my_wallet").run({}, ctx(null as never))), "NO_SIGNER");
+});
+
+test("get_test_funds: devnet only, airdrop plus the site's faucet, refusals as values", async () => {
+  const { t, ctx } = await market();
+  const calls: string[] = [];
+  const site = (async (u: URL, init?: RequestInit) => {
+    calls.push(`${u.pathname} ${String(init?.body)}`);
+    return Response.json({ ok: true, amount: "20000000", signature: "sig" });
+  }) as unknown as typeof fetch;
+  const d = data(await tool("get_test_funds").run({}, { ...ctx(), fetch: site }));
+  assert.deepEqual(d.usdc, { ok: true, amount: "20", signature: "sig" });
+  assert.deepEqual(calls, [`/api/faucet ${JSON.stringify({ wallet: t.buyer.address })}`]);
+  const limited = (async () => Response.json({ ok: false, reason: "WALLET_LIMIT", message: "later" }, { status: 429 })) as unknown as typeof fetch;
+  // The harness RPC has no airdrop, so with the faucet also refusing nothing arrives: one refusal naming both.
+  const none = await tool("get_test_funds").run({}, { ...ctx(), fetch: limited });
+  assert.equal(reason(none), "NO_FUNDS");
+  assert.match((none as { message: string }).message, /later/);
+  assert.equal(reason(await tool("get_test_funds").run({}, ctx(t.buyer as never, { cluster: "localnet" }))), "UNSUPPORTED");
+});

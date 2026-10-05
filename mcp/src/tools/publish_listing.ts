@@ -62,6 +62,7 @@ export default defineTool({
     const custody: Custody = {
       store: (_listing, data) => ({ ciphertext: data, contentHash: sha256(data) }),
       releaseKey: async () => ({ ok: false, reason: "NOT_HERE", message: "keys are released by the marketplace custody" }),
+      releasedTo: () => null, // releases are recorded by the marketplace custody, never here
     };
     const att: { status: "requested" | "not_available" } = { status: "not_available" };
     const listingId = new DataView(crypto.getRandomValues(new Uint8Array(8)).buffer).getBigUint64(0, true);
