@@ -162,3 +162,40 @@ test("mission_status: the chain's facts plus the team's progress from the site (
   const down = (async () => { throw new Error("down"); }) as unknown as typeof fetch;
   assert.deepEqual(data(await tool("mission_status").run({ mission }, { ...ctx(), fetch: down })).team, { unavailable: "the marketplace site did not answer" });
 });
+
+test("the model key never appears in any tool result (#183): every tool, with a fake key in the environment", async () => {
+  const FAKE = "sk-ant-FAKE-KEY-" + "x9Q".repeat(16);
+  const before = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = FAKE;
+  try {
+    const { listing, ctx } = await market();
+    // A site stub that answers every route the tools call (catalogue, demand, listings, missions, faucet).
+    const site = (async (u: URL) => Response.json({
+      ok: true, listings: [{ address: listing, kind: "Data", price: "5000000", attested: true }], groups: [], meta: null,
+      state: "running", events: [{ type: "plan", stage: 0 }, { type: "result", role: "researcher", output: "notes" }], amount: "20000000", signature: "sig",
+      path: u.pathname,
+    })) as unknown as typeof fetch;
+    const c = { ...ctx(), fetch: site };
+    const results: unknown[] = [];
+    const bought = await tool("buy").run({ listing }, c);
+    results.push(bought);
+    const deal = bought.ok ? (bought.data.deal as string) : listing;
+    const calls: [string, Record<string, unknown>][] = [
+      ["program_info", {}], ["my_wallet", {}], ["get_test_funds", {}], ["find_listings", { query: "x" }], ["get_listing", { listing }],
+      ["setup_policy", { daily_budget_usdc: "10", max_price_usdc: "5" }], ["deal_status", { deal }], ["release", { deal, delivery_hash: "00".repeat(32) }],
+      ["challenge", { deal }], ["hire_team", { team: listing, goal: "3 days in Lisbon", budget_usdc: "5" }], ["mission_status", { mission: listing }],
+      ["demand_board", {}], ["my_listings", {}], ["draft_listing", { text: "a,b\n1,2\n", name: "n", description: "d", category: "c" }],
+      ["publish_listing", { text: "a,b\n1,2\n", name: "n", description: "d", category: "c", price_usdc: "1" }],
+      ["call_service", { listing, body: {} }],
+    ];
+    // A thrown error is what the server would turn into INTERNAL; its message is checked for the key too.
+    for (const [name, args] of calls) results.push(await tool(name).run(args as never, c).catch((e: Error) => ({ thrown: name, message: e.message, stack: e.stack })));
+    // Every registered tool was exercised.
+    assert.deepEqual(new Set([...calls.map(([n]) => n), "buy"]), new Set(TOOLS.map((t) => t.name)));
+    const text = JSON.stringify(results);
+    assert.ok(!text.includes(FAKE) && !text.includes("x9Qx9Q"), "a tool result contains the model key");
+  } finally {
+    if (before === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = before;
+  }
+});
