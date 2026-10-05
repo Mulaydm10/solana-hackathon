@@ -6,7 +6,7 @@ import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/t
 import { fetchMaybeDeal, fetchMaybeDealLink, fetchMaybeMandate, findLinkPda, findMandatePda, getCloseMissionInstructionAsync, getRevokeMandateInstruction, policyAddress, STATUS_NAMES } from "@deal/chain";
 import { useWallet } from "../wallet";
 import { sendWithWallet } from "../../lib/wallet-tx";
-import { PUBLIC_MINT, PUBLIC_RPC } from "../../lib/public-config";
+import { demoMissionLink, PUBLIC_MINT, PUBLIC_RPC } from "../../lib/public-config";
 import { approveStageIx, challengeIx, describePlan, planHashOk, releaseIx, waitingStage, type FeeDealState } from "../../lib/mission-flow";
 import { listMissions, missionLink, type SavedMission } from "../../lib/inbox";
 import { missionState, readChainState, rpcReads, type ChainState } from "./chain-state";
@@ -107,7 +107,15 @@ function Inbox() {
       setStatus((prev) => ({ ...prev, [m.mission]: s?.ok ? { ...s, state: missionState(s.state, chain) } : s }));
     }));
   }, []);
-  if (saved.length === 0) return <p data-testid="inbox-empty">No missions hired from this browser yet. <a href="/hire">Hire a team</a>, or open a mission with <code>?m=&lt;mission address&gt;</code>.</p>;
+  if (saved.length === 0) {
+    const demo = demoMissionLink();
+    return (
+      <p data-testid="inbox-empty">
+        No missions hired from this browser yet. <a href="/hire">Hire a team</a>, or open a mission with <code>?m=&lt;mission address&gt;</code>.
+        {demo ? <> Or <a href={demo} data-testid="demo-mission">watch the demo mission</a> (read-only, no wallet needed).</> : null}
+      </p>
+    );
+  }
   return (
     <ul data-testid="inbox" className="inbox">
       {saved.map((m) => {

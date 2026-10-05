@@ -17,3 +17,9 @@ Infrastructure only so far: a health route and a page proving `@deal/core` + `@d
 
 ## Test
 `npm test` = typecheck → unit tests → `next build` (the build is what proves the shared lanes bundle for the browser).
+
+## Demo mission for judges (#187)
+
+Set `NEXT_PUBLIC_DEMO_MISSION` (and `NEXT_PUBLIC_DEMO_FEE_DEAL`) to a mission run by `npm run demo:mission --prefix agents`
+(it prints both). /hire and the empty missions inbox then link to `/missions?m=<mission>&fee=<deal>`: the real mission,
+read-only, no wallet needed. The mission service must run with the same `MISSION_STORE` as the demo run.
