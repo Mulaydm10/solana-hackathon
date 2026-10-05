@@ -13,11 +13,15 @@ import { missionState, readChainState, rpcReads, type ChainState } from "./chain
 
 type Event = { type: string; stage?: number; role?: string; ok?: boolean; reason?: string; amount?: string; payee?: string; output?: string; deliverableHash?: string };
 type Status = {
-  ok: boolean; reason?: string; state: string; mission: string; buyer: string; digest: string; events: Event[];
+  ok: boolean; reason?: string; state: string; mission: string; buyer: string; digest: string; events: Event[]; aiProvider?: string;
   roles: { role: string; agent: string }[]; plans: { stage: number; plan: string; planHash: string }[];
 };
 
 const ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+/** How the mission's agent text was produced, as the mission service reports it (#191). Simulated runs always say so. */
+export const aiLabel = (provider: string | undefined): string | null =>
+  provider === "simulated" ? "Simulated AI demo" : provider === "anthropic" ? "AI: Claude" : null;
 const explorer = (a: string) => `https://explorer.solana.com/address/${a}?cluster=devnet`;
 const hex = (b: ArrayLike<number>) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 
@@ -130,6 +134,7 @@ function Inbox() {
               : waiting !== null ? <strong>stage {waiting + 1} is waiting for your approval</strong>
               : delivered ? <strong>final product delivered: release or challenge</strong>
               : s.state}
+            {s?.ok && aiLabel(s.aiProvider) ? <> · {aiLabel(s.aiProvider)}</> : null}
           </li>
         );
       })}
@@ -201,6 +206,7 @@ export function MissionView() {
         <span className="eyebrow-mono">Mission</span>
         <a href={explorer(s.mission)}><code>{s.mission.slice(0, 6)}…{s.mission.slice(-4)}</code></a>
         <strong className="mission-state">{missionState(s.state, chain)}</strong>
+        {aiLabel(s.aiProvider) && <span data-testid="ai-provider" className="eyebrow-mono">{aiLabel(s.aiProvider)}</span>}
         {closed && <span> (you closed it; what was left went back to your wallet)</span>}
       </header>
 

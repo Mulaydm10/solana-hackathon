@@ -204,3 +204,11 @@ test("the Trip planner researcher may pay the data seller and its 1 USDC purchas
   // The devnet listing still commits to the first Trip planner until it is updated; it stays hireable meanwhile.
   assert.ok(blueprintFor("d0789d9f8e3dbb5c92e5f0a70b6230866f1fef26104554800dcaa7b89dafafeb"));
 });
+
+test("aiLabel: a simulated mission is always labelled Simulated AI demo, never as a live model (#191)", async () => {
+  const { aiLabel } = await import("../app/missions/mission-view.tsx");
+  assert.equal(aiLabel("simulated"), "Simulated AI demo");
+  assert.equal(aiLabel("anthropic"), "AI: Claude");
+  assert.equal(aiLabel("none"), null);
+  assert.equal(aiLabel(undefined), null);
+});
