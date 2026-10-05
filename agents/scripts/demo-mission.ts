@@ -7,17 +7,27 @@
 //   npm run demo:mission --prefix agents                devnet; the first run creates .keys/demo-buyer.json and
 //                                                       says what to fund it with (devnet SOL + test USDC)
 //   add --step to wait for Enter before each human approval (for recording)
+//   add --check to run only the setup checks (env, RPC, program, mint, buyer's SOL and USDC) and send nothing
+//
+// On another machine, e.g.:
+//   DEAL_RPC_URL=https://api.devnet.solana.com DEMO_BUYER=$HOME/fiducia/demo-buyer.json \
+//   AI_PROVIDER=simulated npm run demo:mission --prefix agents -- --step
+// Every setup problem (bad or mainnet RPC, unreachable RPC, missing or malformed keypair file, unfunded buyer, bad
+// address) is printed as one line naming the variable to fix, before any transaction. The RPC URL is printed
+// without its query string, so a provider API key in it stays private.
 //
 //   AI_PROVIDER        simulated: the labelled Simulated AI demo (no key, no network), same broker interface;
 //                      anthropic (or unset with a key): Claude; unset without a key: deterministic workers
 //   ANTHROPIC_API_KEY  for Claude: sealed into the broker's vault and removed from this process's env before any
 //                      worker runs
 //   e.g. AI_PROVIDER=simulated npm run demo:mission --prefix agents
-//   DEMO_BUYER         keypair file of the buyer (devnet; default .keys/demo-buyer.json)
+//   DEMO_BUYER         keypair file of the buyer (devnet; a 64-number JSON array as written by solana-keygen).
+//                      Unset: .keys/demo-buyer.json, created on the first run. Set: must already exist.
 //   MISSION_STORE      the mission service's store directory (default ./demo-runs/missions, the service's default):
 //                      the run is saved there so the site's /missions?m=<mission>&fee=<deal> shows it
-//   DEAL_RPC_URL / DEAL_MINT / DEAL_VERIFIER / LLM_MODEL   devnet RPC, Circle devnet USDC, a fresh address, claude-opus-5-5
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+//   DEAL_RPC_URL       devnet RPC (default https://api.devnet.solana.com; any devnet provider; mainnet is refused)
+//   DEAL_MINT / DEAL_VERIFIER / LLM_MODEL   Circle devnet USDC, a fresh address, claude-opus-5-5
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
@@ -39,11 +49,13 @@ import {
   aiProviderFrom, createBroker, createVault, fileMissionStore, publicView, liveFrom, mandateSourceFromChain, mockBooking, mockMarketData, prepareMission, runStages, sealCredential,
   type MissionEvent,
 } from "../src/index.ts";
+import { demoEnv, preflight, readKeypairFile, safeUrl } from "./demo-setup.ts";
 
 const USDC = 1_000_000n;
 const args = new Set(process.argv.slice(2));
 const local = args.has("--local");
 const step = args.has("--step");
+const checkOnly = args.has("--check");
 const env = process.env;
 const here = dirname(fileURLToPath(import.meta.url));
 const usdc = (v: bigint) => `${formatAmount(v, 6)} USDC`;
@@ -52,8 +64,13 @@ const log: string[] = [];
 const say = (line = "") => { console.log(line); log.push(line); };
 const fail = (m: string): never => { say(`demo-mission: ${m}`); process.exit(1); };
 
-const rpcUrl = env.DEAL_RPC_URL ?? "https://api.devnet.solana.com";
-if (!local && /mainnet/i.test(rpcUrl)) fail("mainnet is not supported");
+const setup = demoEnv(env, { buyerPath: join(here, "../.keys/demo-buyer.json"), store: join(here, "../demo-runs/missions") });
+if (!local && !setup.ok) {
+  say("demo-mission: setup is incomplete (nothing was sent):");
+  for (const e of setup.errors) say(`  - ${e}`);
+  process.exit(1);
+}
+const { rpcUrl, buyerPath, buyerPathFromEnv, mint: mintAddress, store } = setup.ok ? setup.value : { rpcUrl: "", buyerPath: "", buyerPathFromEnv: false, mint: "", store: join(here, "../demo-runs/missions") };
 const link = (sig: string) => (local ? `(local) ${sig}` : `https://explorer.solana.com/tx/${sig}?cluster=devnet`);
 const addr = (a: string) => (local ? a : `https://explorer.solana.com/address/${a}?cluster=devnet`);
 
@@ -89,8 +106,8 @@ async function localChain(): Promise<Chain> {
 }
 
 async function devnetChain(): Promise<Chain> {
-  const path = env.DEMO_BUYER ?? join(here, "../.keys/demo-buyer.json");
-  if (!existsSync(path)) {
+  const path = buyerPath;
+  if (!buyerPathFromEnv && !existsSync(path)) {
     const kp = crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]) as Promise<CryptoKeyPair>;
     const k = await kp;
     const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", k.privateKey));
@@ -99,14 +116,21 @@ async function devnetChain(): Promise<Chain> {
     writeFileSync(path, JSON.stringify([...pkcs8.slice(-32), ...pub]), { mode: 0o600 });
     const s = await createKeyPairSignerFromBytes(Uint8Array.from([...pkcs8.slice(-32), ...pub]));
     say(`Created the demo buyer ${s.address} in ${path} (devnet only; gitignored).`);
-    say("Fund it once, then run this again:");
+    say("Fund it once, then run this again (or point DEMO_BUYER at an already funded devnet keypair file):");
     say("  1. devnet SOL (about 0.5): https://faucet.solana.com");
     say("  2. test USDC: the site's faucet (https://fiducia-orpin.vercel.app) or https://faucet.circle.com (Solana devnet)");
     process.exit(0);
   }
-  const buyer = await createKeyPairSignerFromBytes(Uint8Array.from(JSON.parse(readFileSync(path, "utf8")) as number[]));
+  let buyer: KeyPairSigner;
+  try {
+    buyer = await createKeyPairSignerFromBytes(readKeypairFile(path));
+  } catch (e) {
+    // Shape problems name the file and the fix; a well-shaped file whose halves don't match is reported the same way.
+    return fail(e instanceof Error && /^DEMO_BUYER=/.test(e.message) ? e.message
+      : `${buyerPathFromEnv ? "DEMO_BUYER=" : "the demo buyer file "}${path} is not a valid Solana keypair (its secret and public halves don't match). Recreate it with solana-keygen new -o <path>.`);
+  }
   const client = createClient().use(signerPlugin(buyer)).use(solanaRpc({ rpcUrl }));
-  const ctx: DealContext = { client: client as unknown as DealClient, mint: (env.DEAL_MINT ?? "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU") as never };
+  const ctx: DealContext = { client: client as unknown as DealClient, mint: mintAddress as never };
   return { ctx, buyer, now: () => BigInt(Math.floor(Date.now() / 1000)), send: (ixs) => (client as unknown as DealClient).sendTransaction(ixs) };
 }
 
@@ -136,17 +160,39 @@ const tokenOf = async (owner: Address) => {
 };
 
 const [teamSeller, dataSeller] = (await Promise.all([0, 1].map(() => generateKeyPairSigner()))) as [KeyPairSigner, KeyPairSigner];
-const verifier = (env.DEAL_VERIFIER ?? (await generateKeyPairSigner()).address) as Address;
+const verifier = ((setup.ok ? setup.value.verifier : null) ?? (await generateKeyPairSigner()).address) as Address;
 const budget = 4n * USDC;
 const fee = 1n * USDC;
 const goal = env.DEMO_GOAL ?? "Plan a 3-day trip to Lisbon for two, mid-range budget";
 
-say(`Fiducia agent-team mission demo${choice.mode === "simulated" ? " [Simulated AI demo]" : ""} (${local ? "local LiteSVM, compiled deal_escrow" : `devnet, ${rpcUrl}`})`);
+say(`Fiducia agent-team mission demo${choice.mode === "simulated" ? " [Simulated AI demo]" : ""} (${local ? "local LiteSVM, compiled deal_escrow" : `devnet, ${safeUrl(rpcUrl)}`})`);
 say(`Workers: ${choice.label}${choice.mode === "simulated" ? " — every agent output below is SIMULATED, not a live model" : ""}`);
 say(`Buyer ${addr(buyer.address)}`);
 say(`Team seller ${teamSeller.address} · data seller ${dataSeller.address} · verifier ${verifier}`);
-const have = await tokenOf(buyer.address);
-if (have < budget + fee) fail(`the buyer holds ${usdc(have)}; it needs ${usdc(budget + fee)} (budget + team fee). Fund it with test USDC first.`);
+if (!local) {
+  const rpc = ctx.client.rpc as unknown as {
+    getGenesisHash(): { send(): Promise<string> };
+    getBalance(a: Address): { send(): Promise<{ value: bigint }> };
+    getAccountInfo(a: Address, o: { encoding: "base64" }): { send(): Promise<{ value: { executable: boolean } | null }> };
+  };
+  const problems = await preflight({
+    genesisHash: () => rpc.getGenesisHash().send(),
+    executable: async (a) => (await rpc.getAccountInfo(a as Address, { encoding: "base64" }).send()).value?.executable ?? null,
+    exists: async (a) => (await rpc.getAccountInfo(a as Address, { encoding: "base64" }).send()).value !== null,
+    lamports: async (a) => (await rpc.getBalance(a as Address).send()).value,
+    tokenBalance: (o) => tokenOf(o as Address),
+  }, { rpcUrl, program: DEAL_ESCROW_PROGRAM_ADDRESS, mint: ctx.mint, buyer: buyer.address, needUsdc: budget + fee, usdc });
+  if (problems.length) {
+    say("demo-mission: setup is incomplete (nothing was sent):");
+    for (const e of problems) say(`  - ${e}`);
+    process.exit(1);
+  }
+  say("Setup checks passed: devnet RPC reachable, deal_escrow deployed, mint present, buyer funded.");
+} else {
+  const have = await tokenOf(buyer.address);
+  if (have < budget + fee) fail(`the buyer holds ${usdc(have)}; it needs ${usdc(budget + fee)} (budget + team fee).`);
+}
+if (checkOnly) process.exit(0);
 
 // Token accounts for the sellers (paid by the buyer), and the buyer's spending policy if it has none yet.
 await c.send(await Promise.all([teamSeller.address, dataSeller.address].map((owner) => getCreateAssociatedTokenIdempotentInstructionAsync({ payer: buyer, owner, mint: ctx.mint }))) as never[]);
@@ -236,7 +282,7 @@ say(`Team seller balance ${usdc(await tokenOf(teamSeller.address))} · data sell
 
 // The mission service serves this run to the site (read-only), from the same store directory.
 const events: MissionEvent[] = shown;
-fileMissionStore(env.MISSION_STORE ?? join(here, "../demo-runs/missions")).save(p.mission, { ...publicView(p), state: "done", events, aiProvider: choice.mode });
+fileMissionStore(store).save(p.mission, { ...publicView(p), state: "done", events, aiProvider: choice.mode });
 say(`Watch it on the site: /missions?m=${p.mission}&fee=${feeDeal.deal}`);
 
 const dir = join(here, "../demo-runs");
