@@ -16,6 +16,7 @@
 //                           missions after a restart, and scripted demo runs (demo:mission) appear too
 //   DEMO_BUYERS             the site's demo buyer address(es), comma-separated: their missions show one   default: none
 //                           over-cap payment refused on chain before the in-mandate one (#214)
+//   MISSION_POLL_MS         how often the stage loop and the runner read the chain (ms)              default: 5000
 //   DEAL_RPC_URL / DEAL_MINT / HOST / PORT                                                          devnet, Circle USDC, 127.0.0.1, 3320
 // Mainnet is refused. Workers in ../workers use Claude through the broker when the key is set.
 import { readFileSync } from "node:fs";
@@ -61,7 +62,10 @@ const source = mandateSourceFromChain(ctx);
 const broker = createBroker({ vault: createVault(master, sealed), providers: [mockMarketData, mockBooking, ...(choice.provider ? [choice.provider] : [])], mandates: source });
 const workers = Object.fromEntries(["researcher", "writer"].map((r) => [r, fileURLToPath(new URL(`../workers/${r}.mjs`, import.meta.url))]));
 
+// The public devnet RPC rate-limits; 5 s polling is what the recorded CLI demo uses (#222).
+const pollMs = /^\d+$/.test(env.MISSION_POLL_MS ?? "") ? Math.max(1_000, Number(env.MISSION_POLL_MS)) : 5_000;
 const svc = createMissionService({
+  pollMs, runner: { pollMs },
   ctx, broker, capabilities: ["market:read", "booking:quote", "booking:pay", "llm:complete"], workers, live: liveFrom(source),
   aiProvider: choice.mode, dealRules: { verifier: verifier as never }, token, team: teamSeller ? { seller: teamSeller } : undefined,
   demoBuyers: (env.DEMO_BUYERS ?? "").split(",").map((a) => a.trim()).filter((a) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)),
