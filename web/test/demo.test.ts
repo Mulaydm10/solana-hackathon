@@ -5,7 +5,8 @@ import { createServer } from "node:http";
 import { generateKeyPairSync } from "node:crypto";
 import { generateKeyPairSigner, type Address, type KeyPairSigner } from "@solana/kit";
 import { sha256Hex } from "@deal/core";
-import { approveDemo, createLimiter, DEMO_LIMITS, releaseDemo, startDemo, type DemoDeps, type TeamOffer } from "../lib/demo.ts";
+import { approveDemo, createLimiter, demoBudget, DEMO_LIMITS, releaseDemo, startDemo, type DemoDeps, type TeamOffer } from "../lib/demo.ts";
+import { missionTerms } from "@deal/core";
 import { demoAvailable, parseEnv } from "../lib/env.ts";
 import { TRIP_PLANNER } from "../lib/teams.ts";
 import { POST as prepare } from "../app/api/missions/prepare/route.ts";
@@ -60,7 +61,7 @@ test("demo start: the demo budget is fixed, the policy is created small if missi
   const r = await startDemo(deps, "1.1.1.1", "  3 days in Lisbon for two  ");
   assert.ok(r.ok, JSON.stringify(r));
   const prep = serviceCalls.find((c) => c.path === "/missions/prepare")!.body as { budget: string; buyer: string; goal: string };
-  assert.equal(prep.budget, DEMO_LIMITS.budget.toString());
+  assert.equal(prep.budget, demoBudget(TRIP_PLANNER).toString());
   assert.equal(prep.buyer, deps.buyer.address);
   assert.equal(prep.goal, "3 days in Lisbon for two");
   assert.equal(sent.length, 3); // policy; mission + fee deal (one transaction); mandates
@@ -184,4 +185,24 @@ test("demo routes refuse without DEMO_BUYER_KEY (the button is hidden then)", as
   } finally {
     if (saved !== undefined) process.env.DEMO_BUYER_KEY = saved;
   }
+});
+
+test("#218: the demo budget covers the team's role caps, so the mission service's terms check accepts it", () => {
+  const budget = demoBudget(TRIP_PLANNER);
+  assert.equal(budget, 6_000_000n, "Trip planner: researcher 5 + writer 1 USDC");
+  assert.ok(budget <= DEMO_LIMITS.maxBudget);
+  // The exact check the mission service runs in prepare (it answered CAPS_OVER_BUDGET for the old 2 USDC budget).
+  assert.equal(missionTerms(TRIP_PLANNER, "Plan a 3-day trip to Lisbon for two", budget).ok, true);
+  assert.equal((missionTerms(TRIP_PLANNER, "Plan a 3-day trip to Lisbon for two", 2_000_000n) as { reason: string }).reason, "CAPS_OVER_BUDGET");
+  // One run (budget + team fee) fits the demo policy several times a day.
+  assert.ok((DEMO_LIMITS.policyPerDay / (budget + 3_000_000n)) >= 5n);
+});
+
+test("#218: a demo team whose caps exceed the demo budget is refused before anything is prepared or signed", async () => {
+  const { deps, sent, serviceCalls } = await fakeDeps();
+  const big = { ...TRIP_PLANNER, roles: TRIP_PLANNER.roles.map((r) => ({ ...r, cap: r.cap * 10n })) };
+  const r = await startDemo({ ...deps, team: async () => ({ ...(await deps.team())!, blueprint: big }) }, "1.2.3.4", "Plan Lisbon");
+  assert.equal((r as { reason: string }).reason, "DEMO_TEAM_TOO_EXPENSIVE");
+  assert.equal(serviceCalls.length, 0);
+  assert.equal(sent.length, 0);
 });

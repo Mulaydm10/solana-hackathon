@@ -16,10 +16,13 @@ import type { Blueprint } from "@deal/core";
 const USDC = 1_000_000n;
 
 export const DEMO_LIMITS = {
-  /** Every demo mission's budget (the team's expenses), base units. */
-  budget: 2n * USDC,
-  /** The demo buyer's on-chain policy may allow at most this per day, and this per deal. */
-  policyPerDay: 20n * USDC,
+  /**
+   * A demo mission's budget is the team's role caps sum (missionTerms refuses less: CAPS_OVER_BUDGET, #218), and
+   * never more than this, base units.
+   */
+  maxBudget: 6n * USDC,
+  /** The demo buyer's on-chain policy may allow at most this per day, and this per deal (one run: budget + fee). */
+  policyPerDay: 50n * USDC,
   policyMaxPrice: 10n * USDC,
   /** New demo missions per client IP per hour, and in total per day. */
   missionsPerIpPerHour: 2,
@@ -75,6 +78,11 @@ type Prepared = {
 };
 
 /** The demo buyer's policy terms when it has none: the small caps above, any seller. */
+/** The demo mission's budget: exactly what the team's agents may spend in total (the sum of its role caps). */
+export function demoBudget(bp: { roles: readonly { cap: bigint }[] }): bigint {
+  return bp.roles.reduce((s, r) => s + r.cap, 0n);
+}
+
 export function demoPolicy(buyer: Address): PolicyArgs {
   return {
     periodSecs: 86_400, periodBudget: DEMO_LIMITS.policyPerDay, maxPrice: DEMO_LIMITS.policyMaxPrice, approvalThreshold: 10n ** 15n, approver: buyer,
@@ -95,6 +103,8 @@ export async function startDemo(d: DemoDeps, ip: string, goalIn: unknown): Promi
   const team = await d.team();
   if (!team) return no(503, "NO_DEMO_TEAM", "no demo team is listed");
   if (team.price > DEMO_LIMITS.policyMaxPrice) return no(503, "DEMO_TEAM_TOO_EXPENSIVE", "the demo team's fee is above the demo caps");
+  const budget = demoBudget(team.blueprint);
+  if (budget > DEMO_LIMITS.maxBudget) return no(503, "DEMO_TEAM_TOO_EXPENSIVE", "the demo team's agent caps are above the demo budget");
   const policy = await d.policy();
   if (policy && (policy.periodBudget > DEMO_LIMITS.policyPerDay || policy.maxPrice > DEMO_LIMITS.policyMaxPrice)) {
     return no(503, "DEMO_POLICY_TOO_LARGE", "the demo buyer's on-chain policy allows more than the demo caps; nothing was signed");
@@ -105,12 +115,12 @@ export async function startDemo(d: DemoDeps, ip: string, goalIn: unknown): Promi
   const missionId = String(BigInt(d.nowSecs()) * 1_000n + BigInt(Math.floor(Math.random() * 1_000)));
   const expiresAt = String(d.nowSecs() + Math.min(team.blueprint.maxDuration, 6 * 3_600));
   const prep = await d.service("/missions/prepare", {
-    blueprint: toWire(team.blueprint), goal, budget: DEMO_LIMITS.budget.toString(), missionId, buyer: d.buyer.address, expiresAt,
+    blueprint: toWire(team.blueprint), goal, budget: budget.toString(), missionId, buyer: d.buyer.address, expiresAt,
   });
   const p = prep.body as Prepared;
   if (prep.status !== 200 || !p?.ok) return no(502, "PREPARE_FAILED", "the mission service did not prepare the demo mission");
   // What the service returned is checked before the demo key signs it.
-  if (p.buyer !== d.buyer.address || p.createParams.budget !== DEMO_LIMITS.budget.toString()) {
+  if (p.buyer !== d.buyer.address || p.createParams.budget !== budget.toString()) {
     return no(502, "PREPARE_MISMATCH", "the prepared mission is not the demo buyer's, or not the demo budget");
   }
   const fee = await feeDealIx(d.buyer as TransactionSigner, {
