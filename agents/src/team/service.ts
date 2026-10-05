@@ -12,6 +12,8 @@
  * (the site's server routes hold it; browsers never see it). Bodies are size-limited JSON; bigints are strings.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import type { Address, TransactionSigner } from "@solana/kit";
@@ -34,7 +36,41 @@ export type ServiceOptions = {
   runner?: { mode?: "process" | "container"; pollMs?: number; maxSecs?: number };
   /** The team seller's key: the seller of the Team listings this service runs; it accepts and delivers fee deals. */
   team?: { seller: TransactionSigner };
+  /** Keeps each mission's public view (never agent keys) so the site still shows it after a restart. */
+  store?: MissionStore;
 };
+
+/** What the site shows for a mission: its public terms, plans, state and events. Never a key. */
+export type StoredMission = ReturnType<typeof publicView> & { state: string; events: MissionEvent[] };
+
+export type MissionStore = {
+  save(mission: string, view: StoredMission): void;
+  load(mission: string): unknown | null;
+};
+
+const MISSION_FILE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+/** One JSON file per mission in `dir` (written whole, then renamed, so a reader never sees half a file). */
+export function fileMissionStore(dir: string): MissionStore {
+  mkdirSync(dir, { recursive: true });
+  return {
+    save(mission, view) {
+      if (!MISSION_FILE.test(mission)) return;
+      const file = join(dir, `${mission}.json`);
+      writeFileSync(`${file}.tmp`, JSON.stringify(view, big));
+      renameSync(`${file}.tmp`, file);
+    },
+    load(mission) {
+      const file = join(dir, `${mission}.json`);
+      if (!MISSION_FILE.test(mission) || !existsSync(file)) return null;
+      try {
+        return JSON.parse(readFileSync(file, "utf8")) as unknown;
+      } catch {
+        return null;
+      }
+    },
+  };
+}
 
 /** Fee deal checks: every one must hold on chain, or the team will not deliver into that deal. */
 export type FeeDealCheck = { ok: true; invoice: bigint } | { ok: false; reason: string; message: string };
@@ -91,6 +127,16 @@ export function publicView(p: PreparedMission) {
 
 export function createMissionService(o: ServiceOptions): Server {
   const missions = new Map<string, Entry>();
+  // Best effort: a full disk must not stop a running mission.
+  const persist = (mission: string) => {
+    const e = missions.get(mission);
+    if (!e || !o.store) return;
+    try {
+      o.store.save(mission, { ...publicView(e.prepared), state: e.state, events: e.events });
+    } catch (err) {
+      console.error(`[missions] could not store ${mission}:`, err instanceof Error ? err.message : err);
+    }
+  };
   const tokenOk = (req: IncomingMessage) => {
     const h = req.headers.authorization ?? "";
     const given = Buffer.from(h.startsWith("Bearer ") ? h.slice(7) : "");
@@ -120,13 +166,23 @@ export function createMissionService(o: ServiceOptions): Server {
         // mandate the buyer signed, and reset a running mission so it could be started twice.
         if (missions.has(r.value.mission)) return json(res, 409, { ok: false, reason: "MISSION_EXISTS" });
         missions.set(r.value.mission, { prepared: r.value, events: [], state: "prepared" });
+        persist(r.value.mission);
         return json(res, 200, { ok: true, ...publicView(r.value) });
       }
 
       const mission = parts[1];
       const entry = mission ? missions.get(mission) : undefined;
       if (parts[0] !== "missions" || !mission) return json(res, 404, { ok: false, reason: "NOT_FOUND" });
-      if (!entry) return json(res, 404, { ok: false, reason: "UNKNOWN_MISSION" });
+      if (!entry) {
+        // Not running here (e.g. the service restarted, or a scripted run): show what the store kept, read-only.
+        const kept = req.method === "GET" && parts.length === 2 ? o.store?.load(mission) : null;
+        if (kept && typeof kept === "object") {
+          const k = kept as { state?: unknown };
+          const state = k.state === "prepared" || k.state === "running" ? "interrupted" : k.state;
+          return json(res, 200, { ...(kept as object), ok: true, state, stored: true });
+        }
+        return json(res, 404, { ok: false, reason: "UNKNOWN_MISSION" });
+      }
 
       if (req.method === "POST" && parts[2] === "start") {
         if (entry.state !== "prepared") return json(res, 409, { ok: false, reason: "ALREADY_STARTED" });
@@ -144,17 +200,22 @@ export function createMissionService(o: ServiceOptions): Server {
         }
         if (entry.state !== "prepared") return json(res, 409, { ok: false, reason: "ALREADY_STARTED" }); // a racing start won
         entry.state = "running";
+        persist(mission);
         void (async () => {
           try {
             for await (const e of runStages({
               ctx: o.ctx, prepared: entry.prepared, broker: o.broker, workers: o.workers, workerEnv: o.workerEnv, live: o.live,
               pollMs: o.pollMs, runner: o.runner, approvalTimeoutMs: Number(entry.prepared.expiresAt) * 1000 - Date.now(), team,
-            })) entry.events.push(e);
+            })) {
+              entry.events.push(e);
+              persist(mission);
+            }
             entry.state = entry.events.at(-1)?.type === "delivered" ? "done" : "failed";
           } catch (e) {
             entry.events.push({ type: "failed", reason: "INTERNAL", message: e instanceof Error ? e.message : String(e) });
             entry.state = "failed";
           }
+          persist(mission);
         })();
         return json(res, 202, { ok: true, state: entry.state });
       }
