@@ -146,6 +146,8 @@ export function MissionView() {
   const params = useSearchParams();
   const m = params.get("m") ?? "";
   const fee = params.get("fee") ?? (listMissions().find((x) => x.mission === m)?.feeDeal ?? "");
+  // A demo mission (#183): the site's demo buyer signs on the server; the routes refuse missions it did not create.
+  const demo = params.get("demo") === "1";
   const connected = useWallet();
   const [s, setS] = useState<Status | null>(null);
   const [deal, setDeal] = useState<FeeDealState | null>(null);
@@ -177,6 +179,13 @@ export function MissionView() {
     if (!Array.isArray(ixs)) return setMsg(ixs.message);
     const r = await sendWithWallet(connected.wallet, connected.account, PUBLIC_RPC, ixs);
     setMsg(r.ok ? `Sent: ${r.signature.slice(0, 16)}…` : r.message);
+    void load();
+  }
+  async function demoAct(path: string, body: unknown) {
+    setMsg(null);
+    const r = await fetch(`/api/demo/missions/${m}/${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const b = (await r.json().catch(() => ({}))) as { ok?: boolean; signature?: string; reason?: string; message?: string };
+    setMsg(b.ok ? `Sent by the demo buyer: ${String(b.signature).slice(0, 16)}…` : `Refused: ${b.reason}${b.message ? ` (${b.message})` : ""}`);
     void load();
   }
   const one = async (p: Promise<{ ok: true; ix: Instruction } | { ok: false; message: string }>) => {
@@ -236,6 +245,8 @@ export function MissionView() {
           <p className="fine">Your signature is bound to this exact plan hash; a different plan cannot reuse it.</p>
           <button type="button" disabled={!planHashOk(plan)} onClick={() => void act((buyer) => one(approveStageIx(buyer, s.mission as Address, s.plans, plan.stage, s.digest)))}>
             Approve stage {plan.stage + 1}&apos;s plan (wallet)</button>
+          {demo && <button type="button" data-testid="demo-approve" disabled={!planHashOk(plan)} onClick={() => void demoAct("approve", { stage: plan.stage })}>
+            Approve as the demo buyer (devnet, server-signed)</button>}
         </div>
       )}
 
@@ -302,6 +313,8 @@ export function MissionView() {
             <>
               <button type="button" disabled={!product || product !== deal.deliveryHash} onClick={() => void act((buyer) => one(releaseIx(buyer, deal, product ?? "")))}>
                 Release the fee for this final product (wallet)</button>{" "}
+              {demo && <button type="button" data-testid="demo-release" disabled={!product || product !== deal.deliveryHash} onClick={() => void demoAct("release", { feeDeal: deal.deal })}>
+                Release as the demo buyer</button>}{" "}
               <button type="button" onClick={() => void act((buyer) => one(challengeIx(buyer, deal)))}>Challenge it; the verifier rules (wallet)</button>
             </>
           )}

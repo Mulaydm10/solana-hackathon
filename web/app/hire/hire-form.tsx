@@ -26,7 +26,7 @@ const usdc = (base: string) => `${(Number(base) / 1e6).toFixed(2)} USDC`;
 
 
 
-export function HireForm({ teams }: { teams: TeamOption[] }) {
+export function HireForm({ teams, demo = false }: { teams: TeamOption[]; demo?: boolean }) {
   const connected = useWallet();
   const [team, setTeam] = useState(teams[0]?.listing ?? "");
   const [goal, setGoal] = useState("");
@@ -65,6 +65,22 @@ export function HireForm({ teams }: { teams: TeamOption[] }) {
       const p = await fetchMaybeBuyerPolicy(createSolanaRpc(PUBLIC_RPC), await policyAddress(connected.account.address as Address)).catch(() => undefined);
       setPolicy(p === undefined ? undefined : p.exists ? p.data : null);
       setStep("review");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Judges without a wallet: the site's devnet demo buyer hires the team (small fixed budget), then opens the mission. */
+  async function tryDemo() {
+    setMsg(null);
+    setBusy(true);
+    try {
+      const r = await fetch("/api/demo/missions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ goal }) });
+      const body = (await r.json()) as { ok: boolean; mission?: string; feeDeal?: string; reason?: string; message?: string };
+      if (!body.ok || !body.mission) return setMsg(`Demo refused: ${body.reason}${body.message ? ` (${body.message})` : ""}`);
+      window.location.href = `/missions?m=${body.mission}&fee=${body.feeDeal ?? ""}&demo=1`;
+    } catch {
+      setMsg("The demo did not answer; try again.");
     } finally {
       setBusy(false);
     }
@@ -191,6 +207,10 @@ export function HireForm({ teams }: { teams: TeamOption[] }) {
           <div className="sheet-actions">
             <button type="submit" className="btn" data-magnet disabled={busy}>Prepare the mission terms</button>
             <span className="fine">Nothing is signed yet: you review the terms first.</span>
+            {demo && (
+              <button type="button" data-testid="try-demo" className="btn-ghost-inline" disabled={busy} onClick={() => void tryDemo()}>
+                Try the demo (no wallet: a capped devnet demo buyer signs)</button>
+            )}
           </div>
         </form>
       )}

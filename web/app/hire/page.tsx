@@ -4,6 +4,7 @@ import { siteRegistry } from "../../lib/site-registry";
 import { blueprintFor } from "../../lib/teams";
 import { HireForm, type TeamOption } from "./hire-form";
 import { demoMissionLink } from "../../lib/public-config";
+import { demoAvailable, parseEnv } from "../../lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function Hire() {
         </p>
         {demo ? <p data-testid="demo-mission"><a href={demo}>Watch the demo mission</a>: a real team on devnet, read-only, no wallet needed.</p> : null}
       </header>
-      <HireForm teams={teams} />
+      <HireForm teams={teams} demo={demoAvailable(parseEnv(process.env))} />
     </main>
   );
 }
