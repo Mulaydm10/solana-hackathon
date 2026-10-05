@@ -6,8 +6,12 @@
 //   MISSION_FEE_PAYER       path to a keypair file with a little devnet SOL (pays agents' tx fees)  required
 //   MISSION_TEAM_SELLER     path to the team seller's keypair (seller of the Team listings; demo:   optional
 //                           surface/.keys/sellers/<id>.json): accepts fee deals, delivers the product  (no fee deals without it)
+//   ANTHROPIC_API_KEY       the model key for the `llm:complete` provider (Claude workers, PLAN §11)  optional
+//                           sealed into the broker vault at start and removed from this process's env; without it
+//                           the workers produce their deterministic output (roles may still list llm:complete)
+//   LLM_MODEL               model id for the workers                                                   default: claude-opus-5-5
 //   DEAL_RPC_URL / DEAL_MINT / HOST / PORT                                                          devnet, Circle USDC, 127.0.0.1, 3320
-// Mainnet is refused. Workers are the deterministic ones in ../workers until PLAN §11.
+// Mainnet is refused. Workers in ../workers use Claude through the broker when the key is set.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createClient, createKeyPairSignerFromBytes } from "@solana/kit";
@@ -15,7 +19,7 @@ import { solanaRpc } from "@solana/kit-plugin-rpc";
 import { signer as signerPlugin } from "@solana/kit-plugin-signer";
 import type { DealClient, DealContext } from "@deal/chain";
 import {
-  createBroker, createMissionService, createVault, liveFrom, mandateSourceFromChain, masterKeyFromEnv, mockBooking, mockMarketData, sealCredential,
+  claudeProvider, createBroker, createMissionService, createVault, liveFrom, mandateSourceFromChain, masterKeyFromEnv, mockBooking, mockMarketData, sealCredential,
   type SealedCredential,
 } from "../src/index.ts";
 
@@ -41,14 +45,19 @@ const sealed: SealedCredential[] = env.BROKER_CREDENTIALS ? JSON.parse(readFileS
 // The providers are mocks with no real account, but the broker still refuses a call without a credential
 // (NO_CREDENTIAL), so each mock without a sealed one gets a placeholder sealed under this master key.
 for (const p of ["market", "booking"]) if (!sealed.some((c) => c.provider === p)) sealed.push(sealCredential(master, p, `mock-${p}-placeholder`));
+// The model key becomes a sealed broker credential like any other; nothing else in this process keeps it.
+const llmKey = env.ANTHROPIC_API_KEY;
+delete env.ANTHROPIC_API_KEY;
+if (llmKey && !sealed.some((c) => c.provider === "llm")) sealed.push(sealCredential(master, "llm", llmKey));
+const llm = sealed.some((c) => c.provider === "llm");
 const source = mandateSourceFromChain(ctx);
-const broker = createBroker({ vault: createVault(master, sealed), providers: [mockMarketData, mockBooking], mandates: source });
+const broker = createBroker({ vault: createVault(master, sealed), providers: [mockMarketData, mockBooking, claudeProvider({ model: env.LLM_MODEL })], mandates: source });
 const workers = Object.fromEntries(["researcher", "writer"].map((r) => [r, fileURLToPath(new URL(`../workers/${r}.mjs`, import.meta.url))]));
 
 const svc = createMissionService({
-  ctx, broker, capabilities: ["market:read", "booking:quote", "booking:pay"], workers, live: liveFrom(source),
+  ctx, broker, capabilities: ["market:read", "booking:quote", "booking:pay", "llm:complete"], workers, live: liveFrom(source),
   dealRules: { verifier: verifier as never }, token, team: teamSeller ? { seller: teamSeller } : undefined,
 });
 const host = env.HOST ?? "127.0.0.1";
 const port = Number(env.PORT ?? 3320);
-svc.listen(port, host, () => console.log(`serve-missions: listening on http://${host}:${port} (fee payer ${payer.address}${teamSeller ? `, team seller ${teamSeller.address}` : ", no team seller: fee deals refused"})`));
+svc.listen(port, host, () => console.log(`serve-missions: listening on http://${host}:${port} (fee payer ${payer.address}${teamSeller ? `, team seller ${teamSeller.address}` : ", no team seller: fee deals refused"}, ${llm ? "Claude workers" : "deterministic workers: no ANTHROPIC_API_KEY"})`));

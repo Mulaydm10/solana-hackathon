@@ -1,3 +1,5 @@
 # devnet-only spike keys (scripts/spike.ts)
 .keys/
 node_modules/
+# scripted demo run logs (scripts/demo-mission.ts)
+demo-runs/
