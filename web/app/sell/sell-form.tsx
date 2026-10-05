@@ -147,66 +147,110 @@ export function SellForm() {
   }
 
   const steps = draft?.steps ?? [];
+  const assess = steps.find((s) => s.step === "assess");
+  const priced = steps.find((s) => s.step === "price");
+  const drafted = steps.find((s) => s.step === "draft");
+  // Where the seller is in the flow, for the progress track only.
+  const at = done ? 4 : pending ? 3 : draft?.ok && shown >= steps.length ? 2 : busy || steps.length > 0 ? 1 : 0;
+  const FLOW = ["Describe it", "Seller chain", "Review and price", "Sign in wallet", "Listed"];
   return (
-    <section data-testid="sell-form">
-      <form onSubmit={(e) => { e.preventDefault(); void run(); }}>
-        <fieldset>
-          <legend>What you sell</legend>
-          <label><input type="radio" checked={mode === "data"} onChange={() => setMode("data")} /> Data (a file)</label>{" "}
-          <label><input type="radio" checked={mode === "service"} onChange={() => setMode("service")} /> A service (an https endpoint)</label>
+    <section data-testid="sell-form" className="sell">
+      <ol className="stage-track flow-track" aria-label="Progress">
+        {FLOW.map((name, i) => (
+          <li key={name} className={`stage is-${i < at || (i === 4 && done) ? "done" : i === at ? (draft && !draft.ok ? "declined" : busy ? "running" : "waiting") : "queued"}`} style={{ animationDelay: `${i * 0.08}s` }}>
+            <span className="stage-node">{i < at || (i === 4 && done) ? "✓" : i + 1}</span>
+            <span className="stage-name">{name}</span>
+          </li>
+        ))}
+      </ol>
+      <form className="sheet-form" onSubmit={(e) => { e.preventDefault(); void run(); }}>
+        <div className="sheet-part">
+          <span className="part-no">01</span>
+          <fieldset className="choice-set">
+            <legend>What you sell</legend>
+            <label className="choice"><input type="radio" checked={mode === "data"} onChange={() => setMode("data")} /> <span><strong>Data</strong><small>a file, sold once per buyer, checked against its content hash</small></span></label>
+            <label className="choice"><input type="radio" checked={mode === "service"} onChange={() => setMode("service")} /> <span><strong>A service</strong><small>an https endpoint, paid per call</small></span></label>
+          </fieldset>
           {mode === "data" ? (
-            <label style={{ display: "block" }}>File (at most 10 MB) <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
+            <label className="dropzone">File (at most 10 MB) <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
           ) : (
-            <>
-              <label style={{ display: "block" }}>Endpoint <input value={service.endpoint} onChange={(e) => setService({ ...service, endpoint: e.target.value })} size={50} /></label>
-              <label style={{ display: "block" }}>Input schema (JSON) <input value={service.input} onChange={(e) => setService({ ...service, input: e.target.value })} size={50} /></label>
-              <label style={{ display: "block" }}>Output schema (JSON) <input value={service.output} onChange={(e) => setService({ ...service, output: e.target.value })} size={50} /></label>
-              <label style={{ display: "block" }}>Example input (JSON) <input value={service.example} onChange={(e) => setService({ ...service, example: e.target.value })} size={50} /></label>
-            </>
+            <div className="field-grid">
+              <label className="span-2">Endpoint <input value={service.endpoint} onChange={(e) => setService({ ...service, endpoint: e.target.value })} size={50} /></label>
+              <label>Input schema (JSON) <input value={service.input} onChange={(e) => setService({ ...service, input: e.target.value })} size={50} /></label>
+              <label>Output schema (JSON) <input value={service.output} onChange={(e) => setService({ ...service, output: e.target.value })} size={50} /></label>
+              <label className="span-2">Example input (JSON) <input value={service.example} onChange={(e) => setService({ ...service, example: e.target.value })} size={50} /></label>
+            </div>
           )}
-        </fieldset>
-        <label style={{ display: "block" }}>Name <input required value={desc.name} onChange={(e) => setDesc({ ...desc, name: e.target.value })} /></label>
-        <label style={{ display: "block" }}>Description <input required value={desc.description} onChange={(e) => setDesc({ ...desc, description: e.target.value })} size={60} /></label>
-        <label style={{ display: "block" }}>Category <input required value={desc.category} onChange={(e) => setDesc({ ...desc, category: e.target.value })} placeholder="energy" /></label>
-        <label style={{ display: "block" }}>Tags (comma separated) <input value={desc.tags} onChange={(e) => setDesc({ ...desc, tags: e.target.value })} /></label>
-        <button type="submit" disabled={busy}>Run the seller chain</button>
+        </div>
+        <div className="sheet-part">
+          <span className="part-no">02</span>
+          <span className="eyebrow-mono">Describe it</span>
+          <div className="field-grid">
+            <label>Name <input required value={desc.name} onChange={(e) => setDesc({ ...desc, name: e.target.value })} /></label>
+            <label>Category <input required value={desc.category} onChange={(e) => setDesc({ ...desc, category: e.target.value })} placeholder="energy" /></label>
+            <label className="span-2">Description <input required value={desc.description} onChange={(e) => setDesc({ ...desc, description: e.target.value })} size={60} /></label>
+            <label className="span-2">Tags (comma separated) <input value={desc.tags} onChange={(e) => setDesc({ ...desc, tags: e.target.value })} /></label>
+          </div>
+        </div>
+        <div className="sheet-actions">
+          <button type="submit" className="btn" data-magnet disabled={busy}>Run the seller chain</button>
+          <span className="fine">Classify, assess, price and draft terms on the server. Nothing is signed yet.</span>
+        </div>
       </form>
-      {steps.length > 0 && <ol data-testid="sell-steps">{steps.slice(0, shown).map((s, i) => (
-        <li key={i}>
-          {describeStep(s)}
-          {s.step === "assess" && (
-            <details data-testid="sell-report" open>
-              <summary>Assessment report{s.reportHash ? <> (hash <code>{String(s.reportHash).slice(0, 16)}…</code>)</> : null}</summary>
-              <ul>{reportLines(s.report as Parameters<typeof reportLines>[0]).map((l, j) => <li key={j}>{l}</li>)}</ul>
-            </details>
-          )}
-        </li>
-      ))}</ol>}
+      {steps.length > 0 && (
+        <div className="chain-log">
+          <span className="eyebrow-mono">Seller chain{busy && shown < steps.length ? <span className="dots"><i /><i /><i /></span> : null}</span>
+          <ol data-testid="sell-steps" className="feed">{steps.slice(0, shown).map((s, i) => (
+            <li key={i} className={`tone-${s.step === "assess" && s.needsConfirmation ? "warn" : !draft?.ok && i === steps.length - 1 ? "crit" : "ok"}`}>
+              <span className="feed-tag">{s.step}</span>
+              <div>
+                {describeStep(s)}
+                {s.step === "assess" && (
+                  <details data-testid="sell-report" open>
+                    <summary>Assessment report{s.reportHash ? <> (hash <code>{String(s.reportHash).slice(0, 16)}…</code>)</> : null}</summary>
+                    <ul>{reportLines(s.report as Parameters<typeof reportLines>[0]).map((l, j) => <li key={j}>{l}</li>)}</ul>
+                  </details>
+                )}
+              </div>
+            </li>
+          ))}</ol>
+        </div>
+      )}
       {draft?.ok && shown >= steps.length && !done && (
-        <div data-testid="sell-review">
-          <p>Reasons for the price: {(steps.find((s) => s.step === "price")?.reasons as string[] | undefined)?.join("; ")}</p>
-          <label>Your price (USDC) <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} size={8} /></label>
+        <div data-testid="sell-review" className="review-card">
+          <div className="review-figures">
+            {assess ? <div><span className="eyebrow-mono">Grade</span><strong className="figure">{String(assess.grade)}</strong></div> : null}
+            {priced ? <div><span className="eyebrow-mono">Suggested range</span><strong className="figure-sm">{usdc(String(priced.low))} to {usdc(String(priced.high))}</strong></div> : null}
+            {drafted ? <div><span className="eyebrow-mono">Terms hash</span><code>{String(drafted.termsHash).slice(0, 16)}…</code></div> : null}
+          </div>
+          <p>Reasons for the price: {(priced?.reasons as string[] | undefined)?.join("; ")}</p>
+          <label className="price-field">Your price (USDC) <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} size={8} /></label>
           {draft.needsConfirmation && (
-            <label style={{ display: "block" }}><input type="checkbox" checked={pii} onChange={(e) => setPii(e.target.checked)} /> The assessment found personal data. I confirm I may sell it.</label>
+            <label className="confirm"><input type="checkbox" checked={pii} onChange={(e) => setPii(e.target.checked)} /> The assessment found personal data. I confirm I may sell it.</label>
           )}
           {pending ? (
-            <p data-testid="sell-pending">
+            <p data-testid="sell-pending" className="pending-note">
               Listing <code>{pending.listing}</code> is signed
               {pending.signature && <> (<a href={`https://explorer.solana.com/tx/${pending.signature}?cluster=devnet`} target="_blank" rel="noreferrer">transaction</a>)</>}.{" "}
               <button type="button" disabled={busy} onClick={() => void retry(pending)}>Retry custody and assessment (no new transaction)</button>
             </p>
           ) : (
             <>
-              <button type="button" disabled={busy} onClick={() => void sign()}>Sign the listing (wallet)</button>
-              <p>
-                Already signed this listing? <input value={resumeAt} onChange={(e) => setResumeAt(e.target.value)} placeholder="listing address" size={44} />{" "}
-                <button type="button" disabled={busy} onClick={() => void resume()}>Finish custody and assessment</button>
+              <button type="button" className="btn" data-magnet disabled={busy} onClick={() => void sign()}>Sign the listing (wallet)</button>
+              <p className="resume">
+                Already signed this listing? <input value={resumeAt} onChange={(e) => setResumeAt(e.target.value)} placeholder="listing address" size={44} aria-label="Listing address" />{" "}
+                <button type="button" className="btn-ghost" disabled={busy} onClick={() => void resume()}>Finish custody and assessment</button>
               </p>
             </>
           )}
         </div>
       )}
-      {done && <p data-testid="sell-done">Listed: <a href={`/listing/${done.listing}`}><code>{done.listing}</code></a>, attested grade {done.grade} by the marketplace assessor.</p>}
+      {done && (
+        <div className="final-product">
+          <span className="eyebrow-mono">Listed on chain</span>
+          <p data-testid="sell-done">Listed: <a href={`/listing/${done.listing}`}><code>{done.listing}</code></a>, attested grade {done.grade} by the marketplace assessor.</p>
+        </div>
+      )}
       {msg && <p role="alert">{msg}</p>}
     </section>
   );
