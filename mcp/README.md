@@ -16,7 +16,7 @@ Tools for an AI agent to buy data, services and agent teams under on-chain escro
 | `release` | yes | Pay for a delivery, naming the delivery hash you checked |
 | `challenge` | yes | Dispute a delivery; the deal's independent verifier decides |
 | `hire_team` | no | Returns the link a **human** opens to fund a team and approve its stages in their own wallet |
-| `mission_status` | no | Follow a hired team's mission |
+| `mission_status` | no | Follow a hired team's mission: chain facts, plus the team's progress from the site |
 
 No tool can approve a stage gate, add a mandate or raise a cap: those are the human's, in their own wallet (a test
 enforces it). Refusals are normal results with a reason code (the program's own error names).
@@ -66,6 +66,17 @@ Then ask the agent, for example: *"Check my wallet, get test funds if needed, se
 20 USDC max price, then find the cheapest attested dataset and buy it."* The agent calls `my_wallet` →
 `get_test_funds` → `setup_policy` → `find_listings` → `get_listing` → `buy` → `deal_status`, and the program
 enforces the budget, not the agent.
+
+### Demo: an agent hires a team, the human approves, the agent follows it (3 steps)
+
+1. Ask the agent: *"Find an agent team that plans trips and hire it to plan 3 days in Lisbon with a 5 USDC budget."*
+   It calls `find_listings` (kind `Team`) and then `hire_team`, which returns an approval link. **No tool signs anything here.**
+2. Open the link and sign in your own wallet: fund the mission, the agents' mandates, and each stage when its plan
+   appears. Copy the mission address the page shows.
+3. Ask the agent: *"Follow mission `<address>`."* `mission_status` returns the chain's facts (budget, spent, stages
+   approved) and the team's progress from the site: the stage waiting for your approval, every spend (including ones
+   the program refused, such as `OverPerTxCap`), the agents' results (marked untrusted) and the delivered product hash.
+   Releasing the fee is yours too, on the mission page.
 
 **Scripted run** (no AI client needed, same MCP protocol): with the same variables exported,
 `npm run demo --prefix mcp` (read-only) or `node mcp/scripts/demo.mjs --buy` (sets a policy if missing and buys).

@@ -2,10 +2,12 @@ import { z } from "zod";
 import { getMission } from "@deal/chain";
 import { defineTool, ok, refuse } from "../tool.ts";
 import { badInput, isAddress, needChain, plain } from "../access.ts";
+import { teamProgress } from "../progress.ts";
 
 export default defineTool({
   name: "mission_status",
-  description: "Read a hired team's mission from the chain: budget, spent, stages and which are approved, closed or not. Approving stages is for the human, in their wallet.",
+  description:
+    "Follow a hired team's mission: the chain's facts (budget, spent, stages approved, closed) and, when DEAL_SITE_URL is set, the team's progress (stage waiting for the human's approval, agents' spends including on-chain refusals, their results, the delivered product hash). Approving stages is for the human, in their wallet.",
   input: { mission: z.string() },
   writes: false,
   async run(args, c) {
@@ -13,6 +15,16 @@ export default defineTool({
     const ch = await needChain(c);
     if (!ch.ok) return ch.result;
     const m = await getMission(ch.value.ctx, args.mission as never);
-    return m ? ok(plain(m)) : refuse("NOT_FOUND", "No mission at that address.");
+    if (!m) return refuse("NOT_FOUND", "No mission at that address.");
+    let team: unknown = null;
+    if (c.config.siteUrl) {
+      try {
+        const r = await (c.fetch ?? fetch)(new URL(`/api/missions/${args.mission}`, c.config.siteUrl), { headers: { accept: "application/json" } });
+        team = teamProgress(await r.json().catch(() => null)) ?? { unavailable: `the site answered ${r.status}` };
+      } catch {
+        team = { unavailable: "the marketplace site did not answer" };
+      }
+    }
+    return ok({ ...plain(m), team });
   },
 });
