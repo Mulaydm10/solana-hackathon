@@ -140,3 +140,25 @@ test("get_test_funds: devnet only, airdrop plus the site's faucet, refusals as v
   assert.match((none as { message: string }).message, /later/);
   assert.equal(reason(await tool("get_test_funds").run({}, ctx(t.buyer as never, { cluster: "localnet" }))), "UNSUPPORTED");
 });
+
+test("mission_status: the chain's facts plus the team's progress from the site (read-only)", async () => {
+  const { t, dctx, ctx } = await market();
+  const { missions, findMissionPda } = await import("@deal/chain");
+  const now = BigInt(t.client.svm.getClock().unixTimestamp);
+  const made = await missions.create(dctx, t.buyer, {
+    missionId: 77n, budget: 1n * USDC, termsHash: hash(40), stageCaps: [1n * USDC], expiresAt: now + 3_600n, verifier: t.verifier.address,
+  });
+  assert.ok(made.ok, JSON.stringify(made));
+  const [mission] = await findMissionPda({ buyer: t.buyer.address, missionId: 77n });
+  const asked: string[] = [];
+  const site = (async (u: URL) => {
+    asked.push(u.pathname);
+    return Response.json({ ok: true, state: "running", events: [{ type: "plan", stage: 0 }] });
+  }) as unknown as typeof fetch;
+  const d = data(await tool("mission_status").run({ mission }, { ...ctx(), fetch: site }));
+  assert.equal(d.budget, String(1n * USDC));
+  assert.deepEqual(asked, [`/api/missions/${mission}`]);
+  assert.equal((d.team as { waitingForApproval: number }).waitingForApproval, 0);
+  const down = (async () => { throw new Error("down"); }) as unknown as typeof fetch;
+  assert.deepEqual(data(await tool("mission_status").run({ mission }, { ...ctx(), fetch: down })).team, { unavailable: "the marketplace site did not answer" });
+});
