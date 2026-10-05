@@ -277,7 +277,7 @@ export function MissionView() {
                 <dl className="mandate">
                   <dt>Spent / cap</dt><dd>{usd(md.spent)} / {usd(md.cap)} USDC</dd>
                   <dt>Per payment</dt><dd>{usd(md.perTxCap)} USDC</dd>
-                  <dt>Allowed payees</dt><dd>{md.payees === 0 ? "none" : md.payees}</dd>
+                  <dt>Allowed payees</dt><dd>{md.payees === 0 ? "none (this agent doesn't buy anything)" : md.payees}</dd>
                   <dt>Expires</dt><dd>{new Date(Number(md.expiresAt) * 1000).toISOString().slice(0, 16).replace("T", " ")} UTC</dd>
                 </dl>
               </>

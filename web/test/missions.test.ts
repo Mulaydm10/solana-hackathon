@@ -22,7 +22,7 @@ const TOKEN = "s".repeat(40);
 
 test("every known team blueprint is valid and keyed by its own hash; the fixture Team listing finds it by content hash", () => {
   for (const [hash, bp] of Object.entries(TEAM_BLUEPRINTS)) {
-    assert.ok(validateBlueprint(bp, { limits: DEFAULT_LIMITS, capabilities: ["market:read", "booking:quote", "booking:pay"] }).ok, hash);
+    assert.ok(validateBlueprint(bp, { limits: DEFAULT_LIMITS, capabilities: ["market:read", "booking:quote", "booking:pay", "llm:complete"] }).ok, hash);
     assert.equal(Buffer.from(blueprintHash(bp)).toString("hex"), hash);
   }
   const team = FIXTURES.find((f) => f.kind === "Team")!;
@@ -79,7 +79,7 @@ test("prepare: strict input, the blueprint comes from the site, the token goes o
     assert.equal(r.status, 200);
     const sent = seen.bodies[0] as { blueprint: { name: string; roles: { cap: string }[] }; budget: string };
     assert.equal(sent.blueprint.name, "Trip planner"); // the site's blueprint, not the caller's
-    assert.equal(sent.blueprint.roles[0]!.cap, "5000000");
+    assert.equal(sent.blueprint.roles[0]!.cap, "3000000");
     assert.deepEqual(seen.auth, [`Bearer ${TOKEN}`]);
     assert.ok(!JSON.stringify(await r.json()).includes(TOKEN));
   });
@@ -211,4 +211,17 @@ test("aiLabel: a simulated mission is always labelled Simulated AI demo, never a
   assert.equal(aiLabel("anthropic"), "AI: Claude");
   assert.equal(aiLabel("none"), null);
   assert.equal(aiLabel(undefined), null);
+});
+
+test("#220: the site's Trip planner is the recorded demo team: simulated-AI capable, researcher 3 USDC, writer pays no one", () => {
+  const r = TRIP_PLANNER.roles.find((x) => x.name === "researcher")!;
+  const w = TRIP_PLANNER.roles.find((x) => x.name === "writer")!;
+  assert.deepEqual(r.capabilities, ["market:read", "llm:complete"]);
+  assert.deepEqual(w.capabilities, ["llm:complete"]);
+  assert.equal(r.cap, 3_000_000n);
+  assert.equal(r.perTxCap, 2_000_000n);
+  assert.deepEqual(r.payees, [TRIP_DATA_SELLER]);
+  assert.equal((w.payees ?? []).length, 0, "least privilege: the writer never pays");
+  assert.deepEqual(TRIP_PLANNER.stages.map((st) => st.cap), [3_000_000n, 1_000_000n]);
+  assert.equal(Buffer.from(blueprintHash(TRIP_PLANNER)).toString("hex"), "370fcf88b51aefe649db26eac4a38bb7e9bd7227f26053118819ffa6737bfd93");
 });
