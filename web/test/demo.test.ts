@@ -189,7 +189,7 @@ test("demo routes refuse without DEMO_BUYER_KEY (the button is hidden then)", as
 
 test("#218: the demo budget covers the team's role caps, so the mission service's terms check accepts it", () => {
   const budget = demoBudget(TRIP_PLANNER);
-  assert.equal(budget, 6_000_000n, "Trip planner: researcher 5 + writer 1 USDC");
+  assert.equal(budget, 4_000_000n, "Trip planner: researcher 3 + writer 1 USDC");
   assert.ok(budget <= DEMO_LIMITS.maxBudget);
   // The exact check the mission service runs in prepare (it answered CAPS_OVER_BUDGET for the old 2 USDC budget).
   assert.equal(missionTerms(TRIP_PLANNER, "Plan a 3-day trip to Lisbon for two", budget).ok, true);
