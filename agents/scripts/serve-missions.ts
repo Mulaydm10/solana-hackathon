@@ -14,6 +14,8 @@
 //   LLM_MODEL               model id for the workers                                                   default: claude-opus-5-5
 //   MISSION_STORE           directory for each mission's public view (no keys), so the site still shows   default: ./demo-runs/missions
 //                           missions after a restart, and scripted demo runs (demo:mission) appear too
+//   DEMO_BUYERS             the site's demo buyer address(es), comma-separated: their missions show one   default: none
+//                           over-cap payment refused on chain before the in-mandate one (#214)
 //   DEAL_RPC_URL / DEAL_MINT / HOST / PORT                                                          devnet, Circle USDC, 127.0.0.1, 3320
 // Mainnet is refused. Workers in ../workers use Claude through the broker when the key is set.
 import { readFileSync } from "node:fs";
@@ -62,6 +64,7 @@ const workers = Object.fromEntries(["researcher", "writer"].map((r) => [r, fileU
 const svc = createMissionService({
   ctx, broker, capabilities: ["market:read", "booking:quote", "booking:pay", "llm:complete"], workers, live: liveFrom(source),
   aiProvider: choice.mode, dealRules: { verifier: verifier as never }, token, team: teamSeller ? { seller: teamSeller } : undefined,
+  demoBuyers: (env.DEMO_BUYERS ?? "").split(",").map((a) => a.trim()).filter((a) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)),
   store: fileMissionStore(env.MISSION_STORE ?? fileURLToPath(new URL("../demo-runs/missions", import.meta.url))),
 });
 const host = env.HOST ?? "127.0.0.1";

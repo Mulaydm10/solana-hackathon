@@ -28,6 +28,13 @@ export type ServiceOptions = {
   capabilities: readonly string[];
   workers: Record<string, string>;
   workerEnv?: Record<string, Record<string, string>>;
+  /**
+   * The site's server-side demo buyer(s) ("Try the demo", #199). Missions whose prepared buyer is one of these start
+   * the researcher with TRY_OVER_CAP=1, so the demo shows one over-cap payment refused ON CHAIN (OverPerTxCap) before
+   * the in-mandate one (#214). Decided from the prepared mission's buyer, never from request fields; other missions
+   * never get it.
+   */
+  demoBuyers?: readonly string[];
   live: (mission: string, agent: string) => Promise<boolean>;
   dealRules: { verifier: Address; minReviewSecs?: bigint; minResolveSecs?: bigint; maxToleranceBps?: number };
   /** Bearer token the site's server routes send. */
@@ -206,7 +213,7 @@ export function createMissionService(o: ServiceOptions): Server {
         void (async () => {
           try {
             for await (const e of runStages({
-              ctx: o.ctx, prepared: entry.prepared, broker: o.broker, workers: o.workers, workerEnv: o.workerEnv, live: o.live,
+              ctx: o.ctx, prepared: entry.prepared, broker: o.broker, workers: o.workers, workerEnv: workerEnvFor(o, entry.prepared.buyer), live: o.live,
               pollMs: o.pollMs, runner: o.runner, approvalTimeoutMs: Number(entry.prepared.expiresAt) * 1000 - Date.now(), team,
             })) {
               entry.events.push(e);
@@ -242,4 +249,10 @@ export function reviveBlueprint(v: unknown): unknown {
     roles: Array.isArray(o.roles) ? o.roles.map((r) => (r && typeof r === "object" ? { ...(r as object), cap: amt((r as Record<string, unknown>).cap), perTxCap: amt((r as Record<string, unknown>).perTxCap) } : r)) : o.roles,
     stages: Array.isArray(o.stages) ? o.stages.map((st) => (st && typeof st === "object" ? { ...(st as object), cap: amt((st as Record<string, unknown>).cap) } : st)) : o.stages,
   };
+}
+
+/** The worker env for one mission: the service's own, plus TRY_OVER_CAP=1 for the researcher of a demo buyer's mission. */
+export function workerEnvFor(o: Pick<ServiceOptions, "workerEnv" | "demoBuyers">, buyer: string): Record<string, Record<string, string>> | undefined {
+  if (!o.demoBuyers?.includes(buyer)) return o.workerEnv;
+  return { ...o.workerEnv, researcher: { ...o.workerEnv?.researcher, TRY_OVER_CAP: "1" } };
 }
