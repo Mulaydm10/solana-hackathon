@@ -6,6 +6,8 @@
 //   MISSION_FEE_PAYER       path to a keypair file with a little devnet SOL (pays agents' tx fees)  required
 //   MISSION_TEAM_SELLER     path to the team seller's keypair (seller of the Team listings; demo:   optional
 //                           surface/.keys/sellers/<id>.json): accepts fee deals, delivers the product  (no fee deals without it)
+//   AI_PROVIDER             simulated = the labelled Simulated AI demo (no key); anthropic = Claude    default: Claude if
+//                           (needs the key); unset = Claude with a key, else deterministic workers      a key is set
 //   ANTHROPIC_API_KEY       the model key for the `llm:complete` provider (Claude workers, PLAN §11)  optional
 //                           sealed into the broker vault at start and removed from this process's env; without it
 //                           the workers produce their deterministic output (roles may still list llm:complete)
@@ -21,7 +23,7 @@ import { solanaRpc } from "@solana/kit-plugin-rpc";
 import { signer as signerPlugin } from "@solana/kit-plugin-signer";
 import type { DealClient, DealContext } from "@deal/chain";
 import {
-  claudeProvider, createBroker, createMissionService, fileMissionStore, createVault, liveFrom, mandateSourceFromChain, masterKeyFromEnv, mockBooking, mockMarketData, sealCredential,
+  aiProviderFrom, createBroker, createMissionService, fileMissionStore, createVault, liveFrom, mandateSourceFromChain, masterKeyFromEnv, mockBooking, mockMarketData, sealCredential,
   type SealedCredential,
 } from "../src/index.ts";
 
@@ -48,19 +50,20 @@ const sealed: SealedCredential[] = env.BROKER_CREDENTIALS ? JSON.parse(readFileS
 // (NO_CREDENTIAL), so each mock without a sealed one gets a placeholder sealed under this master key.
 for (const p of ["market", "booking"]) if (!sealed.some((c) => c.provider === p)) sealed.push(sealCredential(master, p, `mock-${p}-placeholder`));
 // The model key becomes a sealed broker credential like any other; nothing else in this process keeps it.
-const llmKey = env.ANTHROPIC_API_KEY;
+const ai = aiProviderFrom(env);
 delete env.ANTHROPIC_API_KEY;
-if (llmKey && !sealed.some((c) => c.provider === "llm")) sealed.push(sealCredential(master, "llm", llmKey));
-const llm = sealed.some((c) => c.provider === "llm");
+if (!ai.ok) fail(ai.message);
+const choice = ai.ok ? ai.value : (undefined as never);
+if (choice.credential && !sealed.some((c) => c.provider === "llm")) sealed.push(sealCredential(master, "llm", choice.credential));
 const source = mandateSourceFromChain(ctx);
-const broker = createBroker({ vault: createVault(master, sealed), providers: [mockMarketData, mockBooking, claudeProvider({ model: env.LLM_MODEL })], mandates: source });
+const broker = createBroker({ vault: createVault(master, sealed), providers: [mockMarketData, mockBooking, ...(choice.provider ? [choice.provider] : [])], mandates: source });
 const workers = Object.fromEntries(["researcher", "writer"].map((r) => [r, fileURLToPath(new URL(`../workers/${r}.mjs`, import.meta.url))]));
 
 const svc = createMissionService({
   ctx, broker, capabilities: ["market:read", "booking:quote", "booking:pay", "llm:complete"], workers, live: liveFrom(source),
-  dealRules: { verifier: verifier as never }, token, team: teamSeller ? { seller: teamSeller } : undefined,
+  aiProvider: choice.mode, dealRules: { verifier: verifier as never }, token, team: teamSeller ? { seller: teamSeller } : undefined,
   store: fileMissionStore(env.MISSION_STORE ?? fileURLToPath(new URL("../demo-runs/missions", import.meta.url))),
 });
 const host = env.HOST ?? "127.0.0.1";
 const port = Number(env.PORT ?? 3320);
-svc.listen(port, host, () => console.log(`serve-missions: listening on http://${host}:${port} (fee payer ${payer.address}${teamSeller ? `, team seller ${teamSeller.address}` : ", no team seller: fee deals refused"}, ${llm ? "Claude workers" : "deterministic workers: no ANTHROPIC_API_KEY"})`));
+svc.listen(port, host, () => console.log(`serve-missions: listening on http://${host}:${port} (fee payer ${payer.address}${teamSeller ? `, team seller ${teamSeller.address}` : ", no team seller: fee deals refused"}, ${choice.label})`));

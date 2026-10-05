@@ -8,8 +8,11 @@
 //                                                       says what to fund it with (devnet SOL + test USDC)
 //   add --step to wait for Enter before each human approval (for recording)
 //
-//   ANTHROPIC_API_KEY  optional: Claude researcher and writer through the broker (llm:complete); the key is
-//                      sealed into the broker's vault and removed from this process's env before any worker runs
+//   AI_PROVIDER        simulated: the labelled Simulated AI demo (no key, no network), same broker interface;
+//                      anthropic (or unset with a key): Claude; unset without a key: deterministic workers
+//   ANTHROPIC_API_KEY  for Claude: sealed into the broker's vault and removed from this process's env before any
+//                      worker runs
+//   e.g. AI_PROVIDER=simulated npm run demo:mission --prefix agents
 //   DEMO_BUYER         keypair file of the buyer (devnet; default .keys/demo-buyer.json)
 //   MISSION_STORE      the mission service's store directory (default ./demo-runs/missions, the service's default):
 //                      the run is saved there so the site's /missions?m=<mission>&fee=<deal> shows it
@@ -33,8 +36,8 @@ import { DEAL_ESCROW_PROGRAM_ADDRESS, deals, fetchMaybeBuyerPolicy, getInitPolic
 import { PROGRAM_SO } from "@deal/chain/node";
 import { formatAmount, type Blueprint } from "@deal/core";
 import {
-  claudeProvider, createBroker, createVault, fileMissionStore, publicView, liveFrom, mandateSourceFromChain, mockBooking, mockMarketData, prepareMission, runStages, sealCredential,
-  LLM_MODEL, type MissionEvent,
+  aiProviderFrom, createBroker, createVault, fileMissionStore, publicView, liveFrom, mandateSourceFromChain, mockBooking, mockMarketData, prepareMission, runStages, sealCredential,
+  type MissionEvent,
 } from "../src/index.ts";
 
 const USDC = 1_000_000n;
@@ -57,9 +60,11 @@ const addr = (a: string) => (local ? a : `https://explorer.solana.com/address/${
 // The model key: sealed into the broker vault, then gone from this process's environment (workers never see it).
 const master = randomBytes(32);
 const sealed = [sealCredential(master, "market", "mock-market-placeholder"), sealCredential(master, "booking", "mock-booking-placeholder")];
-if (env.ANTHROPIC_API_KEY) sealed.push(sealCredential(master, "llm", env.ANTHROPIC_API_KEY));
+const ai = aiProviderFrom(env);
+if (!ai.ok) fail(ai.message);
+const choice = ai.ok ? ai.value : (undefined as never);
+if (choice.credential) sealed.push(sealCredential(master, "llm", choice.credential));
 delete env.ANTHROPIC_API_KEY;
-const withClaude = sealed.some((c) => c.provider === "llm");
 
 type Chain = { ctx: DealContext; buyer: TransactionSigner; now: () => bigint; send: (ixs: never[]) => Promise<unknown> };
 
@@ -136,8 +141,8 @@ const budget = 4n * USDC;
 const fee = 1n * USDC;
 const goal = env.DEMO_GOAL ?? "Plan a 3-day trip to Lisbon for two, mid-range budget";
 
-say(`Fiducia agent-team mission demo (${local ? "local LiteSVM, compiled deal_escrow" : `devnet, ${rpcUrl}`})`);
-say(`Workers: ${withClaude ? `Claude (${env.LLM_MODEL ?? LLM_MODEL}) through the broker's llm:complete` : "deterministic (set ANTHROPIC_API_KEY for Claude)"}`);
+say(`Fiducia agent-team mission demo${choice.mode === "simulated" ? " [Simulated AI demo]" : ""} (${local ? "local LiteSVM, compiled deal_escrow" : `devnet, ${rpcUrl}`})`);
+say(`Workers: ${choice.label}${choice.mode === "simulated" ? " — every agent output below is SIMULATED, not a live model" : ""}`);
 say(`Buyer ${addr(buyer.address)}`);
 say(`Team seller ${teamSeller.address} · data seller ${dataSeller.address} · verifier ${verifier}`);
 const have = await tokenOf(buyer.address);
@@ -187,7 +192,7 @@ for (const r of p.roles) say(`Mandate for ${r.role} (agent ${r.agent.address}): 
 // 4. Stages: the human approves exactly the plan hash rendered in code; agents run only after that is on chain.
 const source = mandateSourceFromChain(ctx, local ? c.now : undefined);
 const broker = createBroker({
-  vault: createVault(master, sealed), providers: [mockMarketData, mockBooking, claudeProvider({ model: env.LLM_MODEL })], mandates: source,
+  vault: createVault(master, sealed), providers: [mockMarketData, mockBooking, ...(choice.provider ? [choice.provider] : [])], mandates: source,
   now: local ? () => Number(c.now()) : undefined,
 });
 const workers = Object.fromEntries(["researcher", "writer"].map((r) => [r, fileURLToPath(new URL(`../workers/${r}.mjs`, import.meta.url))]));
@@ -231,7 +236,7 @@ say(`Team seller balance ${usdc(await tokenOf(teamSeller.address))} · data sell
 
 // The mission service serves this run to the site (read-only), from the same store directory.
 const events: MissionEvent[] = shown;
-fileMissionStore(env.MISSION_STORE ?? join(here, "../demo-runs/missions")).save(p.mission, { ...publicView(p), state: "done", events });
+fileMissionStore(env.MISSION_STORE ?? join(here, "../demo-runs/missions")).save(p.mission, { ...publicView(p), state: "done", events, aiProvider: choice.mode });
 say(`Watch it on the site: /missions?m=${p.mission}&fee=${feeDeal.deal}`);
 
 const dir = join(here, "../demo-runs");
