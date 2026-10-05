@@ -398,3 +398,128 @@ html[data-intro="1"] .ink-sheet { clip-path: inset(0 0 0 0); }
   .flip-inner { transition: none; }
   html[data-intro="1"] .ink-sheet { clip-path: inset(0 0 100% 0); }
 }
+
+/* Sell, deal, hire, dashboard: workflow sheets */
+.page-head { display: grid; justify-items: start; gap: 4px; margin: 4px 0 22px; }
+.page-head > * { animation: fadeUp .6s var(--ease) both; }
+.page-head > h1 { animation-delay: .06s; margin: 10px 0 4px; }
+.page-head > p { animation-delay: .14s; color: var(--ink2); max-width: 72ch; font-size: 17px; margin: 0; }
+.page-head h1 em { color: var(--ink2); }
+.page-addr code { word-break: break-all; }
+main section.sell, main section.hire, main section.deal { display: grid; gap: 18px; }
+main section.sell > *, main section.hire > *, main section.deal > * { margin: 0; }
+.flow-track { padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.flow-track::before { left: 40px; right: 40px; top: 37px; }
+.flow-track > li + li { border-top: 0; }
+.flow-track .stage-name { font-size: 19px; }
+.flow-track .stage.is-queued .stage-name { color: var(--ink3); }
+main section .sheet-form { padding: 0; gap: 0; overflow: hidden; }
+.sheet-part { position: relative; display: grid; gap: 12px; padding: 20px 20px 20px 72px; border-bottom: 1px dashed var(--line); }
+.part-no { position: absolute; left: 20px; top: 14px; font: 400 36px/1 var(--display); color: transparent; -webkit-text-stroke: 1px var(--line2); }
+.sheet-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 18px 20px; }
+.sheet-actions .fine { max-width: 60ch; }
+.choice-set { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; border: 0; padding: 0; }
+.choice-set legend { padding: 0 0 8px; }
+.choice { display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); cursor: pointer; transition: border-color .3s var(--ease), box-shadow .3s var(--ease), transform .3s var(--ease); }
+.choice:hover { border-color: var(--line2); transform: translateY(-1px); }
+.choice:has(input:checked) { border-color: var(--ink); box-shadow: 4px 4px 0 var(--ink); background: var(--surface); }
+.choice input { margin-top: 3px; }
+.choice > span { display: grid; gap: 4px; }
+.choice strong { font: 400 24px/1 var(--display); color: var(--ink); }
+.choice small { font-size: 13px; }
+.dropzone input[type="file"] { min-height: 64px; padding: 16px; }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
+.field-grid .span-2 { grid-column: 1 / -1; }
+.field-grid input, .field-grid textarea { width: 100%; min-width: 0; }
+.chain-log { display: grid; gap: 12px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.chain-log .eyebrow-mono { display: inline-flex; gap: 8px; align-items: center; }
+.chain-log .feed > li { animation: fadeUp .45s var(--ease) both; }
+.chain-log details { margin-top: 8px; padding: 10px 12px; border: 1px dashed var(--line2); border-radius: 9px; background: var(--bg); }
+.chain-log summary { cursor: pointer; font: 500 12px/1.5 var(--mono); letter-spacing: .06em; color: var(--ink2); }
+.chain-log details ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; color: var(--ink2); }
+.review-card, .terms-sheet { position: relative; display: grid; gap: 12px; padding: 20px 22px; border: 1px solid var(--ink); border-radius: 14px; background: var(--surface); box-shadow: 6px 6px 0 var(--ink); animation: revealUp .8s var(--ease) both; }
+.terms-sheet { box-shadow: 6px 6px 0 var(--team); }
+.review-card > p, .terms-sheet > p { margin: 0; color: var(--ink2); }
+.terms-sheet h2 { margin: 0; padding: 0; border: 0; }
+.review-figures, .terms-figures, .seller-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.review-figures > div, .terms-figures > div, .seller-stats > div { display: grid; gap: 8px; align-content: start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.figure { font: 400 56px/.9 var(--display); color: var(--ok); }
+.figure-sm { font: 400 26px/1.05 var(--display); }
+.price-field input { max-width: 180px; font: 500 18px var(--mono); }
+.confirm { display: flex; gap: 6px; align-items: flex-start; }
+.resume { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.resume input { flex: 1 1 260px; min-width: 0; }
+.pending-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px; border: 1px dashed var(--svc); border-radius: 10px; background: var(--svcbg); }
+.pending-note code { word-break: break-all; }
+.final-product [data-testid="sell-done"] { margin: 10px 0 0; font-size: 17px; }
+.final-product [data-testid="sell-done"] code { word-break: break-all; }
+.sell button.btn-ghost:hover:not(:disabled), .deal button.btn-ghost:hover:not(:disabled) { color: var(--ink); background: var(--surface); }
+.deal button.btn-revoke:hover:not(:disabled) { color: var(--bad); background: var(--badbg); }
+.loading-note, .empty-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 18px 20px; border: 1px dashed var(--line2); border-radius: 12px; background: var(--surface); color: var(--ink2); font-size: 15px; }
+.loading-note .dots { color: var(--acc); }
+
+/* Deal: the escrow record */
+.role-chip { background: var(--teambg); color: var(--team); }
+.deal-grid { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.deal-grid > dl { margin: 0; min-width: 0; }
+.deal-grid dd { min-width: 0; overflow-wrap: anywhere; }
+.escrow-figure { position: relative; overflow: hidden; display: grid; align-content: space-between; gap: 14px; padding: 20px; border-radius: 14px; background: var(--ink); color: var(--bg); }
+.escrow-figure::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bg) 12%, transparent), transparent); animation: sheen 5s ease-in-out 1s infinite; pointer-events: none; }
+.escrow-figure .eyebrow-mono, .escrow-figure .fine { color: color-mix(in srgb, var(--bg) 65%, transparent); }
+.escrow-figure strong { font: 400 clamp(40px, 5vw, 56px)/.95 var(--display); }
+dd.is-yes { color: var(--ok); }
+.next-step { display: grid; gap: 12px; justify-items: start; padding: 18px 20px; border: 1px dashed var(--acc); border-radius: 12px; background: var(--accbg); }
+.next-step > p { margin: 0; color: var(--ink2); }
+.action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 !important; }
+.action-row > p { margin: 0; flex-basis: 100%; color: var(--ink2); }
+.action-row button + button { margin: 0; }
+
+/* Hire: the brief and the contract */
+.hire .team-set { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; border: 0; padding: 0; }
+.hire .team-set legend { padding: 0 0 8px; }
+.hire .team-set .team-choice { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px; }
+.team-choice input { margin-top: 6px; }
+.team-body { display: grid; gap: 10px; min-width: 0; }
+.team-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.team-name { font: 400 26px/1.05 var(--display); color: var(--ink); }
+.team-desc { font-size: 14px; color: var(--ink2); }
+.team-roles { display: flex; flex-wrap: wrap; gap: 8px; }
+.role-pill { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-size: 14px; text-transform: capitalize; }
+.role-pill .agent-avatar { width: 26px; height: 26px; border-radius: 50%; font-size: 16px; }
+.team-fee { font: 500 11px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink3); }
+.brief-grid .fine { align-self: end; margin: 0 0 10px; }
+.plan-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.plan-list > li { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); min-width: 0; }
+.plan-list .stage-node { flex: none; width: 32px; height: 32px; font-size: 13px; }
+.plan-list code { word-break: break-all; }
+.terms-sheet .sheet-actions { padding: 0; }
+.done-note { padding: 12px 14px; border-radius: 10px; background: var(--okbg); border-left: 3px solid var(--ok); }
+
+/* Dashboard: the seller's control sheet */
+main form.lookup { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+main form.lookup input { flex: 1 1 280px; min-width: 0; font-family: var(--mono); font-size: 14px; }
+.seller-sheet { display: grid; gap: 14px; padding: 20px; border: 1px solid var(--ink); border-radius: 14px; background: var(--surface); box-shadow: 6px 6px 0 var(--ink); animation: revealUp .8s var(--ease) both; }
+.seller-id { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.seller-id > div { display: grid; gap: 6px; min-width: 0; }
+.seller-id code { word-break: break-all; }
+.rep-line { margin: 0; color: var(--ink2); }
+[data-testid="dashboard-listings"] > li + li { border-top: 0; }
+
+@media (max-width: 640px) {
+  .flow-track { padding: 14px; }
+  .sheet-part { padding: 18px 16px; }
+  .part-no { position: static; font-size: 28px; }
+  .field-grid, .deal-grid { grid-template-columns: 1fr; }
+  .review-card, .terms-sheet, .seller-sheet { padding: 16px; box-shadow: 4px 4px 0 var(--ink); }
+  .seller-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .seller-stats > div { padding: 10px; }
+  .terms-sheet { box-shadow: 4px 4px 0 var(--team); }
+}
+@media (max-width: 640px) {
+  .stage-track.flow-track { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 14px 10px; }
+  .flow-track::before { display: block; left: 30px; right: 30px; top: 31px; }
+  .flow-track .stage { justify-items: center; text-align: center; gap: 6px; }
+  .flow-track .stage-node { width: 34px; height: 34px; font-size: 13px; }
+  .flow-track .stage-name { font-size: 13px; line-height: 1.1; }
+  .flow-track .stage-meta { display: none; }
+}

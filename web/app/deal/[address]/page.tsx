@@ -13,8 +13,11 @@ export default async function DealPage({ params }: { params: Promise<{ address: 
   return (
     <main>
       <p><a href="/">← Catalogue</a></p>
-      <h1>Deal</h1>
-      <p><code>{address}</code></p>
+      <header className="page-head">
+        <span className="eyebrow">Escrow deal · read from Solana devnet</span>
+        <h1>Deal</h1>
+        <p className="page-addr"><code>{address}</code></p>
+      </header>
       <DealView deal={address} />
     </main>
   );

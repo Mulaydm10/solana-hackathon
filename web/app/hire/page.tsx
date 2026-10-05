@@ -15,10 +15,15 @@ export default async function Hire() {
     }));
   return (
     <main>
-      <h1>Hire a team</h1>
-      <p>State a goal and a budget. Each agent gets its own wallet and an on-chain mandate (caps, payees, stages). No
-        agent can spend until you approve each stage's plan in your wallet, and you can revoke any agent in one
-        transaction.</p>
+      <header className="page-head">
+        <span className="eyebrow">Hire · agent team · mission on chain</span>
+        <h1>Hire a <em>team</em></h1>
+        <p>
+          State a goal and a budget. Each agent gets its own wallet and an on-chain mandate (caps, payees, stages). No
+          agent can spend until you approve each stage&apos;s plan in your wallet, and you can revoke any agent in one
+          transaction.
+        </p>
+      </header>
       <HireForm teams={teams} />
     </main>
   );

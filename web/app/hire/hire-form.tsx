@@ -142,29 +142,68 @@ export function HireForm({ teams }: { teams: TeamOption[] }) {
     }
   }
 
-  if (teams.length === 0) return <p>No teams are listed yet.</p>;
+  if (teams.length === 0) return <p className="empty-note">No teams are listed yet.</p>;
+  const option = teams.find((t) => t.listing === team);
+  const at = step === "form" ? 0 : step === "review" ? 1 : step === "funded" ? 4 : 5;
+  const FLOW = ["Mission terms", policy ? "Budget policy (on chain)" : "Budget policy", "Budget and team fee", "Agent mandates", "Approve stage 1"];
   return (
-    <section data-testid="hire-form">
+    <section data-testid="hire-form" className="hire">
+      <ol className="stage-track flow-track" aria-label="Progress">
+        {FLOW.map((name, i) => {
+          const state = i < at || (i === 1 && policy && at >= 1) ? "done" : i === at ? (busy ? "running" : failed ? "declined" : "waiting") : "queued";
+          return (
+            <li key={name} className={`stage is-${state}`} style={{ animationDelay: `${i * 0.08}s` }}>
+              <span className="stage-node">{state === "done" ? "✓" : i + 1}</span>
+              <span className="stage-name">{name}</span>
+              <span className="stage-meta">{i === 0 ? "rendered by code" : "your wallet signs"}</span>
+            </li>
+          );
+        })}
+      </ol>
       {step === "form" && (
-        <form onSubmit={(e) => { e.preventDefault(); void prepare(); }}>
-          <fieldset>
-            <legend>Team</legend>
-            {teams.map((t) => (
-              <label key={t.listing} style={{ display: "block" }}>
-                <input type="radio" name="team" value={t.listing} checked={team === t.listing} onChange={() => setTeam(t.listing)} /> {t.name}: &ldquo;{t.description}&rdquo; ({t.roles.join(", ")})
-              </label>
-            ))}
-          </fieldset>
-          <label style={{ display: "block" }}>Goal <textarea required minLength={3} maxLength={2000} value={goal} onChange={(e) => setGoal(e.target.value)} rows={3} cols={60} /></label>
-          <label style={{ display: "block" }}>Expense budget (USDC) <input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} size={8} /></label>
-          <button type="submit" disabled={busy}>Prepare the mission terms</button>
+        <form className="sheet-form" onSubmit={(e) => { e.preventDefault(); void prepare(); }}>
+          <div className="sheet-part">
+            <span className="part-no">01</span>
+            <fieldset className="team-set">
+              <legend>Team</legend>
+              {teams.map((t) => (
+                <label key={t.listing} className="team-choice" data-tilt>
+                  <input type="radio" name="team" value={t.listing} checked={team === t.listing} onChange={() => setTeam(t.listing)} />
+                  <span className="team-body">
+                    <span className="team-top"><strong className="team-name">{t.name}</strong><span className="chip chip-Team">Team</span></span>
+                    <span className="team-desc">&ldquo;{t.description}&rdquo;</span>
+                    <span className="team-roles">{t.roles.map((r) => <span key={r} className="role-pill"><span className="agent-avatar" aria-hidden>{r.slice(0, 1).toUpperCase()}</span>{r}</span>)}</span>
+                    <span className="team-fee">team fee {usdc(t.price)} · held in escrow until you release the final product</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          </div>
+          <div className="sheet-part">
+            <span className="part-no">02</span>
+            <span className="eyebrow-mono">Your brief</span>
+            <div className="field-grid brief-grid">
+              <label className="span-2">Goal <textarea required minLength={3} maxLength={2000} value={goal} onChange={(e) => setGoal(e.target.value)} rows={3} cols={60} placeholder="Plan 3 days in Lisbon for two, under 400 EUR" /></label>
+              <label>Expense budget (USDC) <input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} size={8} /></label>
+              <p className="fine">The agents can only spend this budget, split into capped mandates. Unspent budget can be taken back.</p>
+            </div>
+          </div>
+          <div className="sheet-actions">
+            <button type="submit" className="btn" data-magnet disabled={busy}>Prepare the mission terms</button>
+            <span className="fine">Nothing is signed yet: you review the terms first.</span>
+          </div>
         </form>
       )}
       {prep && step !== "form" && (
-        <div data-testid="mission-terms">
-          <h2>Mission terms (rendered by code)</h2>
-          <p>Mission <code>{prep.mission}</code>, terms hash <code>{prep.terms.hash.slice(0, 16)}…</code>, expense budget {usdc(prep.createParams.budget)},
-            team fee {usdc(teams.find((t) => t.listing === team)?.price ?? "0")} in escrow until you release the final product.</p>
+        <div data-testid="mission-terms" className="terms-sheet">
+          <span className="eyebrow-mono">Mission terms · rendered by code</span>
+          <h2>{option?.name ?? "Mission"}</h2>
+          <div className="terms-figures">
+            <div><span className="eyebrow-mono">Expense budget</span><strong className="figure-sm">{usdc(prep.createParams.budget)}</strong></div>
+            <div><span className="eyebrow-mono">Team fee in escrow</span><strong className="figure-sm">{usdc(option?.price ?? "0")}</strong></div>
+            <div><span className="eyebrow-mono">Terms hash</span><code>{prep.terms.hash.slice(0, 16)}…</code></div>
+          </div>
+          <p>Mission <code>{prep.mission}</code>. The team fee stays in escrow until you release the final product.</p>
           <table>
             <thead><tr><th>Agent role</th><th>Wallet</th><th>Cap</th><th>Per payment</th><th>Stages</th></tr></thead>
             <tbody>{prep.roles.map((r) => (
@@ -175,7 +214,7 @@ export function HireForm({ teams }: { teams: TeamOption[] }) {
           <p data-testid="mission-expiry">Expires {new Date(Number(prep.createParams.expiresAt) * 1000).toUTCString()}: the team must deliver by then,
             and what is left of the budget can be taken back. Verifier <code>{prep.createParams.verifier}</code> rules on any challenge
             of the agents&apos; deals or the team fee.</p>
-          <ol>{prep.plans.map((p) => <li key={p.stage}>Stage {p.stage + 1}: {describePlan(p.plan)}, plan <code>{p.planHash.slice(0, 16)}…</code></li>)}</ol>
+          <ol className="plan-list">{prep.plans.map((p) => <li key={p.stage}><span className="stage-node">{p.stage + 1}</span><span>Stage {p.stage + 1}: {describePlan(p.plan)}, plan <code>{p.planHash.slice(0, 16)}…</code></span></li>)}</ol>
           {step === "review" && (
             <div data-testid="policy-terms">
               <h3>Your budget policy</h3>
@@ -187,26 +226,28 @@ export function HireForm({ teams }: { teams: TeamOption[] }) {
                 <>
                   <p>You have no budget policy yet. Your wallet first signs one with these terms; every deal and mission you fund is checked against it,
                     and this mission&apos;s agents inherit its seller rule.</p>
-                  <label style={{ display: "block" }}>Budget per day (USDC) <input inputMode="decimal" size={8} value={policyForm.perDay}
-                    onChange={(e) => setPolicyForm({ ...policyForm, perDay: e.target.value })} /></label>
-                  <label style={{ display: "block" }}>Max price per deal (USDC) <input inputMode="decimal" size={8} value={policyForm.maxPrice}
-                    onChange={(e) => setPolicyForm({ ...policyForm, maxPrice: e.target.value })} /></label>
-                  <label style={{ display: "block" }}><input type="checkbox" checked={policyForm.anySeller}
+                  <div className="field-grid">
+                    <label>Budget per day (USDC) <input inputMode="decimal" size={8} value={policyForm.perDay}
+                      onChange={(e) => setPolicyForm({ ...policyForm, perDay: e.target.value })} /></label>
+                    <label>Max price per deal (USDC) <input inputMode="decimal" size={8} value={policyForm.maxPrice}
+                      onChange={(e) => setPolicyForm({ ...policyForm, maxPrice: e.target.value })} /></label>
+                  </div>
+                  <label className="confirm"><input type="checkbox" checked={policyForm.anySeller}
                     onChange={(e) => setPolicyForm({ ...policyForm, anySeller: e.target.checked })} /> Any seller (unchecked: only this team and the payees in its agents&apos; mandates)</label>
                 </>
               )}
             </div>
           )}
           {step === "review" && (
-            <>
-              <p>Your wallet asks you to sign up to three transactions: your budget policy (only the first time), the mission
-                budget with the team fee, then the agents&apos; mandates.</p>
-              <button type="button" disabled={busy} onClick={() => void fund()}>
+            <div className="sheet-actions">
+              <button type="button" className="btn" data-magnet disabled={busy} onClick={() => void fund()}>
                 {failed ? "Retry: send only what is still missing (wallet)" : "Fund the mission and the team fee, give the agents their mandates (wallet)"}</button>
-            </>
+              <span className="fine">Your wallet asks you to sign up to three transactions: your budget policy (only the first time), the mission
+                budget with the team fee, then the agents&apos; mandates.</span>
+            </div>
           )}
-          {step === "funded" && <button type="button" disabled={busy} onClick={() => void approveFirst()}>Approve stage 1&apos;s plan (wallet)</button>}
-          {step === "started" && <p>Stage 1 approved. Follow it on <a href={missionLink({ mission: prep.mission, feeDeal })}>your mission page</a>.</p>}
+          {step === "funded" && <div className="sheet-actions"><button type="button" className="btn" data-magnet disabled={busy} onClick={() => void approveFirst()}>Approve stage 1&apos;s plan (wallet)</button></div>}
+          {step === "started" && <p className="done-note">Stage 1 approved. Follow it on <a href={missionLink({ mission: prep.mission, feeDeal })}>your mission page</a>.</p>}
         </div>
       )}
       {msg && <p role="alert">{msg}</p>}
