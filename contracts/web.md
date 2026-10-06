@@ -50,7 +50,7 @@ existing site, `/hire`, "Try the demo" and `DEMO_BUYER_KEY` are untouched.
 
 - Routes: `app/machines/page.tsx`, `POST app/api/machines/charge` (Node runtime), `GET app/api/machines/status`.
 - Server-only env (capability `machines`, devnet only): `ROBOT_AGENT_KEY`, `PAD_KEY`, `MACHINE_MISSION`,
-  `PEAQ_EVENT_KEY`, `PEAQ_RPC_URL`, `PEAQ_DEPLOYMENT`, `PEAQ_EVENT_REGISTRY`, `PEAQ_SOURCE_CHAIN_ID`,
+  `PEAQ_EVENT_KEY`, `PEAQ_RPC_URL`, `PEAQ_DEPLOYMENT`, `PEAQ_EVENT_REGISTRY`, `PEAQ_SOURCE_CHAIN_ID` (`0`: self-reported events),
   `ROBOT_MACHINE_ID`, `PAD_MACHINE_ID`; optional `PEAQ_EXPLORER_TX_URL`. Any missing: the page says "machine demo
   not configured" and the routes refuse (fail closed). No key or RPC secret in a response, log or the client bundle.
 - The fleet mission's owner key is never on the server: the owner sets the robot's rules once, offline
