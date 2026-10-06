@@ -7,3 +7,4 @@ export * from "./seller/index.ts";
 export * from "./vm/index.ts";
 export * from "./team/index.ts";
 export * from "./verifier/index.ts";
+export * from "./machines/index.ts";
