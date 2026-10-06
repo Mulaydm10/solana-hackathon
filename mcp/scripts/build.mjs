@@ -21,6 +21,9 @@ await build({
   banner: {
     js: "#!/usr/bin/env node\nimport { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);",
   },
+  // The agents lane's machine loop (peaq track) loads the peaq SDK lazily; the MCP never calls it, and the SDK's
+  // optional cloud packages cannot be bundled. Left external, the unused dynamic import is never resolved.
+  external: ["@peaqos/peaq-os-sdk"],
   logLevel: "warning",
 });
 chmodSync(out, 0o755);
