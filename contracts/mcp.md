@@ -7,3 +7,8 @@ npm package, run as `npx <name>-mcp`, exposing an MCP server (stdio) to AI agent
 - Signs with the agent's own local keypair (path from config or env). The package never ships or fetches keys.
 - Bundled into a single file at build time so `@deal/core` and `@deal/chain` (workspace-local) need not be published.
 - Verify: `npm test --prefix mcp` (unit tests + bundle smoke test).
+
+## machine_status (#230, optional)
+
+Read-only tool: the two simulated machines' peaq IDs, the robot's mandate left, recent charges, peaq event count or
+MCR. No signing; existing tools unchanged.
