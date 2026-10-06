@@ -83,6 +83,8 @@ charge(deps: ChargeDeps, req: { chargeId: string; amount: bigint; reading: Meter
 - Network calls only through the broker's egress (`egressAllowed`); tests use local stubs.
 - machines/: peaq RPC calls go through the injected `PeaqClient` (the egress rule above is for agents running inside a
   mission; this is server-side settlement code). Machines are simulated and labelled so wherever named. Keys
-  (`MACHINE_OWNER_KEY`, `ROBOT_AGENT_KEY`, `PAD_KEY`, `PEAQ_EVENT_KEY`) are devnet/testnet only, from env or local files.
+  (`MACHINE_OWNER_KEY` for the setup scripts only, `ROBOT_AGENT_KEY`, `PAD_KEY`, `PEAQ_EVENT_KEY`) are devnet/testnet
+  only, from env or local files. Import path for other lanes: `@deal/agents/machines`. The fleet mission must be
+  created with `rentLamports` (it pays rent for the deals its agent opens), and the pad needs a token account.
 - Verify: `npm test --prefix agents`. Network or Docker tests are opt-in by env var (`AGENTS_NET=1`, `AGENTS_DOCKER=1`),
   like `DEAL_CHECK_DEVNET` in chain.
