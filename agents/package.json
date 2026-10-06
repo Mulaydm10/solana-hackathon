@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./seller": "./src/seller/index.ts",
-    "./custody": "./src/custody/index.ts"
+    "./custody": "./src/custody/index.ts",
+    "./machines": "./src/machines/index.ts"
   },
   "scripts": {
     "test": "tsc --noEmit && node --import tsx --test \"test/**/*.test.ts\"",
