@@ -162,6 +162,38 @@ A clean devnet run of the hire flow: mission [`BJyjL2qc…`](https://explorer.so
 
 ---
 
+## 🔌 Machine economy (peaq track)
+
+> **Two machines, one deal: a delivery robot pays a charging pad, settled on chain, with no human per payment.**
+> Both machines are **simulated**. Their Solana transactions are real (devnet), and their peaq identities and events are real (agung testnet).
+
+**The loop: "charge on delivery."**
+1. **The owner sets the rules once, on chain:** a Fiducia mandate for the robot's agent. At most **0.50 USDC per charge** and **2 USDC in total**, and the charging pad is the **only allowed payee**.
+2. **The robot pays on its own.** Its agent opens an escrow deal for each charge. Nobody approves individual payments.
+3. **Pay only for proven energy.** The pad signs a meter reading (kWh, time, price). Its sha256 is delivered on chain, and the robot releases **exactly that reading**.
+4. **The program enforces the limits.** A 0.60 USDC charge is refused by the Solana program (`OverPerTxCap`). The site simulates every transaction first, so a refused charge is never sent.
+5. **It's recorded on peaq.** Each settled charge becomes a **revenue event for the pad** and an **activity event for the robot** in peaq's EventRegistry. That's the history peaq's Machine Credit Rating is built from.
+
+**Why both chains:** peaq is the machines' identity and credit layer. Solana + Fiducia is the money layer: mandates, escrow and settlement. peaq's own agent-spending limits are enforced by its orchestrator server; Fiducia enforces the same kind of limits **in a Solana program**.
+
+| Try it | |
+|---|---|
+| Status | Solana side live (fleet mission below). The page goes live once the two machines are activated on agung (waiting on agung test tokens, #226) |
+| Live page | https://fiducia-orpin.vercel.app/machines: "Charge 0.40 USDC", then "Try 0.60 USDC (over limit)" |
+| From Claude Code | MCP tool `machine_status`: machine IDs, mandate left, last charges with their Solana and peaq transactions |
+| Fleet mission (devnet) | [`7hTQTkkZ…ssYn6`](https://explorer.solana.com/address/7hTQTkkZ5hGrVvdsGXm3kqG4RB3u7LiN62WdmUDssYn6?cluster=devnet), live until 27 Oct 2026 |
+| peaq network | agung testnet (chain 9990), EventRegistry [`0x2DAD…0040`](https://agung-testnet.subscan.io/account/0x2DAD8905380993940e340C5cE6d313d5c2780040) |
+
+**Honest limits**
+- **Simulated machines.** No physical robot or pad. The keys, signatures, deals and events are real.
+- **Self-reported peaq events (trust level 0).** peaq can't verify a Solana transaction (its event registry accepts peaq or Base as source chains), so each event carries the full Solana release signature for anyone to check on the Solana Explorer. The events never claim peaq verified the payment.
+- **agung uses peaq's 1.0 machine registry.** agung has no Economics 2.0 event registry, so the robot and pad are registered and bonded (1 PEAQ each) in agung's 1.0 IdentityRegistry. peaq serves no credit rating for testnet machines, and the page says so instead of showing a number.
+- **Test money only:** devnet test USDC and agung PEAQ.
+
+Code: `agents/src/machines/` (meter reading, charge loop, peaq events), `agents/scripts/machines/` (one-time setup), `web/app/machines/` (page and API), `mcp/src/tools/machine_status.ts`. Plan: [`docs/handoffs/peaq-machine-economy.md`](docs/handoffs/peaq-machine-economy.md).
+
+---
+
 ## ⛓️ Solana integration
 
 Everything that matters lives in **one Anchor program**, [`deal_escrow`](https://explorer.solana.com/address/CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV?cluster=devnet) (`CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV`, devnet). Every account is a PDA.
@@ -229,7 +261,8 @@ flowchart LR
 | v3 upgrade transaction | [`2i7r7iCz…HBanQuwC3`](https://explorer.solana.com/tx/2i7r7iCz3CkrYfcuvTVUd3cpxEm7GveWqYNtiiEG3guBkjAGcdQPnsQyUi3W7RsW6sYvR2fqRNqiWKHHBanQuwC3?cluster=devnet) (slot 507459446) |
 | Deployed binary | sha256 `d437551261d8a438b41b9e0ecc60994ccc9db4df3cfbeab322b226c31b1f7e8c`; `chain/scripts/verify-deployed.ts` checks it against the committed build |
 | Registered assessor | [`EvR4wU8jfNeRLwHiDv8DoCqkSJ8w8nWwhQEXUg95PyKY`](https://explorer.solana.com/address/EvR4wU8jfNeRLwHiDv8DoCqkSJ8w8nWwhQEXUg95PyKY?cluster=devnet) |
-| Settlement token | Circle devnet USDC [`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`](https://explorer.solana.com/address/4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU?cluster=devnet) |
+| Settlement token | Demo test USDC [`91TuVptwV9MjAowMtrLQB3Qs5VmMWA5uzxng1NcJH6iX`](https://explorer.solana.com/address/91TuVptwV9MjAowMtrLQB3Qs5VmMWA5uzxng1NcJH6iX?cluster=devnet) (6 decimals; the site's faucet hands it out). Circle devnet USDC also works when configured. |
+| Machine demo | Fleet mission [`7hTQTkkZ…ssYn6`](https://explorer.solana.com/address/7hTQTkkZ5hGrVvdsGXm3kqG4RB3u7LiN62WdmUDssYn6?cluster=devnet) on devnet; peaq agung (chain 9990) for machine IDs and events |
 | Live site | https://fiducia-orpin.vercel.app (Vercel) |
 | Demo video | https://youtu.be/L7-ofBtbwRA |
 
