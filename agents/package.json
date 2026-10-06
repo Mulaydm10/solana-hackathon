@@ -29,7 +29,8 @@
     "@solana/kit-plugin-rpc": "^0.19.0",
     "@solana/kit-plugin-signer": "^0.19.0",
     "@x402/core": "^2.28.0",
-    "@x402/svm": "^2.28.0"
+    "@x402/svm": "^2.28.0",
+    "viem": "2.57.3"
   },
   "devDependencies": {
     "@solana/kit-plugin-litesvm": "^0.19.0",
