@@ -41,3 +41,18 @@ type AttestedReport = {
 Rules: grade, quality and trust shown anywhere come from `report` and `rep`, never from `meta`. The chain
 implementation drops any listing whose stored metadata or report JSON does not hash to `meta_hash` / `report_hash`.
 Seller-written text may be matched for search but must never outrank verified signals on its own.
+
+## Machines page (#229, peaq track; add only)
+
+`/machines` shows one loop: a simulated delivery robot pays a simulated charging pad on devnet, settled on a signed
+meter reading, with peaq events for both machines. It reuses `@deal/agents` `machines/` (contracts/agents.md); the
+existing site, `/hire`, "Try the demo" and `DEMO_BUYER_KEY` are untouched.
+
+- Routes: `app/machines/page.tsx`, `POST app/api/machines/charge` (Node runtime), `GET app/api/machines/status`.
+- Server-only env: `MACHINE_OWNER_KEY`, `ROBOT_AGENT_KEY`, `PAD_KEY`, `PEAQ_EVENT_KEY`, `PEAQ_RPC_URL`,
+  `PEAQ_DEPLOYMENT`, `ROBOT_MACHINE_ID`, `PAD_MACHINE_ID`. Any missing: the page says "machine demo not
+  configured" and the routes refuse (fail closed). No key or RPC secret in a response, log or the client bundle.
+- `POST /api/machines/charge` body `{ amount: "0.40" | "0.60" }` only. 0.60 is the over-limit case: it is simulated,
+  never sent, and returns the program's refusal code. Per-IP and daily limits as in `lib/demo.ts`.
+- Rules, totals and MCR are read (chain, peaq), never hard-coded. An MCR rise is shown only if the MCR API reports it.
+- `NAV` gets one appended entry `{ href: "/machines", label: "Machines" }`.

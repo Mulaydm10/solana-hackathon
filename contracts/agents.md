@@ -17,6 +17,8 @@ that will later use Claude has a deterministic implementation behind the same in
 | `agents/src/team/` | #70 | Mulaydm10 | Orchestrator, stage loop, mock providers |
 | `agents/src/reader/` | #71 | vedant059 | Quarantined reader interface + deterministic reader |
 | `agents/test/injection/` | #71 | vedant059 | Injection corpus, run by the lane's verify |
+| `agents/src/machines/` | #227 | unassigned | peaq machine track: signed meter reading, charge-on-delivery loop, peaq events (`docs/handoffs/peaq-machine-economy.md`) |
+| `agents/scripts/machines/` | #228 | unassigned | One-time setup: activate the two simulated machines on peaq, create the fleet mission + robot mandate |
 | `agents/src/index.ts` | first PR | whoever lands first | Re-exports; later PRs add one line each |
 
 The first `agents` claim PR to merge adds `agents/package.json`, `tsconfig.json` and `src/index.ts`. Its `test` script
@@ -53,6 +55,24 @@ interface Reader { read<T>(untrusted: string, schema: Schema<T>): Promise<Ok<{ v
 
 // team/ (#70)
 runMission(goal: string, blueprint: Blueprint, opts: MissionOpts): AsyncIterable<MissionEvent>;
+
+// machines/ (#227): simulated machines, real devnet deals and real peaq events. Uses only instructions already on
+// CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV; adds none.
+type MeterReading = { padId: string; robotId: string; kWh: string; startedAt: number; endedAt: number; priceMicroUsdc: bigint; nonce: string };
+signReading(r: MeterReading, padSecret: Uint8Array): { reading: MeterReading; signature: Uint8Array; deliveryHash: Uint8Array }; // sha256(canonical JSON)
+verifyReading(r: MeterReading, signature: Uint8Array, padPublic: Uint8Array): boolean;
+type PeaqConfig = { rpcUrl: string; deployment: string; eventRegistry: string; sourceChainId: number }; // never hard-coded (#226)
+interface PeaqClient {
+  submitRevenueEvent(machineId: bigint, s: Settlement): Promise<Ok<{ txHash: string }> | Refused>; // value USD cents, currency "USD", trustLevel 1
+  submitActivityEvent(machineId: bigint, s: Settlement): Promise<Ok<{ txHash: string }> | Refused>; // currency "", trustLevel 1
+  queryMcr(machineId: bigint): Promise<Ok<{ status: string; score?: number }> | Refused>;          // "not served" is a refusal, not a guess
+}
+type Settlement = { chargeId: string; deal: Address; releaseSignature: string; deliveryHash: Uint8Array; amount: bigint }; // rawData = canonical JSON of this + cluster/program
+charge(deps: ChargeDeps, req: { chargeId: string; amount: bigint; reading: MeterReading }): Promise<Ok<{
+  openSig: string; deliverSig: string; releaseSig: string; padEventTx: string; robotEventTx: string }> | Refused>;
+// Simulates before every send: an over-limit amount returns the program's code (OverPerTxCap, OverMandateCap,
+// PayeeNotAllowed) as a refusal and signs nothing. Idempotent per chargeId: never releases twice, never writes a peaq
+// event twice for one release (a retry resumes where the last run stopped).
 ```
 
 ## Rules
@@ -61,5 +81,8 @@ runMission(goal: string, blueprint: Blueprint, opts: MissionOpts): AsyncIterable
 - No module returns or logs a sealed credential or a private key; tests assert it.
 - Amounts are bigint base units; all arithmetic in code, never by a model.
 - Network calls only through the broker's egress (`egressAllowed`); tests use local stubs.
+- machines/: peaq RPC calls go through the injected `PeaqClient` (the egress rule above is for agents running inside a
+  mission; this is server-side settlement code). Machines are simulated and labelled so wherever named. Keys
+  (`MACHINE_OWNER_KEY`, `ROBOT_AGENT_KEY`, `PAD_KEY`, `PEAQ_EVENT_KEY`) are devnet/testnet only, from env or local files.
 - Verify: `npm test --prefix agents`. Network or Docker tests are opt-in by env var (`AGENTS_NET=1`, `AGENTS_DOCKER=1`),
   like `DEAL_CHECK_DEVNET` in chain.
