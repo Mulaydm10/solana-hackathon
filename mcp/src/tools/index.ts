@@ -17,5 +17,6 @@ import publishListing from "./publish_listing.ts";
 import demandBoard from "./demand_board.ts";
 import myListings from "./my_listings.ts";
 import callService from "./call_service.ts";
+import machineStatus from "./machine_status.ts";
 
-export const TOOLS: readonly AnyTool[] = [programInfo, myWallet, getTestFunds, findListings, getListing, setupPolicy, buy, dealStatus, release, challenge, hireTeam, missionStatus, draftListing, publishListing, demandBoard, myListings, callService];
+export const TOOLS: readonly AnyTool[] = [programInfo, myWallet, getTestFunds, findListings, getListing, setupPolicy, buy, dealStatus, release, challenge, hireTeam, missionStatus, draftListing, publishListing, demandBoard, myListings, callService, machineStatus];
