@@ -61,10 +61,13 @@ runMission(goal: string, blueprint: Blueprint, opts: MissionOpts): AsyncIterable
 type MeterReading = { padId: string; robotId: string; kWh: string; startedAt: number; endedAt: number; priceMicroUsdc: bigint; nonce: string };
 signReading(r: MeterReading, padSecret: Uint8Array): { reading: MeterReading; signature: Uint8Array; deliveryHash: Uint8Array }; // sha256(canonical JSON)
 verifyReading(r: MeterReading, signature: Uint8Array, padPublic: Uint8Array): boolean;
-type PeaqConfig = { rpcUrl: string; deployment: string; eventRegistry: string; sourceChainId: number }; // never hard-coded (#226)
+type PeaqConfig = { rpcUrl: string; deployment: string; eventRegistry: string; sourceChainId: 0 | 3338 | 8453 }; // never hard-coded (#226)
+// peaq accepts only these source chains, not Solana. sourceChainId 0 => trustLevel 0 (self-reported): the event carries
+// the full Solana release signature in rawData (sourceTxHash = its sha256) and never claims peaq verified the payment.
+// trustLevel 1 only on a source chain peaq can verify (3338, 8453). Decided in #226 (agung, 1.0 machines).
 interface PeaqClient {
-  submitRevenueEvent(machineId: bigint, s: Settlement): Promise<Ok<{ txHash: string }> | Refused>; // value USD cents, currency "USD", trustLevel 1
-  submitActivityEvent(machineId: bigint, s: Settlement): Promise<Ok<{ txHash: string }> | Refused>; // currency "", trustLevel 1
+  submitRevenueEvent(machineId: bigint, s: Settlement): Promise<Ok<{ txHash: string }> | Refused>; // value USD cents, currency "USD", trustLevel per sourceChainId
+  submitActivityEvent(machineId: bigint, s: Settlement): Promise<Ok<{ txHash: string }> | Refused>; // value 0, currency "", trustLevel per sourceChainId
   queryMcr(machineId: bigint): Promise<Ok<{ status: string; score?: number }> | Refused>;          // "not served" is a refusal, not a guess
 }
 type Settlement = { chargeId: string; deal: Address; releaseSignature: string; deliveryHash: Uint8Array; amount: bigint }; // rawData = canonical JSON of this + cluster/program
