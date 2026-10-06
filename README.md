@@ -1,33 +1,126 @@
 <p align="center">
-  <img src="docs/assets/fiducia-banner.svg" alt="Fiducia: trust, enforced on Solana" width="100%">
+  <img src="docs/assets/fiducia-banner.svg" alt="Fiducia controls how AI agents spend money, enforced on Solana" width="100%">
 </p>
 
 <p align="center">
-  <a href="https://fiducia-orpin.vercel.app"><img alt="Live demo" src="https://img.shields.io/badge/live-fiducia--orpin.vercel.app-2DD4BF?style=for-the-badge"></a>
-  <a href="https://explorer.solana.com/address/CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV?cluster=devnet"><img alt="Solana devnet program" src="https://img.shields.io/badge/Solana-devnet-9945FF?style=for-the-badge&logo=solana&logoColor=white"></a>
-  <a href="https://youtu.be/L7-ofBtbwRA"><img alt="Demo video" src="https://img.shields.io/badge/demo-video-FF0000?style=for-the-badge&logo=youtube&logoColor=white"></a>
-  <a href="https://github.com/Mulaydm10/solana-hackathon/blob/design/pitch-deck/docs/pitch/Fiducia-pitch-deck.pdf"><img alt="Pitch deck" src="https://img.shields.io/badge/pitch-deck-E8B04B?style=for-the-badge"></a>
+  <a href="https://fiducia-orpin.vercel.app"><img alt="Live demo" src="https://img.shields.io/badge/live-fiducia--orpin.vercel.app-211E18?style=for-the-badge"></a>
+  <a href="https://explorer.solana.com/address/CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV?cluster=devnet"><img alt="Solana devnet program" src="https://img.shields.io/badge/Solana-devnet-2B59D1?style=for-the-badge&logo=solana&logoColor=white"></a>
+  <a href="https://youtu.be/L7-ofBtbwRA"><img alt="Demo video" src="https://img.shields.io/badge/demo-video-B93232?style=for-the-badge&logo=youtube&logoColor=white"></a>
+  <a href="docs/pitch/Fiducia-pitch-deck.pdf"><img alt="Pitch deck" src="https://img.shields.io/badge/pitch-deck-855504?style=for-the-badge"></a>
+  <a href="docs/pitch/Fiducia-Technical-Brief.pdf"><img alt="Technical brief" src="https://img.shields.io/badge/technical-brief-5A48B8?style=for-the-badge"></a>
+  <a href="docs/pitch/Fiducia-GTM-Launch-Plan.pdf"><img alt="Go-to-market plan" src="https://img.shields.io/badge/go--to--market-plan-1B6B33?style=for-the-badge"></a>
 </p>
 
 <p align="center">
-  <img alt="Anchor" src="https://img.shields.io/badge/Anchor-Rust-0E1726?logo=rust">
-  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-0E1726?logo=nextdotjs">
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-0E1726?logo=typescript">
-  <img alt="USDC" src="https://img.shields.io/badge/USDC-SPL%20Token-0E1726">
-  <img alt="x402" src="https://img.shields.io/badge/x402-pay--per--call-0E1726">
-  <img alt="MCP" src="https://img.shields.io/badge/MCP-agent%20server-0E1726">
+  <img alt="Anchor" src="https://img.shields.io/badge/Anchor-Rust-211E18?logo=rust">
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-211E18?logo=nextdotjs">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-211E18?logo=typescript">
+  <img alt="USDC" src="https://img.shields.io/badge/USDC-SPL%20Token-211E18">
+  <img alt="x402" src="https://img.shields.io/badge/x402-pay--per--call-211E18">
+  <img alt="MCP" src="https://img.shields.io/badge/MCP-17%20tools-211E18">
 </p>
 
 > *Fiducia* (Latin): the trust you place in someone who holds your assets.
 
-**Fiducia is a marketplace where people and their AI agents buy data, services and entire agent teams, with Solana enforcing every rule.**
+**Fiducia controls how AI agents spend money.** Agents buy data, APIs, reports and specialist work inside an **on-chain mandate**: caps, approved sellers, stages and expiry, enforced by one Solana program. A human approves every stage, and the seller is paid only for what was delivered.
 
-AI agents can already find data, call APIs and plan projects. The moment they need to **pay**, nobody can trust them:
-- they can overspend;
-- buyers can't verify what they're buying;
-- today a human approves every payment by hand.
+| | |
+|---|---|
+| **Built first for** | Small AI product teams and automation agencies whose **research agents** buy datasets, APIs, reports and expert work for clients |
+| **Their problem** | Someone answers to a client for every dollar an agent spends. Today that means shared API keys, a company card and a spreadsheet |
+| **With Fiducia** | One mandate per client, approved sellers only, every stage signed off by a human, every receipt on chain |
+| **Sellers** | Data owners, API makers, researchers, and developers or architects selling agent teams, designs and specialist work |
 
-Fiducia makes the rules part of the chain, so agents can spend and you keep control.
+---
+
+## ⚡ Start here: pick a path
+
+| | Path | Time | What you need |
+|---|---|---|---|
+| **1** | [**Click the demo**](#1-click-the-demo-no-wallet) | 1 min | A browser. No wallet |
+| **2** | [**Use it from Claude Code (MCP)**](#2-use-it-from-claude-code-mcp) | 5 min | Node 20+, Claude Code or Claude Desktop |
+| **3** | [**Use it with your own wallet**](#3-use-it-with-your-own-wallet) | 5 min | Phantom on devnet |
+| **4** | [**Run it locally**](#4-run-it-locally) | 5 min | Node 20+ |
+
+### 1. Click the demo (no wallet)
+
+1. Open **[fiducia-orpin.vercel.app/hire](https://fiducia-orpin.vercel.app/hire)** and press **Try the demo**. A capped devnet demo buyer signs for you.
+2. On the mission page, press **Approve** for stage 1. Watch the researcher's 2.000001 USDC payment get **refused** by the chain (`OverPerTxCap`) and its 1 USDC payment **settle**.
+3. Approve stage 2, read the delivered plan and its hash, then press **Release**. Every step links to Solana Explorer.
+
+> Demo agents are labelled **Simulated AI demo**: deterministic, so every run is repeatable. The approvals, payments, refusal and release are real devnet transactions.
+
+### 2. Use it from Claude Code (MCP)
+
+```bash
+git clone https://github.com/Mulaydm10/solana-hackathon && cd solana-hackathon
+for d in core chain agents mcp; do (cd $d && npm ci); done
+npm run build --prefix mcp                                   # -> mcp/dist/cli.js
+solana-keygen new -o ~/.config/fiducia/agent.json --no-bip39-passphrase   # the agent's OWN devnet key
+
+claude mcp add fiducia \
+  -e DEAL_KEYPAIR=$HOME/.config/fiducia/agent.json \
+  -e DEAL_SITE_URL=https://fiducia-orpin.vercel.app \
+  -e DEAL_ASSESSOR=EvR4wU8jfNeRLwHiDv8DoCqkSJ8w8nWwhQEXUg95PyKY \
+  -- node "$PWD/mcp/dist/cli.js"
+```
+
+Then ask Claude:
+
+> *Find an agent team that plans trips and hire it to plan 3 days in Lisbon for two, mid-range, with a 4 USDC budget.*
+
+Claude calls `find_listings`, then `hire_team`, and returns an approval link. **No tool signs anything in that step:** funding, mandates and stage approvals stay with the human. Claude Desktop config, all variables and a scripted run: [`mcp/README.md`](mcp/README.md#run-it-for-the-demo-devnet-today).
+
+<details>
+<summary><b>All 17 MCP tools</b></summary>
+
+| Tool | Signs | What it does |
+|---|---|---|
+| `program_info` | no | Program id, network, deal statuses, refusal codes |
+| `my_wallet` | no | The agent's address, SOL, USDC, spending policy and next step |
+| `get_test_funds` | no (devnet) | Devnet SOL and test USDC for the agent's own wallet |
+| `find_listings` / `get_listing` | no | Search the marketplace; one listing with price, hash, attestation and reputation |
+| `setup_policy` | yes | The agent's on-chain spending policy (daily budget, max price) |
+| `buy` / `deal_status` | yes / no | Buy an attested listing under escrow; follow the deal |
+| `release` / `challenge` | yes | Pay for a checked delivery, or dispute it with the verifier |
+| `hire_team` / `mission_status` | no | Approval link for a human to fund a team; follow the mission |
+| `call_service` | yes | x402 pay-per-call: no answer, no charge |
+| `draft_listing` / `publish_listing` / `my_listings` | yes | Sell from an agent |
+| `demand_board` | no | What buyers search for but cannot find |
+
+</details>
+
+### 3. Use it with your own wallet
+
+1. Install **Phantom**, turn on *Settings → Developer Settings → Testnet mode* and pick **Solana Devnet**.
+2. Get devnet SOL from [faucet.solana.com](https://faucet.solana.com) and test USDC from the site's faucet.
+3. On **[fiducia-orpin.vercel.app](https://fiducia-orpin.vercel.app)**: **Sell** a CSV, **Buy** a listing, or **Hire** a team and approve its stages on `/missions`.
+
+### 4. Run it locally
+
+```bash
+for d in core chain agents web; do (cd $d && npm ci); done
+cd web && npm run dev            # http://localhost:3000 (demo mode without .env.local)
+```
+
+---
+
+## 🧭 How it works
+
+<p align="center"><img src="docs/assets/fiducia-lifecycle.svg" alt="Five steps: agent asks, fund and set limits, approve the stage, agents spend, released on delivery" width="100%"></p>
+
+### One real mission, on chain
+
+A clean devnet run of the hire flow: mission [`BJyjL2qc…`](https://explorer.solana.com/address/BJyjL2qc9bfdxB8K8a7fyaxbhKyovNeapvW7wbsj1rSs?cluster=devnet), fee deal [`CSYUV9i8…`](https://explorer.solana.com/address/CSYUV9i8cZDxhfgtevd2m7bUmwVcqfZuC8CQCTQAVzZA?cluster=devnet).
+
+| Step | On chain | Result |
+|---|---|---|
+| Human funds the mission and adds two mandates | researcher 3.00 USDC (2.00 per payment), writer 1.00 USDC | ✅ |
+| Human approves stage 1 | `approve_stage` bound to the plan hash | ✅ approved |
+| Researcher tries to pay 2.000001 USDC | `agent_spend` → `OverPerTxCap` | ⛔ refused, never lands |
+| Researcher pays 1.00 USDC to the approved seller | `agent_spend` | ✅ settled |
+| Human approves stage 2, team delivers | `approve_stage`, `submit_delivery` (product hash) | ✅ delivered |
+| Human releases the fee | `release` | ✅ paid |
 
 ---
 
@@ -39,36 +132,37 @@ Fiducia makes the rules part of the chain, so agents can spend and you keep cont
 | ⚡ | **Services**: APIs a seller runs (the method stays private) | Answers per call | x402 pay-per-call, in USDC |
 | 🤖 | **Agent teams**: a blueprint of roles, caps and stage gates | A finished product for your goal | Escrow fee + a mission budget |
 
-### For sellers
-- **One upload.** An agent chain **classifies → grades (A–D) → prices → drafts terms**, and scans for personal data and secrets.
-- **The seller signs `create_listing` in Phantom.** A registered assessor then **attests the grade on chain**.
-- **Encrypted custody.** Data is only accepted if it matches the on-chain content hash. The key is sealed separately, so the **method stays private**.
-- **Seller dashboard and demand board**, which shows what buyers search for but can't find.
+<details>
+<summary><b>For sellers, buyers, agent teams and AI agents</b></summary>
 
-### For buyers
+**Sellers**
+- **One upload.** An agent chain **classifies → grades (A to D) → prices → drafts terms**, and scans for personal data and secrets.
+- **The seller signs `create_listing` in Phantom.** A registered assessor then **attests the grade on chain**.
+- **Encrypted custody.** Data is accepted only if it matches the on-chain content hash; the key is sealed separately, so the **method stays private**.
+- **Seller dashboard and demand board.**
+
+**Buyers**
 - An **on-chain budget policy**: daily budget, max price and an optional seller allowlist.
 - **Escrow** with seller stake, deadlines and a review window.
-- **Sealed key pickup.** Your wallet signs a message, the key is sealed to a one-time browser key, and the browser verifies the data against the chain.
+- **Sealed key pickup**: the browser verifies the data against the chain.
 - **Release** to pay, or **challenge** with a bond, and an independent verifier rules.
-- **Wash-resistant reputation**: no score below 10 deals or 3 distinct buyers, plus a flag when one buyer dominates.
+- **Wash-resistant reputation**: no score below 10 deals or 3 distinct buyers, and a flag when one buyer is over half the volume.
 
-### For agent teams
-- **Its own VM per agent**, so each team keeps its environment the way it wants. Secrets never enter the VM: agents get scoped capabilities through a broker.
+**Agent teams**
+- **Its own VM per agent.** Secrets never enter the VM: agents get scoped capabilities through a broker.
 - **An on-chain mandate per agent**: cap, per-payment cap, allowed payees, stages and expiry.
-- **Stage gates.** Your approval is bound to the exact plan hash you saw, so it can't be replayed for a different plan.
-- **One-click revoke**, an approvals inbox, every spend visible on chain, and payment **only for the exact final-product hash**.
-- **Prompt-injection quarantine.** Outside content is read by a quarantined reader; numbers are computed in code, never by the model.
+- **Stage gates** bound to the exact plan hash, so an approval can't be replayed for a different plan.
+- **One-click revoke**, an approvals inbox, and payment **only for the exact final-product hash**.
+- **Prompt-injection quarantine**: outside content goes through a quarantined reader; numbers are computed in code, never by the model.
 
-### For AI agents
-- An **MCP server** with buyer and seller tools: `my_wallet`, `get_test_funds`, `find_listings`, `get_listing`, `setup_policy`, `buy`, `deal_status`, `release`, `challenge`, `hire_team`, `mission_status`, `draft_listing`, `publish_listing`, `my_listings`, `demand_board`, `call_service`.
-- **x402 pay-per-call** in USDC on Solana: no answer, no charge.
-- **`/llms.txt`** and **`/api/catalogue`**: the same registry the site shows.
+**AI agents**
+- The **MCP server** above, **x402 pay-per-call** in USDC on Solana, and **`/llms.txt`** + **`/api/catalogue`**.
+
+</details>
 
 ---
 
 ## ⛓️ Solana integration
-
-<p align="center"><img src="docs/assets/fiducia-flow.svg" alt="How a deal flows on Solana: attested, budget, escrow, sealed key, released" width="100%"></p>
 
 Everything that matters lives in **one Anchor program**, [`deal_escrow`](https://explorer.solana.com/address/CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV?cluster=devnet) (`CfD43mq2P1mVVpKxueo1XDe6UrQBCF3DZjNmDGQNVGSV`, devnet). Every account is a PDA.
 
@@ -102,27 +196,27 @@ flowchart LR
 | Spend within your budget and max price | `BuyerPolicy`, checked in `create_deal` |
 | Pay only for the exact data listed | `submit_delivery` must equal the listing's content hash (`DealLink`) |
 | Grades come only from registered assessors | `attest_listing` + `AssessorRegistry` (set only by the upgrade authority) |
-| Agents spend only within their mandate | `agent_spend` / `agent_open_deal` check caps, payees, stage and expiry |
+| Agents spend only within their mandate | `agent_spend` / `agent_open_deal`: per-payment cap, mandate cap, stage cap, mission budget, payees, stage, expiry |
 | Nothing runs without your approval of that plan | `approve_stage` binds the plan hash + mandate digest |
 | Stop any agent instantly | `revoke_mandate` (one transaction) |
 | No delivery, no payment | escrow + `timeout_refund`; `challenge` → verifier `resolve` |
 | Reputation can't be wash-traded | `SellerRep` / `RepPair` per mint |
 | Money is conserved | every payout goes through one `settle()` with a conservation check |
 
-**Why Solana:** sub-cent fees and fast finality make per-call payments and per-stage escrow viable. One auditable program replaces trust in our servers.
+**Why Solana:** a median fee under a tenth of a cent makes per-call payments and per-stage escrow viable, where a card fee (about 2.9% + $0.30) would be larger than a 5 cent data call. One auditable program replaces trust in our servers.
 
 ---
 
-## 🚀 Try it (devnet)
+## 📚 Docs and pitch
 
-1. Install **Phantom**, then turn on *Settings → Developer Settings → Testnet mode* and pick **Solana Devnet**.
-2. Get devnet SOL from [faucet.solana.com](https://faucet.solana.com), and test tokens from the site's faucet.
-3. Open **https://fiducia-orpin.vercel.app**:
-   - **Sell** a CSV;
-   - **Buy** a listing;
-   - **Hire** the Trip planner team and approve its stages on `/missions`.
+| Document | What's inside |
+|---|---|
+| [**Pitch deck**](docs/pitch/Fiducia-pitch-deck.pdf) | 15 slides: problem, first customer, solution, Solana integration, devnet proof, go-to-market, business model, roadmap |
+| [**Technical brief**](docs/pitch/Fiducia-Technical-Brief.pdf) | 3 pages: system map and trust boundaries, mission lifecycle, spend checks, account model, threats, status, roadmap |
+| [**Go-to-market and launch plan**](docs/pitch/Fiducia-GTM-Launch-Plan.pdf) | 8 pages: why now (cited data), customer and vertical, marketplace, pricing hypothesis, launch phases, metrics, risks |
+| [`docs/PLAN.md`](docs/PLAN.md) · [`docs/DEPLOY.md`](docs/DEPLOY.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Design, deploy runbook, architecture |
 
-Every flow (sell, buy, sealed delivery, hire a team with a mandate-bound spend, and x402 pay-per-call) is **verified end to end on devnet**.
+> Market figures in the pitch material are external context, not Fiducia traction. Pricing and launch numbers are hypotheses and targets.
 
 ---
 
@@ -139,16 +233,6 @@ Every flow (sell, buy, sealed delivery, hire a team with a mandate-bound spend, 
 | Live site | https://fiducia-orpin.vercel.app (Vercel) |
 | Demo video | https://youtu.be/L7-ofBtbwRA |
 
-## 🤖 Use it from an AI agent (MCP)
-
-Fiducia ships an MCP server so Claude (Desktop or Code) or any MCP client can buy under an on-chain budget, signing
-with the agent's own key. Setup takes two minutes: see [`mcp/README.md`](mcp/README.md#run-it-for-the-demo-devnet-today).
-
-```bash
-for d in core chain agents mcp; do (cd $d && npm ci); done
-npm run build --prefix mcp && npm run demo --prefix mcp   # a scripted agent session over MCP
-```
-
 ---
 
 ## 🧱 Repository
@@ -161,15 +245,8 @@ npm run build --prefix mcp && npm run demo --prefix mcp   # a scripted agent ses
 | [`web/`](web) | Next.js 16 site: catalogue, listing, sell, deal, hire, missions, demand, dashboard, proof |
 | [`mcp/`](mcp) | MCP server for AI agents (buyer + seller tools) |
 | [`surface/`](surface) | Earlier procurement demo + devnet setup scripts |
-| [`docs/`](docs) | [`PLAN.md`](docs/PLAN.md) (design), [`DEPLOY.md`](docs/DEPLOY.md) (runbook), pitch material |
+| [`docs/`](docs) | Design, runbooks, pitch deck, technical brief, go-to-market plan |
 | [`contracts/`](contracts) | The interface each lane exposes |
-
-### Run locally
-
-```bash
-for d in core chain agents web; do (cd $d && npm ci); done
-cd web && npm run dev            # http://localhost:3000 (demo mode without .env.local)
-```
 
 ### Tests
 
@@ -192,15 +269,20 @@ npm test --prefix mcp
 - **Servers hold only role keys** (assessor, verifier, custody, agents), and never a user's.
 - **No grade without attestation.** The site shows a grade only if the report hashes to the on-chain hash and its assessor is still registered.
 - **Agents see capabilities, not credentials.** Their egress is allowlisted, and an approval is valid once, for one plan.
-- **Devnet only.** The env schemas refuse mainnet.
+- **Devnet only.** The env schemas refuse mainnet. The program has not been externally audited yet.
 
 ## 🗺️ Roadmap
 
-- **Now (live on devnet):** sell, buy, hire, pay per call; every rule on chain.
-- **Next:** Claude inside every agent (research, writing, drafting), and live verifier rulings wired to the site.
-- **Then:** mainnet with real USDC, an external audit, and team blueprints published by sellers.
+| When | Milestone |
+|---|---|
+| **Now** | Live on devnet: sell, buy, hire, pay per call; every rule on chain; simulated demo agents |
+| **Dec 2026** | Claude inside every agent slot; 5 research-agency design partners; live verifier rulings |
+| **Q1 2027** | External audit, multisig upgrade authority, capped mainnet with real USDC |
+| **Q2 2027 →** | Public launch for agencies; then coding, booking and commerce agents |
+
+Dates are targets.
 
 ## 👥 Team
 
-Built by **Dhruv** & **Vedant** for *Build an MVP with Solana at WHU* (Superteam Germany, 2026).
+Built by **Dhruv** & **Vedant** for *Build an MVP with Solana at WHU* (Superteam Germany, 2026) and the road to Colosseum.
 The two Claude Code sessions coordinated through GitHub, using the agent-bus protocol in [`AGENTS.md`](AGENTS.md).
