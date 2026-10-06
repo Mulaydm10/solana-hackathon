@@ -186,7 +186,7 @@ test("the model key never appears in any tool result (#183): every tool, with a 
       ["challenge", { deal }], ["hire_team", { team: listing, goal: "3 days in Lisbon", budget_usdc: "5" }], ["mission_status", { mission: listing }],
       ["demand_board", {}], ["my_listings", {}], ["draft_listing", { text: "a,b\n1,2\n", name: "n", description: "d", category: "c" }],
       ["publish_listing", { text: "a,b\n1,2\n", name: "n", description: "d", category: "c", price_usdc: "1" }],
-      ["call_service", { listing, body: {} }],
+      ["call_service", { listing, body: {} }], ["machine_status", {}],
     ];
     // A thrown error is what the server would turn into INTERNAL; its message is checked for the key too.
     for (const [name, args] of calls) results.push(await tool(name).run(args as never, c).catch((e: Error) => ({ thrown: name, message: e.message, stack: e.stack })));
