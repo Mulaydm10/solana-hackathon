@@ -15,6 +15,9 @@ const securityHeaders = [
 
 const config: NextConfig = {
   transpilePackages: ["@deal/core", "@deal/chain", "@deal/agents"],
+  // The peaq SDK (machines, #229) is loaded by Node at runtime, never bundled: one of its dependencies ships assets
+  // the bundler cannot place. Server only; it is a web dependency so it resolves from here.
+  serverExternalPackages: ["@peaqos/peaq-os-sdk"],
   turbopack: { root: repoRoot },
   outputFileTracingRoot: repoRoot,
   poweredByHeader: false,

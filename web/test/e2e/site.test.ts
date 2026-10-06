@@ -27,7 +27,18 @@ const CANARY_ASSESSOR = JSON.stringify(CANARY_ASSESSOR_BYTES);
 const CANARY_CUSTODY = randomBytes(32).toString("hex");
 const CANARY_DEMO_BYTES = Array.from(randomBytes(64));
 const CANARY_DEMO = JSON.stringify(CANARY_DEMO_BYTES);
-const env = { ...process.env, DEAL_CLUSTER: "devnet", ANTHROPIC_API_KEY: CANARY_KEY, DEAL_VERIFIER_KEY: CANARY_VERIFIER, MISSION_SERVICE_URL: "http://127.0.0.1:9", MISSION_SERVICE_TOKEN: CANARY_MISSION_TOKEN, DEAL_FAUCET_KEY: CANARY_FAUCET, DEAL_ASSESSOR_KEY: CANARY_ASSESSOR, DEAL_CUSTODY_KEY: CANARY_CUSTODY, DEMO_BUYER_KEY: CANARY_DEMO, NEXT_TELEMETRY_DISABLED: "1" };
+// The machine demo (#229): robot and pad keys, the peaq event key. Random bytes, so the page shows "could not be read".
+const CANARY_ROBOT_BYTES = Array.from(randomBytes(64));
+const CANARY_ROBOT = JSON.stringify(CANARY_ROBOT_BYTES);
+const CANARY_PAD_BYTES = Array.from(randomBytes(64));
+const CANARY_PAD = JSON.stringify(CANARY_PAD_BYTES);
+const CANARY_PEAQ = `0x${randomBytes(32).toString("hex")}`;
+const MACHINE_ENV = {
+  ROBOT_AGENT_KEY: CANARY_ROBOT, PAD_KEY: CANARY_PAD, MACHINE_MISSION: "Dea1Address11111111111111111111111111111111", PEAQ_EVENT_KEY: CANARY_PEAQ,
+  PEAQ_RPC_URL: "http://127.0.0.1:9", PEAQ_DEPLOYMENT: "agung-2026-08-28", PEAQ_EVENT_REGISTRY: `0x${"1".repeat(40)}`, PEAQ_SOURCE_CHAIN_ID: "5",
+  ROBOT_MACHINE_ID: "13", PAD_MACHINE_ID: "12",
+};
+const env = { ...process.env, ...MACHINE_ENV, DEAL_CLUSTER: "devnet", ANTHROPIC_API_KEY: CANARY_KEY, DEAL_VERIFIER_KEY: CANARY_VERIFIER, MISSION_SERVICE_URL: "http://127.0.0.1:9", MISSION_SERVICE_TOKEN: CANARY_MISSION_TOKEN, DEAL_FAUCET_KEY: CANARY_FAUCET, DEAL_ASSESSOR_KEY: CANARY_ASSESSOR, DEAL_CUSTODY_KEY: CANARY_CUSTODY, DEMO_BUYER_KEY: CANARY_DEMO, NEXT_TELEMETRY_DISABLED: "1" };
 
 /**
  * String literals from agents' seller chain and custody (#110): server-only code, so never in the browser.
@@ -152,6 +163,9 @@ test("no server secret, secret name or server-only module text reaches the brows
     CANARY_KEY, CANARY_VERIFIER, CANARY_BYTES.slice(0, 16).join(","), CANARY_MISSION_TOKEN, CANARY_FAUCET, CANARY_FAUCET_BYTES.slice(0, 16).join(","),
     CANARY_ASSESSOR, CANARY_ASSESSOR_BYTES.slice(0, 16).join(","), CANARY_CUSTODY, CANARY_DEMO, CANARY_DEMO_BYTES.slice(0, 16).join(","),
     "DEMO_BUYER_KEY", "ANTHROPIC_API_KEY", "DEAL_VERIFIER_KEY", "MISSION_SERVICE_TOKEN", "DEAL_FAUCET_KEY", "DEAL_ASSESSOR_KEY", "DEAL_CUSTODY_KEY", "BLOB_READ_WRITE_TOKEN",
+    CANARY_ROBOT, CANARY_ROBOT_BYTES.slice(0, 16).join(","), CANARY_PAD, CANARY_PAD_BYTES.slice(0, 16).join(","), CANARY_PEAQ,
+    "ROBOT_AGENT_KEY", "PAD_KEY", "PEAQ_EVENT_KEY",
+    "PEAQOS_TELEMETRY", // the peaq SDK and its wrapper run on the server only (#229)
     "must be a JSON array of 64 bytes", // lib/env.ts is server-only
     // The agents lane's seller chain and custody (#110) run on the server only: none of their code may ship.
     ...AGENTS_MARKERS,
@@ -165,6 +179,11 @@ test("no server secret, secret name or server-only module text reaches the brows
   for (const path of [...NAV.map((n) => n.href), `/listing/${FIXTURES[0]!.address}`, "/deal/Dea1Address11111111111111111111111111111111", "/api/health"]) {
     const { html } = await page(path);
     for (const s of forbidden.slice(0, 3)) assert.ok(!html.includes(s), `canary served on ${path}`);
+  }
+  // /machines renders with the machine keys set and serves no part of them (#229).
+  const machines = (await page("/machines")).html;
+  for (const c of [CANARY_ROBOT, CANARY_PAD, CANARY_PEAQ, CANARY_ROBOT_BYTES.slice(0, 16).join(","), CANARY_PAD_BYTES.slice(0, 16).join(",")]) {
+    assert.ok(!machines.includes(c), "a machine key was served on /machines");
   }
   // Health says the capabilities exist, without their values.
   const h = (await (await fetch(`${base}/api/health`)).json()) as { capabilities: Record<string, boolean> };

@@ -38,6 +38,27 @@ const Schema = z.object({
   MISSION_SERVICE_TOKEN: z.string().min(32).optional(),
   /** Demo buyer for judges (64-byte JSON array), devnet only: signs demo missions it creates (#183). Server only. */
   DEMO_BUYER_KEY: keypairBytes.optional(),
+  // Machine economy demo (#229, peaq track): a simulated robot pays a simulated charging pad. Devnet/testnet keys,
+  // server only. The fleet mission's owner key is never here: the owner sets the rules once, offline (#228).
+  /** The robot's agent key (64-byte JSON array): opens and releases charges under its mission mandate. */
+  ROBOT_AGENT_KEY: keypairBytes.optional(),
+  /** The charging pad's key (64-byte JSON array): accepts, delivers, and signs its meter readings. */
+  PAD_KEY: keypairBytes.optional(),
+  /** The fleet mission (base58) whose mandate binds the robot. */
+  MACHINE_MISSION: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(),
+  /** peaq event signer, 0x + 64 hex. */
+  PEAQ_EVENT_KEY: z.string().regex(/^0x[0-9a-fA-F]{64}$/, "must be 0x + 64 hex characters").optional(),
+  PEAQ_RPC_URL: z.string().url().optional(),
+  /** peaq deployment id, e.g. agung-2026-08-28 or peaq-mainnet. */
+  PEAQ_DEPLOYMENT: z.string().min(3).optional(),
+  /** peaq EventRegistry contract (0x + 40 hex). */
+  PEAQ_EVENT_REGISTRY: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+  /** peaq's id for Solana as an event source (the SDK's SOLANA_PROTOCOL_CHAIN_ID is 5). */
+  PEAQ_SOURCE_CHAIN_ID: z.coerce.number().int().min(0).optional(),
+  /** Optional peaq block explorer base for tx links, e.g. https://…/tx/ (no link when unset). */
+  PEAQ_EXPLORER_TX_URL: z.string().url().optional(),
+  ROBOT_MACHINE_ID: z.string().regex(/^[1-9]\d{0,77}$/).optional(),
+  PAD_MACHINE_ID: z.string().regex(/^[1-9]\d{0,77}$/).optional(),
 });
 
 export type ServerEnv = z.infer<typeof Schema> & { rpcUrl: string };
@@ -56,7 +77,7 @@ export function parseEnv(raw: Record<string, string | undefined>): EnvResult {
   return { ok: true, env: { ...r.data, rpcUrl: r.data.DEAL_RPC_URL ?? DEFAULT_RPC[r.data.DEAL_CLUSTER] } };
 }
 
-export type Capability = "drafting" | "verifier" | "missions" | "faucet" | "sell" | "demo";
+export type Capability = "drafting" | "verifier" | "missions" | "faucet" | "sell" | "demo" | "machines";
 const NEEDS: Record<Capability, (keyof ServerEnv)[]> = {
   drafting: ["ANTHROPIC_API_KEY"],
   verifier: ["DEAL_VERIFIER_KEY"],
@@ -64,13 +85,17 @@ const NEEDS: Record<Capability, (keyof ServerEnv)[]> = {
   faucet: ["DEAL_FAUCET_KEY"],
   sell: ["DEAL_ASSESSOR_KEY", "DEAL_CUSTODY_KEY"],
   demo: ["DEMO_BUYER_KEY", "MISSION_SERVICE_URL", "MISSION_SERVICE_TOKEN"],
+  machines: [
+    "ROBOT_AGENT_KEY", "PAD_KEY", "MACHINE_MISSION", "PEAQ_EVENT_KEY", "PEAQ_RPC_URL", "PEAQ_DEPLOYMENT", "PEAQ_EVENT_REGISTRY",
+    "PEAQ_SOURCE_CHAIN_ID", "ROBOT_MACHINE_ID", "PAD_MACHINE_ID",
+  ],
 };
 
 /** For routes that cannot run without a secret: a typed refusal instead of a half-configured run. */
 export function requireEnv(r: EnvResult, cap: Capability): { ok: true; env: ServerEnv } | { ok: false; status: number; body: { ok: false; reason: string; message: string } } {
   if (!r.ok) return { ok: false, status: 500, body: { ok: false, reason: r.reason, message: r.message } };
   // The demo buyer signs with a server key: devnet only, never localnet tricks or anything else.
-  if (cap === "demo" && r.env.DEAL_CLUSTER !== "devnet") return { ok: false, status: 503, body: { ok: false, reason: "NOT_CONFIGURED", message: "the demo runs on devnet only" } };
+  if ((cap === "demo" || cap === "machines") && r.env.DEAL_CLUSTER !== "devnet") return { ok: false, status: 503, body: { ok: false, reason: "NOT_CONFIGURED", message: cap === "demo" ? "the demo runs on devnet only" : "the machine demo runs on devnet only" } };
   if (NEEDS[cap].some((k) => !r.env[k])) return { ok: false, status: 503, body: { ok: false, reason: "NOT_CONFIGURED", message: `${cap} is not configured on this deployment` } };
   return { ok: true, env: r.env };
 }
