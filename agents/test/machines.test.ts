@@ -51,15 +51,15 @@ const settlement = (over: Partial<Settlement> = {}): Settlement => ({
   chargeId: "c-1", deal: DEAL, releaseSignature: "5f79BRnkCmV5Wf9s", deliveryHash: new Uint8Array(32).fill(1), amount: 400_000n, ...over,
 });
 
-test("peaq: the pad's revenue event is USD cents at trust level 1, linked to the Solana release", () => {
-  const r = eventParams("revenue", 12n, settlement(), { sourceChainId: 5 }, PROGRAM, 1_800_000_000.7);
+test("peaq: the pad's revenue event is USD cents, self-reported (trust 0, source chain 0), linked to the Solana release", () => {
+  const r = eventParams("revenue", 12n, settlement(), { sourceChainId: 0 }, PROGRAM, 1_800_000_000.7);
   assert.ok(r.ok);
   const p = r.params;
   assert.equal(p.eventType, 0);
   assert.equal(p.value, 40, "0.40 USDC = 40 cents");
   assert.equal(p.currency, "USD");
-  assert.equal(p.trustLevel, 1);
-  assert.equal(p.sourceChainId, 5);
+  assert.equal(p.trustLevel, 0, "peaq cannot verify a Solana payment: self-reported");
+  assert.equal(p.sourceChainId, 0);
   assert.equal(p.timestamp, 1_800_000_000);
   assert.equal(p.sourceTxHash, sourceTxHash("5f79BRnkCmV5Wf9s"));
   assert.match(p.sourceTxHash, /^0x[0-9a-f]{64}$/);
@@ -70,25 +70,31 @@ test("peaq: the pad's revenue event is USD cents at trust level 1, linked to the
 });
 
 test("peaq: the robot's activity event has value 0 and no currency", () => {
-  const r = eventParams("activity", 13n, settlement(), { sourceChainId: 5 }, PROGRAM, 1);
+  const r = eventParams("activity", 13n, settlement(), { sourceChainId: 0 }, PROGRAM, 1);
   assert.ok(r.ok);
   assert.equal(r.params.eventType, 1);
   assert.equal(r.params.value, 0);
   assert.equal(r.params.currency, "");
-  assert.equal(r.params.trustLevel, 1);
+  assert.equal(r.params.trustLevel, 0);
+});
+
+test("peaq: only the source chains peaq accepts; trust level 1 only on a verifiable source chain", () => {
+  assert.equal((eventParams("activity", 13n, settlement(), { sourceChainId: 5 }, PROGRAM, 1) as { reason: string }).reason, "BAD_CONFIG");
+  const peaqSource = eventParams("activity", 13n, settlement(), { sourceChainId: 3338 }, PROGRAM, 1);
+  assert.ok(peaqSource.ok && peaqSource.params.trustLevel === 1);
 });
 
 test("peaq: money is never rounded, and events need a release and a real machine id", () => {
   assert.deepEqual(usdCents(1_000_000n), { ok: true, cents: 100 });
   assert.equal((usdCents(400_001n) as { reason: string }).reason, "SUBCENT_AMOUNT");
-  assert.equal((eventParams("revenue", 12n, settlement({ amount: 1n }), { sourceChainId: 5 }, PROGRAM, 1) as { reason: string }).reason, "SUBCENT_AMOUNT");
-  assert.equal((eventParams("revenue", 0n, settlement(), { sourceChainId: 5 }, PROGRAM, 1) as { reason: string }).reason, "BAD_MACHINE_ID");
-  assert.equal((eventParams("activity", 1n, settlement({ releaseSignature: "" }), { sourceChainId: 5 }, PROGRAM, 1) as { reason: string }).reason, "NOT_RELEASED");
+  assert.equal((eventParams("revenue", 12n, settlement({ amount: 1n }), { sourceChainId: 0 }, PROGRAM, 1) as { reason: string }).reason, "SUBCENT_AMOUNT");
+  assert.equal((eventParams("revenue", 0n, settlement(), { sourceChainId: 0 }, PROGRAM, 1) as { reason: string }).reason, "BAD_MACHINE_ID");
+  assert.equal((eventParams("activity", 1n, settlement({ releaseSignature: "" }), { sourceChainId: 0 }, PROGRAM, 1) as { reason: string }).reason, "NOT_RELEASED");
 });
 
 test("peaq: a failed submit is a refusal naming only the error code, never the request or a key", async () => {
   const secret = "0x" + "ab".repeat(32);
-  const c = createPeaqClient({ rpcUrl: "x", deployment: "agung-2026-08-28", eventRegistry: "0x1", sourceChainId: 5 }, {
+  const c = createPeaqClient({ rpcUrl: "x", deployment: "agung-2026-08-28", eventRegistry: "0x1", sourceChainId: 0 }, {
     program: PROGRAM, submit: async () => { throw Object.assign(new Error(`boom ${secret}`), { code: "MachineNotFound" }); },
   });
   const r = await c.submitRevenueEvent(12n, settlement());
@@ -99,10 +105,10 @@ test("peaq: a failed submit is a refusal naming only the error code, never the r
 test("peaq: MCR is 'not served' on testnet (no guess), and read from the API on mainnet", async () => {
   const urls: string[] = [];
   const fetchStub = (async (u: string) => { urls.push(u); return new Response(JSON.stringify({ status: "Provisioned" })); }) as unknown as typeof fetch;
-  const agung = createPeaqClient({ rpcUrl: "x", deployment: "agung-2026-08-28", eventRegistry: "0x1", sourceChainId: 5 }, { program: PROGRAM, submit: async () => ({ txHash: "0x" }), fetch: fetchStub });
+  const agung = createPeaqClient({ rpcUrl: "x", deployment: "agung-2026-08-28", eventRegistry: "0x1", sourceChainId: 0 }, { program: PROGRAM, submit: async () => ({ txHash: "0x" }), fetch: fetchStub });
   assert.equal(((await agung.queryMcr(12n)) as { reason: string }).reason, "MCR_NOT_SERVED");
   assert.equal(urls.length, 0);
-  const main = createPeaqClient({ rpcUrl: "x", deployment: "peaq-mainnet", eventRegistry: "0x1", sourceChainId: 5 }, { program: PROGRAM, submit: async () => ({ txHash: "0x" }), fetch: fetchStub });
+  const main = createPeaqClient({ rpcUrl: "x", deployment: "peaq-mainnet", eventRegistry: "0x1", sourceChainId: 0 }, { program: PROGRAM, submit: async () => ({ txHash: "0x" }), fetch: fetchStub });
   assert.deepEqual(await main.queryMcr(12n), { ok: true, status: "Provisioned" });
   assert.deepEqual(urls, ["https://mcr.peaq.xyz/mcr/did:peaq:12"]);
 });
@@ -128,7 +134,7 @@ function fakes(o: { refuseOpen?: string; failReleaseOnce?: boolean; failPeaqOnce
       return ok("sig-release");
     },
   };
-  const peaq = createPeaqClient({ rpcUrl: "x", deployment: "agung-2026-08-28", eventRegistry: "0x1", sourceChainId: 5 }, {
+  const peaq = createPeaqClient({ rpcUrl: "x", deployment: "agung-2026-08-28", eventRegistry: "0x1", sourceChainId: 0 }, {
     program: PROGRAM, now: () => 1,
     submit: async (p) => {
       const kind = p.eventType === 0 ? "revenue" : "activity";

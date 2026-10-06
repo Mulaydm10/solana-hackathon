@@ -1,5 +1,7 @@
 // peaq side of the machine track (#227): each released charge becomes a revenue event for the pad and an activity
-// event for the robot in peaq's EventRegistry, trust level 1 (on-chain verifiable), linked to the Solana release.
+// event for the robot in peaq's EventRegistry, linked to the Solana release. peaq accepts only source chains 0, 3338
+// (peaq) and 8453 (Base), not Solana, so with sourceChainId 0 the event is self-reported (trust level 0): it carries the
+// full release signature in rawData, verifiable on the Solana Explorer, and never claims peaq verified the payment.
 // Network, registry and source chain id are config (#226), never hard-coded here. Server-side only.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -15,7 +17,7 @@ export type PeaqConfig = {
   deployment: string;
   /** EventRegistry contract (0x…); which one accepts this deployment's machine ids is checked in #226. */
   eventRegistry: string;
-  /** peaq's id for the source chain of `sourceTxHash` (the SDK's SOLANA_PROTOCOL_CHAIN_ID is 5). */
+  /** Source chain of `sourceTxHash` as peaq knows it: 0 (none/off-chain: self-reported), 3338 (peaq) or 8453 (Base). */
   sourceChainId: number;
   /** MCR API base; defaults to the public service. */
   mcrUrl?: string;
@@ -38,13 +40,16 @@ export type PeaqEventParams = {
   currency: string;
   timestamp: number;
   rawData: Uint8Array;
-  trustLevel: 1;
+  /** 0 self-reported (source chain 0, e.g. a Solana payment), 1 on-chain verifiable on a source chain peaq supports. */
+  trustLevel: 0 | 1;
   sourceChainId: number;
   sourceTxHash: `0x${string}`;
   metadata: Uint8Array;
 };
 
 export const SOLANA_CLUSTER = "devnet";
+/** The source chains peaq's EventRegistry accepts (SDK 0.10 / contract). */
+export const PEAQ_SOURCE_CHAINS = [0, 3338, 8453] as const;
 
 /** USDC base units (6 decimals) to USD cents; refuses sub-cent amounts instead of rounding money. */
 export function usdCents(amount: bigint): Ok<{ cents: number }> | Refused {
@@ -73,7 +78,9 @@ export function eventParams(
   kind: "revenue" | "activity", machineId: bigint, s: Settlement, cfg: Pick<PeaqConfig, "sourceChainId">, program: string, nowSecs: number,
 ): Ok<{ params: PeaqEventParams }> | Refused {
   if (machineId <= 0n) return refuse("BAD_MACHINE_ID", "machine id must be positive");
-  if (!Number.isSafeInteger(cfg.sourceChainId) || cfg.sourceChainId < 0) return refuse("BAD_CONFIG", "sourceChainId must be a non-negative integer");
+  if (!(PEAQ_SOURCE_CHAINS as readonly number[]).includes(cfg.sourceChainId)) {
+    return refuse("BAD_CONFIG", `peaq accepts sourceChainId ${PEAQ_SOURCE_CHAINS.join(", ")} only (0 = self-reported)`);
+  }
   if (!s.releaseSignature) return refuse("NOT_RELEASED", "an event is written only for a released charge");
   let value = 0;
   if (kind === "revenue") {
@@ -85,7 +92,7 @@ export function eventParams(
     ok: true,
     params: {
       machineId, eventType: kind === "revenue" ? 0 : 1, value, currency: kind === "revenue" ? "USD" : "",
-      timestamp: Math.floor(nowSecs), rawData: settlementRawData(s, program), trustLevel: 1,
+      timestamp: Math.floor(nowSecs), rawData: settlementRawData(s, program), trustLevel: cfg.sourceChainId === 0 ? 0 : 1,
       sourceChainId: cfg.sourceChainId, sourceTxHash: sourceTxHash(s.releaseSignature), metadata: new Uint8Array(),
     },
   };
@@ -102,7 +109,8 @@ const errText = (e: unknown) => {
 
 /** A PeaqClient over an injected `submit` (the SDK in production, a stub in tests). Never throws, never logs keys. */
 export function createPeaqClient(cfg: PeaqConfig, deps: PeaqDeps): PeaqClient {
-  const now = deps.now ?? (() => Date.now() / 1000);
+  // Backdated a little: the registry refuses a timestamp ahead of its block time (FutureTimestamp).
+  const now = deps.now ?? (() => Date.now() / 1000 - 15);
   const send = async (kind: "revenue" | "activity", machineId: bigint, s: Settlement): Promise<Ok<{ txHash: string }> | Refused> => {
     const p = eventParams(kind, machineId, s, cfg, deps.program, now());
     if (!p.ok) return p;

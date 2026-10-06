@@ -2,3 +2,4 @@
 export * from "./meter.ts";
 export * from "./peaq.ts";
 export * from "./charge.ts";
+export * from "./setup.ts";

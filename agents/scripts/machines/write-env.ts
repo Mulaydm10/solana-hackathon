@@ -1,0 +1,23 @@
+// Writes the site's /machines server env (contracts/web.md) to a 0600 file, for `vercel env add` (#228). Never prints
+// a value: only the variable names. Refuses until fleet-setup and activate have both run.
+//
+//   node --import tsx scripts/machines/write-env.ts OUT_FILE [--keys-dir DIR]
+//   env: PEAQ_RPC_URL (agung), PEAQ_EXPLORER_TX_URL (optional, e.g. https://…/tx/)
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { loadFleetKeys, machineEnv, readFleetState, writeEnvFile } from "../../src/machines/setup.ts";
+
+const args = process.argv.slice(2);
+const out = args.find((x, i) => !x.startsWith("--") && args[i - 1] !== "--keys-dir");
+const dir = args.includes("--keys-dir") ? args[args.indexOf("--keys-dir") + 1]! : join(homedir(), ".config", "fiducia", "machines");
+if (!out) {
+  console.error("✗ usage: write-env.ts OUT_FILE [--keys-dir DIR]");
+  process.exit(1);
+}
+const { keys } = loadFleetKeys(dir, false);
+const env = machineEnv(keys, readFleetState(dir), {
+  peaqRpcUrl: process.env.PEAQ_RPC_URL ?? "https://peaq-agung.api.onfinality.io/public",
+  explorerTxUrl: process.env.PEAQ_EXPLORER_TX_URL,
+});
+writeEnvFile(out, env);
+console.log(`wrote ${Object.keys(env).length} variables to ${out} (0600): ${Object.keys(env).join(", ")}`);

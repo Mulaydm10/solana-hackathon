@@ -60,7 +60,7 @@ const reading = (price: bigint, nonce: string): MeterReading => ({
 
 function deps(f: Awaited<ReturnType<typeof fleet>>, payee = f.pad) {
   const events: PeaqEventParams[] = [];
-  const peaq = createPeaqClient({ rpcUrl: "x", deployment: "agung-2026-08-28", eventRegistry: "0x1", sourceChainId: 5 }, {
+  const peaq = createPeaqClient({ rpcUrl: "x", deployment: "agung-2026-08-28", eventRegistry: "0x1", sourceChainId: 0 }, {
     program: DEAL_ESCROW_PROGRAM_ADDRESS, now: f.now, submit: async (p) => (events.push(p), { txHash: `0x${events.length}` }),
   });
   const chain = chainChargeChain(f.ctx, { mission: f.mission, robot: f.robot, pad: payee, now: f.now });
