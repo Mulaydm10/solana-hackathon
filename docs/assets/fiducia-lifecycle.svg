@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 380" width="1280" height="380" role="img" aria-label="Mission lifecycle: agent asks, human funds and sets mandates, human approves each stage, agents spend inside caps, team is paid on delivery">
+  <defs>
+    <pattern id="g" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#E3DCCB" stroke-width="1"/></pattern>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#211E18"/></marker>
+    <style>.serif{font-family:'Instrument Serif','Iowan Old Style','Palatino Linotype',Georgia,serif}.mono{font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace}.body{font-family:'Source Serif 4',Georgia,serif}</style>
+  </defs>
+  <rect width="1280" height="380" fill="#F1ECE1"/><rect width="1280" height="380" fill="url(#g)"/>
+  <text x="48" y="52" class="mono" font-size="13" letter-spacing="3" fill="#686457" font-weight="700">HOW A MISSION WORKS</text>
+  <text x="48" y="96" class="serif" font-size="40" fill="#211E18">Five steps. <tspan font-style="italic" fill="#4E4A3F">Every one checked by Solana.</tspan></text>
+  <g class="body">
+    <rect x="48" y="132" width="212" height="150" rx="10" fill="#F9F6EE" stroke="#CFC5AE"/>
+    <text x="68" y="162" class="mono" font-size="12" fill="#686457">01 · MCP</text>
+    <text x="68" y="196" class="serif" font-size="26" fill="#211E18">Agent asks</text>
+    <text x="68" y="224" font-size="15" fill="#4E4A3F">hire_team returns an</text><text x="68" y="244" font-size="15" fill="#4E4A3F">approval link. It signs</text><text x="68" y="264" font-size="15" fill="#4E4A3F">nothing.</text>
+    <rect x="292" y="132" width="212" height="150" rx="10" fill="#D2DBF4" stroke="#AFC0EC"/>
+    <text x="312" y="162" class="mono" font-size="12" fill="#2B59D1">02 · MANDATE</text>
+    <text x="312" y="196" class="serif" font-size="26" fill="#211E18">Fund + set limits</text>
+    <text x="312" y="224" font-size="15" fill="#4E4A3F">Budget into a vault; per</text><text x="312" y="244" font-size="15" fill="#4E4A3F">agent: cap, per-payment</text><text x="312" y="264" font-size="15" fill="#4E4A3F">cap, payees, expiry.</text>
+    <rect x="536" y="132" width="212" height="150" rx="10" fill="#EADFC6" stroke="#D8C7A0"/>
+    <text x="556" y="162" class="mono" font-size="12" fill="#855504">03 · APPROVAL</text>
+    <text x="556" y="196" class="serif" font-size="26" fill="#211E18">Approve the stage</text>
+    <text x="556" y="224" font-size="15" fill="#4E4A3F">The human signs the</text><text x="556" y="244" font-size="15" fill="#4E4A3F">exact plan hash before</text><text x="556" y="264" font-size="15" fill="#4E4A3F">any money moves.</text>
+    <rect x="780" y="132" width="212" height="150" rx="10" fill="#F9F6EE" stroke="#CFC5AE"/>
+    <text x="800" y="162" class="mono" font-size="12" fill="#686457">04 · agent_spend</text>
+    <text x="800" y="196" class="serif" font-size="26" fill="#211E18">Agents spend</text>
+    <text x="800" y="224" font-size="15" fill="#4E4A3F">Inside the mandate only.</text>
+    <rect x="800" y="236" width="172" height="20" rx="4" fill="#EDD5CB"/><text x="808" y="251" class="mono" font-size="11" fill="#B93232">2.000001 · REFUSED</text>
+    <rect x="800" y="260" width="172" height="20" rx="4" fill="#DCE0CC"/><text x="808" y="275" class="mono" font-size="11" fill="#1B6B33">1.00 USDC · SETTLED</text>
+    <rect x="1024" y="132" width="212" height="150" rx="10" fill="#201D17"/>
+    <text x="1044" y="162" class="mono" font-size="12" fill="#A99F87">05 · ESCROW</text>
+    <text x="1044" y="196" class="serif" font-size="26" font-style="italic" fill="#F1ECE1">Released.</text>
+    <text x="1044" y="224" font-size="15" fill="#CFC5AE">The team is paid only for</text><text x="1044" y="244" font-size="15" fill="#CFC5AE">the delivered product</text><text x="1044" y="264" font-size="15" fill="#CFC5AE">hash. Or refunded.</text>
+  </g>
+  <g stroke="#211E18" stroke-width="1.6" marker-end="url(#a)"><line x1="262" y1="207" x2="288" y2="207"/><line x1="506" y1="207" x2="532" y2="207"/><line x1="750" y1="207" x2="776" y2="207"/><line x1="994" y1="207" x2="1020" y2="207"/></g>
+  <rect x="48" y="312" width="1188" height="40" rx="8" fill="#211E18"/>
+  <text x="642" y="338" text-anchor="middle" class="mono" font-size="14" fill="#F1ECE1">The agent can't sign, approve or raise a cap  ·  No delivery, no payment  ·  Revoke any agent in one transaction</text>
+</svg>
