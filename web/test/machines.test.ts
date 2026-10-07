@@ -21,13 +21,13 @@ const keyBytes = JSON.stringify(Array.from({ length: 64 }, (_, i) => i));
 const FULL = {
   DEAL_CLUSTER: "devnet", ROBOT_AGENT_KEY: keyBytes, PAD_KEY: keyBytes, MACHINE_MISSION: "Dea1Address11111111111111111111111111111111",
   PEAQ_EVENT_KEY: `0x${"ab".repeat(32)}`, PEAQ_RPC_URL: "https://peaq.example", PEAQ_DEPLOYMENT: "agung-2026-08-28", PEAQ_EVENT_REGISTRY: `0x${"1".repeat(40)}`,
-  PEAQ_SOURCE_CHAIN_ID: "5", ROBOT_MACHINE_ID: "13", PAD_MACHINE_ID: "12",
+  PEAQ_SOURCE_CHAIN_ID: "0", ROBOT_MACHINE_ID: "13", PAD_MACHINE_ID: "12",
 };
 
 // ---------- config ----------
 
 test("machines: fail closed unless every machine variable is set, and devnet only", () => {
-  assert.equal(requireEnv(parseEnv(FULL), "machines").ok, true);
+  assert.equal(requireEnv(parseEnv(FULL), "machines").ok, true, "PEAQ_SOURCE_CHAIN_ID=0 (self-reported events) is configured, not missing");
   for (const k of Object.keys(FULL).filter((k) => k !== "DEAL_CLUSTER")) {
     const r = requireEnv(parseEnv({ ...FULL, [k]: undefined }), "machines");
     assert.equal(r.ok, false, `${k} missing should refuse`);

@@ -96,7 +96,8 @@ export function requireEnv(r: EnvResult, cap: Capability): { ok: true; env: Serv
   if (!r.ok) return { ok: false, status: 500, body: { ok: false, reason: r.reason, message: r.message } };
   // The demo buyer signs with a server key: devnet only, never localnet tricks or anything else.
   if ((cap === "demo" || cap === "machines") && r.env.DEAL_CLUSTER !== "devnet") return { ok: false, status: 503, body: { ok: false, reason: "NOT_CONFIGURED", message: cap === "demo" ? "the demo runs on devnet only" : "the machine demo runs on devnet only" } };
-  if (NEEDS[cap].some((k) => !r.env[k])) return { ok: false, status: 503, body: { ok: false, reason: "NOT_CONFIGURED", message: `${cap} is not configured on this deployment` } };
+  // Missing means unset: a value that is legitimately 0 (PEAQ_SOURCE_CHAIN_ID=0, #226) counts as configured.
+  if (NEEDS[cap].some((k) => r.env[k] === undefined)) return { ok: false, status: 503, body: { ok: false, reason: "NOT_CONFIGURED", message: `${cap} is not configured on this deployment` } };
   return { ok: true, env: r.env };
 }
 
