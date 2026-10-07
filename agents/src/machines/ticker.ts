@@ -1,4 +1,4 @@
-// Machine ticker: POSTs the robot's tick to the mission service on an interval (#257).
+// Machine ticker: the mission service POSTs the robot's tick to the site's /api/machines/tick on an interval (#257).
 // Uses only injectable dependencies; tested with a stub fetch, never makes real calls.
 
 export type TickerOptions = {

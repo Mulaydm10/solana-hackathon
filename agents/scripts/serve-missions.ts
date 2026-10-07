@@ -74,7 +74,7 @@ const svc = createMissionService({
 const host = env.HOST ?? "127.0.0.1";
 const port = Number(env.PORT ?? 3320);
 svc.listen(port, host, () => console.log(`serve-missions: listening on http://${host}:${port} (fee payer ${payer.address}${teamSeller ? `, team seller ${teamSeller.address}` : ", no team seller: fee deals refused"}, ${choice.label})`));
-const t = tickerFromEnv(env);
+const t = tickerFromEnv(env, { log: (line) => console.log(`serve-missions: ${line}`) });
 if (t) {
   t.start();
   const ms = Number(env.MACHINE_TICK_MS ?? 1_800_000);

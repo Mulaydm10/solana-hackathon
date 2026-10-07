@@ -284,3 +284,26 @@ test("tickerFromEnv: merges deps into options", () => {
     assert.match(logs[0]!, /^machine tick .* HTTP 200 -$/);
   });
 });
+
+test("tickerFromEnv: uses the given log function on each tick", async () => {
+  const logs: string[] = [];
+  const customFetch: typeof fetch = async () =>
+    new Response(JSON.stringify({ decision: { action: "charge" } }), { status: 202 });
+
+  const ticker = tickerFromEnv(
+    {
+      MACHINE_TICK_URL: "https://example.com/tick",
+      MACHINE_TICK_SECRET: "x".repeat(40),
+    },
+    { log: (line) => logs.push(line), fetch: customFetch },
+  );
+
+  // Perform two ticks.
+  await ticker?.tick();
+  await ticker?.tick();
+
+  // Both ticks should be logged.
+  assert.equal(logs.length, 2);
+  assert.match(logs[0]!, /^machine tick .* HTTP 202 charge$/);
+  assert.match(logs[1]!, /^machine tick .* HTTP 202 charge$/);
+});
