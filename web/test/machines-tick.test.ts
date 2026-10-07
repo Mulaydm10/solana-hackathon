@@ -143,6 +143,21 @@ test("tick: a refused charge is logged with its reason and the battery is not cr
   assert.equal(r.decision.action, "charge");
 });
 
+test("tick: release landed but the peaq event failed: battery credited, 'peaq event pending', no re-buy next slot", async () => {
+  const t = tickDeps({ battery: { levelPct: 10, updatedAt: T0, lastSlot: 0 } });
+  t.d.charge = async (amount, kWh) => {
+    t.charges.push({ amount, kWh });
+    return { id: "c1", at: T0, amount: "x", kWh, by: "robot", openSig: "o", releaseSig: "r", refused: { reason: "PEAQ_SUBMIT_FAILED", message: "peaq event write failed" } };
+  };
+  const r = await robotTick(t.d, T0);
+  assert.ok(r.battery.levelPct > 70, "credited");
+  assert.match(r.decision.reason, /peaq event pending \(PEAQ_SUBMIT_FAILED\)/);
+  assert.doesNotMatch(r.decision.reason, /^refused/);
+  const next = await robotTick(t.d, T0 + SLOT_SECS);
+  assert.equal(next.decision.action, "wait");
+  assert.equal(t.charges.length, 1);
+});
+
 test("tick: a charge that throws is logged, not retried in the slot, battery not credited", async () => {
   const t = tickDeps({ battery: { levelPct: 10, updatedAt: T0, lastSlot: 0 } });
   t.d.charge = async () => { throw new Error("rpc down"); };

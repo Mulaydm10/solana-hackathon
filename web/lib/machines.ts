@@ -238,8 +238,12 @@ async function tickOnce(d: RobotTickDeps, now: number): Promise<TickResult> {
     await d.decisions.add(decision);
     return { decision, battery: { levelPct: b.levelPct, updatedAt: b.updatedAt, lastSlot: slot } };
   }
-  const paid = Boolean(view.releaseSig) && !view.refused;
-  const decision: RobotDecision = { ...base, reason: paid ? dec.reason : `refused (${view.refused?.reason ?? "not settled"}): ${view.refused?.message ?? dec.reason}`, chargeId: view.id };
+  // Money moved iff the release landed. A later failure (e.g. a peaq event write) must not make the robot re-buy energy it paid for.
+  const paid = Boolean(view.releaseSig);
+  const reason = paid
+    ? view.refused ? `${dec.reason}; peaq event pending (${view.refused.reason})` : dec.reason
+    : `refused (${view.refused?.reason ?? "not settled"}): ${view.refused?.message ?? dec.reason}`;
+  const decision: RobotDecision = { ...base, reason, chargeId: view.id };
   const after = paid ? afterCharge(b, dec.kWh, now, DEFAULT_ROBOT) : b;
   const battery = { levelPct: after.levelPct, updatedAt: after.updatedAt, lastSlot: slot };
   await d.battery.put(battery);
