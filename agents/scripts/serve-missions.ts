@@ -26,7 +26,7 @@ import { solanaRpc } from "@solana/kit-plugin-rpc";
 import { signer as signerPlugin } from "@solana/kit-plugin-signer";
 import type { DealClient, DealContext } from "@deal/chain";
 import {
-  aiProviderFrom, createBroker, createMissionService, fileMissionStore, createVault, liveFrom, mandateSourceFromChain, masterKeyFromEnv, mockBooking, mockMarketData, sealCredential,
+  aiProviderFrom, createBroker, createMissionService, fileMissionStore, createVault, liveFrom, mandateSourceFromChain, masterKeyFromEnv, mockBooking, mockMarketData, sealCredential, tickerFromEnv,
   type SealedCredential,
 } from "../src/index.ts";
 
@@ -74,3 +74,10 @@ const svc = createMissionService({
 const host = env.HOST ?? "127.0.0.1";
 const port = Number(env.PORT ?? 3320);
 svc.listen(port, host, () => console.log(`serve-missions: listening on http://${host}:${port} (fee payer ${payer.address}${teamSeller ? `, team seller ${teamSeller.address}` : ", no team seller: fee deals refused"}, ${choice.label})`));
+const t = tickerFromEnv(env);
+if (t) {
+  t.start();
+  const ms = Number(env.MACHINE_TICK_MS ?? 1_800_000);
+  const mins = Math.round(ms / 60_000);
+  console.log(`serve-missions: machine ticker on (every ${mins} min)`);
+}
