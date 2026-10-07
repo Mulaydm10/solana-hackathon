@@ -6,11 +6,15 @@
  * call or real AI reasoning. Like the model, it can only return text: amounts and payees stay in the workers' code.
  */
 import type { Provider } from "../broker/broker.ts";
+import { LLM_LIMITS } from "./limits.ts";
 
 export const SIMULATED_LABEL = "Simulated AI demo";
 const BANNER = `[${SIMULATED_LABEL}: deterministic simulation, not a live model]`;
 
 type City = { areas: string[]; sights: string[]; food: string[]; transport: string };
+
+/** Sweets, pastries and snacks: listed as food, never offered as a dinner. */
+const SWEET = /\b(pasteis?|pastel|nata|gelato|ice cream|crepes?|churros?|croissants?|pastr(y|ies)|cakes?|desserts?|sweets?|cookies?|waffles?|donuts?|mochi|dango|baklava)\b/i;
 
 /** A small, hand-written guide per destination; anything else gets a generic plan built from the goal. */
 const CITIES: Record<string, City> = {
@@ -150,12 +154,15 @@ function write(prompt: string): string {
     `Base: ${stay}. ${notes ? "Built on the research stage's notes." : "No research notes were available; planned from the goal."}`,
     "",
   ];
+  // Dinner is a savoury dish: sweets and pastries from the food list are snacks, never "Dinner: pasteis de nata".
+  const dinners = food.filter((x) => !SWEET.test(x));
+  const dinner = (i: number) => (dinners.length ? dinners[i % dinners.length]! : "a local restaurant");
   let s = 0;
   const next = () => sights[s++ % sights.length]!;
   for (let d = 1; d <= f.days; d++) {
-    if (d === 1 && f.days > 1) lines.push(`Day ${d}`, `  Morning: Arrive in ${f.destination}, check in near ${stay}`, `  Afternoon: ${next()}`, `  Evening: Dinner: ${food[0]}`);
+    if (d === 1 && f.days > 1) lines.push(`Day ${d}`, `  Morning: Arrive in ${f.destination}, check in near ${stay}`, `  Afternoon: ${next()}`, `  Evening: Dinner: ${dinner(0)}`);
     else if (d === f.days && f.days > 1) lines.push(`Day ${d}`, `  Morning: ${next()}`, `  Afternoon: Last walk and souvenirs; head to the station or airport`, `  Evening: Departure`);
-    else lines.push(`Day ${d}`, `  Morning: ${next()}`, `  Afternoon: ${next()}`, `  Evening: Dinner: ${food[d % food.length]}`);
+    else lines.push(`Day ${d}`, `  Morning: ${next()}`, `  Afternoon: ${next()}`, `  Evening: Dinner: ${dinner(d)}`);
   }
   lines.push("", `Budget: ${f.budget ? `target ${f.budget.replace(/^(?:under|below|max(?:imum)?|up to|budget(?: of)?)\s+/i, "")} in total` : `${f.style} choices throughout`}; nothing is booked or paid without your approval.`);
   return lines.join("\n");
@@ -170,10 +177,10 @@ export function simulatedProvider(): Provider {
       if (action !== "complete") throw new Error(`unknown action ${action}`);
       const a = (args ?? {}) as Record<string, unknown>;
       if (typeof a.system !== "string" || typeof a.prompt !== "string") throw new Error("BAD_ARGS: send { system, prompt } as strings");
-      if (a.system.length > 4_000 || a.prompt.length > 12_000) throw new Error("TOO_LONG: system or prompt over the limit");
+      if (a.system.length > LLM_LIMITS.system || a.prompt.length > LLM_LIMITS.prompt) throw new Error("TOO_LONG: system or prompt over the limit");
       // The role is the system prompt's opening sentence ("You are the writer agent ..."), not any later mention.
       const text = /^You are the writer agent\b/.test(a.system) ? write(a.prompt) : research(a.prompt);
-      return { text: text.slice(0, 4_000), model: "simulated" };
+      return { text: text.slice(0, LLM_LIMITS.output), model: "simulated" };
     },
   };
 }

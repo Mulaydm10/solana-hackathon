@@ -13,7 +13,7 @@ import { PROGRAM_SO } from "@deal/chain/node";
 import type { Blueprint } from "@deal/core";
 import {
   aiProviderFrom, createBroker, createDeterministicReader, createVault, liveFrom, mandateSourceFromChain, readGoal, readWorkerMessage, runMission,
-  sealCredential, simulatedProvider, SIMULATED_LABEL, type MissionEvent, type Provider,
+  sealCredential, simulatedProvider, SIMULATED_LABEL, claudeProvider, LLM_LIMITS, type MissionEvent, type Provider,
 } from "../src/index.ts";
 
 const USDC = 1_000_000n;
@@ -163,4 +163,36 @@ test("simulated mission on the program: approvals, an in-mandate spend, an over-
   assert.doesNotMatch(research, /Attacker/); // the simulation never repeats the data block's text
   assert.match(results.find((r) => r.role === "writer")!.output, /Built on the research stage's notes[\s\S]*Day 3/);
   assert.equal(of(ev, "delivered").length, 1);
+});
+
+test("both providers refuse at exactly the same sizes (LLM_LIMITS, #198)", async () => {
+  const sim = simulatedProvider();
+  const claude = claudeProvider({ fetch: (async () => { throw new Error("must refuse before any API call"); }) as unknown as typeof fetch });
+  const over = [
+    { system: "s".repeat(LLM_LIMITS.system + 1), prompt: "p" },
+    { system: "You are the research agent.", prompt: "p".repeat(LLM_LIMITS.prompt + 1) },
+  ];
+  for (const args of over) {
+    await assert.rejects(sim.call("complete", "*", args, "x"), /TOO_LONG/);
+    await assert.rejects(claude.call("complete", "*", args, "x"), /TOO_LONG/);
+  }
+  // Exactly at the limits the simulated provider answers (the Claude one would call the API, so it is not called).
+  const at = await sim.call("complete", "*", { system: "You are the research agent." + " ".repeat(LLM_LIMITS.system - 27), prompt: "p".repeat(LLM_LIMITS.prompt) }, "x") as { text: string };
+  assert.ok(at.text.length <= LLM_LIMITS.output);
+});
+
+test("the simulated writer offers only savoury dinners (#198): no pasteis de nata, gelato or crepes for dinner", async () => {
+  const p = simulatedProvider();
+  for (const goal of ["5 days in Lisbon", "5 days in Paris", "5 days in Rome", "5 days in Barcelona", "5 days in Tokyo", "4 days in Oslo"]) {
+    const plan = (await p.call("complete", "*", { system: "You are the writer agent of a trip-planning team.", prompt: `Customer goal: ${goal}` }, "x")) as { text: string };
+    const dinners = plan.text.match(/^ {2}Evening: Dinner: (.+)$/gm) ?? [];
+    assert.ok(dinners.length > 0, goal);
+    for (const d of dinners) assert.doesNotMatch(d, /nata|pasteis|gelato|crepe|churro|croissant|mochi|dango/i, `${goal}: ${d}`);
+  }
+  // Research notes whose food line is all sweets still give a real dinner.
+  const sweet = (await p.call("complete", "*", {
+    system: "You are the writer agent of a trip-planning team.",
+    prompt: `Customer goal: 3 days in Lisbon\n<research>\n${JSON.stringify([{ role: "researcher", output: "Research notes:\nFood: pasteis de nata; gelato" }])}\n</research>`,
+  }, "x")) as { text: string };
+  assert.match(sweet.text, /Dinner: a local restaurant/);
 });
