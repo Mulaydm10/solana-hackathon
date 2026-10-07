@@ -176,7 +176,7 @@ A clean devnet run of the hire flow: mission [`BJyjL2qc…`](https://explorer.so
 
 **Why both chains:** peaq is the machines' identity and credit layer. Solana + Fiducia is the money layer: mandates, escrow and settlement. peaq's own agent-spending limits are enforced by its orchestrator server; Fiducia enforces the same kind of limits **in a Solana program**.
 
-**Why this is DePIN:** The charging pad is one node of a charging network. It has a peaq machine identity, earns revenue for a service it proves (a signed kWh meter reading, hashed on chain), and builds the on-chain revenue history that peaq's Machine Credit Rating and future financing are built from. One simulated pad today; next is many pads and real meters. The same loop also fits a drone landing on a charging pad—peaq's own starter idea for the DePIN track—though nothing drone-specific is built yet. Autonomous ticking (the robot deciding on its own) is being switched on in production.
+**Why this is DePIN:** The charging pad is one node of a charging network. It has a peaq machine identity, earns revenue for a service it proves (a signed kWh meter reading, hashed on chain), and builds the on-chain revenue history that peaq's Machine Credit Rating and future financing are built from. One simulated pad today; next is many pads and real meters. The same loop also fits a drone landing on a charging pad—peaq's own starter idea—though nothing drone-specific is built yet. Autonomous ticking (the robot deciding on its own) is being switched on in production.
 
 | Try it | |
 |---|---|

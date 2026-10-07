@@ -14,4 +14,4 @@ Devin: read these over the recorded clips (live charge, Solana release, peaq Sub
 
 6. **On the ledger.** Each settled charge becomes a revenue event for the pad and an activity event for the robot, written to peaq's EventRegistry. That's the history that shapes the Machine Credit Rating.
 
-7. **Why it matters.** Machines need credit lines, not just limits. When a pad has verified revenue on chain, peaq can build a credit rating, price downtime insurance from escrow, and unlock financing. The charging network becomes a credit network.
+7. **Why it matters.** Machines need credit lines, not just limits. Next: with verified revenue on chain, a pad could get a credit rating, downtime insurance paid from escrow, and financing—the charging network could become a credit network.
