@@ -2,7 +2,7 @@
 // a value: only the variable names. Refuses until fleet-setup and activate have both run.
 //
 //   node --import tsx scripts/machines/write-env.ts OUT_FILE [--keys-dir DIR]
-//   env: PEAQ_RPC_URL (agung), PEAQ_EXPLORER_TX_URL (optional, e.g. https://…/tx/)
+//   env (optional overrides): PEAQ_RPC_URL, PEAQ_EXPLORER_TX_URL
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadFleetKeys, machineEnv, readFleetState, writeEnvFile } from "../../src/machines/setup.ts";
@@ -15,9 +15,7 @@ if (!out) {
   process.exit(1);
 }
 const { keys } = loadFleetKeys(dir, false);
-const env = machineEnv(keys, readFleetState(dir), {
-  peaqRpcUrl: process.env.PEAQ_RPC_URL ?? "https://peaq-agung.api.onfinality.io/public",
-  explorerTxUrl: process.env.PEAQ_EXPLORER_TX_URL,
-});
+// RPC and explorer follow the network the machines were activated on (agung or peaq mainnet), unless overridden.
+const env = machineEnv(keys, readFleetState(dir), { peaqRpcUrl: process.env.PEAQ_RPC_URL, explorerTxUrl: process.env.PEAQ_EXPLORER_TX_URL });
 writeEnvFile(out, env);
 console.log(`wrote ${Object.keys(env).length} variables to ${out} (0600): ${Object.keys(env).join(", ")}`);
