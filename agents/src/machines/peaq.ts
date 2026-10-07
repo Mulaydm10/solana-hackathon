@@ -129,7 +129,7 @@ export function createPeaqClient(cfg: PeaqConfig, deps: PeaqDeps): PeaqClient {
     submitActivityEvent: (id, s) => send("activity", id, s),
     async queryMcr(machineId) {
       if (!cfg.deployment.startsWith("peaq-mainnet")) {
-        return refuse("MCR_NOT_SERVED", "peaq serves the Machine Credit Rating for mainnet machines only; this is a testnet machine");
+        return refuse("MCR_NOT_SERVED", "peaq does not serve a Machine Credit Rating for testnet machines");
       }
       const f = deps.fetch ?? fetch;
       try {
