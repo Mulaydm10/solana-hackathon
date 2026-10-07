@@ -178,7 +178,9 @@ A clean devnet run of the hire flow: mission [`BJyjL2qc…`](https://explorer.so
 
 | Try it | |
 |---|---|
-| Status | Solana side live (fleet mission below). The page goes live once the two machines are activated on agung (waiting on agung test tokens, #226) |
+| Status | **Live on 7 Oct 2026.** peaq network: **agung testnet**. Robot = peaq machine **348**, charging pad = peaq machine **349** (registered and bonded in agung's 1.0 IdentityRegistry) |
+| First settled charge | 0.40 USDC, released: [`5t4Vbigi…ASBLU`](https://explorer.solana.com/tx/5t4VbigiwYughjqXP36Df17mu5dm5jtEnnLBKBuBjjckopg18kgLxPgjMVUpQWfFDNmu1aoUmuK7X8oicv9ASBLU?cluster=devnet) · pad revenue event [`0xb07adf…8ba8`](https://agung-testnet.subscan.io/tx/0xb07adfadda4142efa034bb38afeef76f7c5a3f6fa6a6783385c3308814ed8ba8) · robot activity event [`0xa61322…36da`](https://agung-testnet.subscan.io/tx/0xa61322813844c0d19f031756ec1693fe393e4cd1c2e0b9498b528df11ade36da) |
+| Refused charge | 0.60 USDC: refused by the program (`OverPerTxCap`) in simulation; nothing was sent |
 | Live page | https://fiducia-orpin.vercel.app/machines: "Charge 0.40 USDC", then "Try 0.60 USDC (over limit)" |
 | From Claude Code | MCP tool `machine_status`: machine IDs, mandate left, last charges with their Solana and peaq transactions |
 | Fleet mission (devnet) | [`7hTQTkkZ…ssYn6`](https://explorer.solana.com/address/7hTQTkkZ5hGrVvdsGXm3kqG4RB3u7LiN62WdmUDssYn6?cluster=devnet), live until 27 Oct 2026 |
