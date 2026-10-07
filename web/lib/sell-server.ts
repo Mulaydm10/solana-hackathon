@@ -10,6 +10,7 @@ import type { DealClient, DealContext } from "@deal/chain";
 import type { ServerEnv } from "./env";
 import { USDC_DEVNET } from "./registry";
 import type { Probe } from "./sell";
+import { safeProbe } from "./safe-probe";
 import { docStore, fileBlobs, keyVault, vercelBlobs, type BlobApi, type Blobs, type KeyVault, type WritableDocStore } from "./storage";
 
 const blobApi: BlobApi = {
@@ -32,8 +33,8 @@ export function keysBlobs(env: Pick<ServerEnv, "BLOB_READ_WRITE_TOKEN">, raw: Re
 
 export type SellRuntime = { ctx: DealContext; docs: WritableDocStore; keys: KeyVault; assessor: KeyPairSigner; now: () => number; probe: Probe };
 
-/** The assessor's one probe call to a seller's https endpoint (assess sets its own timeout). */
-const probe: Probe = (url, init) => (url.startsWith("https://") ? fetch(url, { ...init, redirect: "error" }) : Promise.reject(new Error("https only")));
+/** The assessor's one probe call to a seller's https endpoint: public addresses only, pinned (assess sets its own timeout). */
+const probe: Probe = safeProbe();
 
 let cached: Promise<SellRuntime> | undefined;
 
