@@ -1,7 +1,7 @@
 # peaq "Advance the Machine Economy": submission draft
 
-Status: draft. Fill in the two machine IDs and the first live charge's links once `activate.ts` has run (#226). The
-plan is `docs/handoffs/peaq-machine-economy.md`. Dhruv confirms eligibility (Germany-only listing) before submitting.
+Status: links filled in after the first live run (7 Oct 2026, agung testnet). The plan is
+`docs/handoffs/peaq-machine-economy.md`. Eligibility for the Germany-only listing confirmed by Dhruv (#226).
 
 ## One line
 
@@ -49,11 +49,13 @@ Next: downtime insurance paid from escrow on heartbeat events, and credit lines 
 | Live demo | https://fiducia-orpin.vercel.app/machines |
 | Repository | https://github.com/Mulaydm10/solana-hackathon (README section "Machine economy (peaq track)") |
 | Fleet mission (Solana devnet) | https://explorer.solana.com/address/7hTQTkkZ5hGrVvdsGXm3kqG4RB3u7LiN62WdmUDssYn6?cluster=devnet |
-| Robot peaq machine ID | _after activate.ts_ |
-| Pad peaq machine ID | _after activate.ts_ |
-| First settled charge (Solana release) | _after the first live charge_ |
-| Its peaq revenue / activity events | _after the first live charge_ |
-| Video (2 to 3 min) | _to record_ |
+| Robot peaq machine ID | **348** (agung testnet, 1.0 IdentityRegistry, bonded) |
+| Pad peaq machine ID | **349** (agung testnet, 1.0 IdentityRegistry, bonded) |
+| First settled charge (Solana release) | https://explorer.solana.com/tx/5t4VbigiwYughjqXP36Df17mu5dm5jtEnnLBKBuBjjckopg18kgLxPgjMVUpQWfFDNmu1aoUmuK7X8oicv9ASBLU?cluster=devnet |
+| Its peaq revenue / activity events | pad: https://agung-testnet.subscan.io/tx/0xb07adfadda4142efa034bb38afeef76f7c5a3f6fa6a6783385c3308814ed8ba8 · robot: https://agung-testnet.subscan.io/tx/0xa61322813844c0d19f031756ec1693fe393e4cd1c2e0b9498b528df11ade36da |
+| Over-limit charge | 0.60 USDC refused by the program (`OverPerTxCap`); simulated, nothing sent |
+| peaq network | agung testnet (chain 9990), EventRegistry `0x2DAD8905380993940e340C5cE6d313d5c2780040` |
+| Video (2 to 3 min) | raw clips recorded 7 Oct; narration by Devin |
 
 ## Video outline (2 to 3 min)
 
