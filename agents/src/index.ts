@@ -8,3 +8,5 @@ export * from "./vm/index.ts";
 export * from "./team/index.ts";
 export * from "./verifier/index.ts";
 export * from "./machines/index.ts";
+// machines/autonomy.ts also exports `decide` and `Decision`; the root keeps the reader's (machines: @deal/agents/machines).
+export { decide, type Decision } from "./reader/index.ts";

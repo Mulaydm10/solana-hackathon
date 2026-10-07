@@ -4,7 +4,8 @@
 // the pad has a token account. Idempotent: a re-run reuses everything still live. Prints addresses and signatures
 // only; never funds anything itself (it says what is missing).
 //
-//   node --import tsx scripts/machines/fleet-setup.ts [--dry-run] [--new-mission] [--keys-dir DIR]
+//   node --import tsx scripts/machines/fleet-setup.ts [--dry-run] [--new-mission] [--keys-dir DIR] [--budget USDC] [--cap USDC]
+//   --budget / --cap: decimal USDC (e.g. 10 or 7.5) for a NEW mission only (defaults: FLEET_DEFAULTS); cap must not exceed budget.
 //   env: DEAL_RPC_URL (devnet), DEAL_MINT (the site's test USDC), DEAL_VERIFIER (a verifier address, not the owner)
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -25,12 +26,25 @@ const mint = process.env.DEAL_MINT as Address | undefined;
 const verifier = process.env.DEAL_VERIFIER as Address | undefined;
 const USDC = 1_000_000n;
 const SOL = 1_000_000_000n;
+// Decimal USDC string -> micro-USDC, exactly (no floats): digits, optional point, up to 6 decimals, > 0.
+function parseUsdc(flag: string, def: bigint): bigint {
+  if (!args.includes(flag)) return def;
+  const v = args[args.indexOf(flag) + 1] ?? "";
+  const m = /^(\d{1,9})(?:\.(\d{1,6}))?$/.exec(v);
+  if (!m) fail([`${flag} must be a decimal USDC amount like 10 or 7.5 (got "${v}")`]);
+  const n = BigInt(m![1]!) * USDC + BigInt((m![2] ?? "").padEnd(6, "0"));
+  if (n <= 0n) fail([`${flag} must be greater than 0`]);
+  return n;
+}
 const fmt = (n: bigint, d: bigint) => `${n / d}.${(n % d).toString().padStart(d.toString().length - 1, "0").slice(0, 3)}`;
 
 function fail(lines: string[]): never {
   for (const l of lines) console.error(`✗ ${l}`);
   process.exit(1);
 }
+const budget = parseUsdc("--budget", FLEET_DEFAULTS.budget);
+const cap = parseUsdc("--cap", FLEET_DEFAULTS.cap);
+if (cap > budget) fail([`--cap (${fmt(cap, USDC)}) cannot exceed --budget (${fmt(budget, USDC)})`]);
 const problems: string[] = [];
 if (/mainnet/i.test(rpcUrl)) problems.push(`DEAL_RPC_URL points at mainnet (${safeUrl(rpcUrl)}); this setup is devnet only`);
 if (!mint) problems.push("DEAL_MINT is not set: use the site's test USDC mint (the same as Vercel's DEAL_MINT)");
@@ -71,7 +85,7 @@ const needs: string[] = [];
 const minOwnerSol = live ? SOL / 50n : FLEET_DEFAULTS.rentLamports + SOL / 10n;
 if (ownerSol < minOwnerSol) needs.push(`owner ${a.owner} needs ≥ ${fmt(minOwnerSol, SOL)} SOL (has ${fmt(ownerSol, SOL)})`);
 if (robotSol < SOL / 20n) needs.push(`robot ${a.robot} needs ≥ 0.05 SOL for charge fees (has ${fmt(robotSol, SOL)})`);
-if (!live && ownerUsdc < FLEET_DEFAULTS.budget) needs.push(`owner ${a.owner} needs ≥ ${fmt(FLEET_DEFAULTS.budget, USDC)} test USDC (has ${fmt(ownerUsdc, USDC)})`);
+if (!live && ownerUsdc < budget) needs.push(`owner ${a.owner} needs ≥ ${fmt(budget, USDC)} test USDC (has ${fmt(ownerUsdc, USDC)})`);
 if (needs.length) fail(["fund these devnet wallets, then run again:", ...needs]);
 if (dry) {
   console.log(live ? "would: check the pad's token account" : "would: init policy (if none), create mission, add mandate, approve stage 0, create the pad's token account");
@@ -83,7 +97,7 @@ if (!(await getPolicy(ctx, a.owner))) {
   const r = await safeSend(ctx, a.owner, async () => !!(await getPolicy(ctx, a.owner)), async () => [
     await getInitPolicyInstructionAsync({
       buyer: owner, mint: mint!,
-      params: { periodSecs: 86_400, periodBudget: 10n * USDC, maxPrice: FLEET_DEFAULTS.budget, approvalThreshold: 10n ** 15n, approver: a.owner, allowAnySeller: true, allowedSellers: [] },
+      params: { periodSecs: 86_400, periodBudget: 10n * USDC, maxPrice: budget, approvalThreshold: 10n ** 15n, approver: a.owner, allowAnySeller: true, allowedSellers: [] },
     }),
   ]);
   if (!r.ok) fail([`init policy refused: ${r.reason} ${r.message}`]);
@@ -93,18 +107,18 @@ if (!(await getPolicy(ctx, a.owner))) {
 if (!live) {
   const expiresAt = now + FLEET_DEFAULTS.days * 86_400;
   const missionId = BigInt(state.missionId ?? "0") + 1n;
-  const rules = fleetRules({ robot: a.robot, pad: a.pad, cap: FLEET_DEFAULTS.cap, perCharge: FLEET_DEFAULTS.perCharge, expiresAt });
+  const rules = fleetRules({ robot: a.robot, pad: a.pad, cap: cap, perCharge: FLEET_DEFAULTS.perCharge, expiresAt });
   const made = await missions.create(ctx, owner, {
-    missionId, budget: FLEET_DEFAULTS.budget, termsHash: rules.hash, stageCaps: [FLEET_DEFAULTS.budget], expiresAt, verifier: verifier!,
+    missionId, budget: budget, termsHash: rules.hash, stageCaps: [budget], expiresAt, verifier: verifier!,
     rentLamports: FLEET_DEFAULTS.rentLamports,
   });
   if (!made.ok) fail([`create mission refused: ${made.reason} ${made.message}`]);
-  console.log(`mission ${made.mission} created (id ${missionId}, ${FLEET_DEFAULTS.days} days, budget ${fmt(FLEET_DEFAULTS.budget, USDC)} USDC) · ${made.signature}`);
+  console.log(`mission ${made.mission} created (id ${missionId}, ${FLEET_DEFAULTS.days} days, budget ${fmt(budget, USDC)} USDC) · ${made.signature}`);
   writeFleetState(dir, { ...state, missionId: missionId.toString(), mission: made.mission, expiresAt });
-  const mandate = robotMandate({ robot: a.robot, pad: a.pad, cap: FLEET_DEFAULTS.cap, perCharge: FLEET_DEFAULTS.perCharge, expiresAt });
+  const mandate = robotMandate({ robot: a.robot, pad: a.pad, cap: cap, perCharge: FLEET_DEFAULTS.perCharge, expiresAt });
   const md = await missions.addMandate(ctx, owner, made.mission, mandate);
   if (!md.ok) fail([`add mandate refused: ${md.reason} ${md.message}`]);
-  console.log(`robot mandate: ${fmt(FLEET_DEFAULTS.perCharge, USDC)} USDC per charge, ${fmt(FLEET_DEFAULTS.cap, USDC)} USDC cap, payee = pad only · ${md.signature}`);
+  console.log(`robot mandate: ${fmt(FLEET_DEFAULTS.perCharge, USDC)} USDC per charge, ${fmt(cap, USDC)} USDC cap, payee = pad only · ${md.signature}`);
   const ap = await missions.approveStage(ctx, owner, made.mission, 0, rules.hash, mandatesDigest([mandate]));
   if (!ap.ok) fail([`approve stage 0 refused: ${ap.reason} ${ap.message}`]);
   console.log(`stage 0 approved with the rules hash ${Buffer.from(rules.hash).toString("hex").slice(0, 16)}… · ${ap.signature}`);
