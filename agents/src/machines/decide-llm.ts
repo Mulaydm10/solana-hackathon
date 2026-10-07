@@ -13,6 +13,8 @@ export type LlmFn = (system: string, prompt: string) => Promise<string>;
 
 const TIMEOUT_MS = 15_000;
 const REASON_MAX = 160;
+/** Below this battery level (mandate live) the model is not consulted: the robot must never strand itself. */
+export const SAFETY_FLOOR_PCT = 10;
 const KWH_RE = /^\d{1,3}(\.\d{1,3})?$/;
 
 export const DECISION_SYSTEM = [
@@ -26,6 +28,7 @@ export const DECISION_SYSTEM = [
 const REPLY = s.object({ action: s.oneOf(["wait", "charge"] as const), kWh: s.text({ max: 8 }), reason: s.text({ max: REASON_MAX }) });
 
 const usdc = (n: bigint) => `${n / 1_000_000n}.${(n % 1_000_000n).toString().padStart(6, "0")}`;
+const usdc2 = (n: bigint) => `${n / 1_000_000n}.${(n % 1_000_000n / 10_000n).toString().padStart(2, "0")}`; // whole cents
 const num = (n: number) => (Number.isFinite(n) ? String(Math.round(n * 100) / 100) : "0");
 
 function buildPrompt(t: Telemetry, mandate: MandateLeft, m: RobotModel): string {
@@ -57,6 +60,10 @@ function fallback(t: Telemetry, mandate: MandateLeft, m: RobotModel): DecidedBy 
 export async function decideWithModel(llm: LlmFn, t: Telemetry, mandate: MandateLeft, m: RobotModel): Promise<DecidedBy> {
   try {
     if (!mandate.live) return fallback(t, mandate, m); // nothing to ask: the mandate cannot pay
+    if (clampPct(t.battery.levelPct) < SAFETY_FLOOR_PCT) {
+      const d = decide(t.battery, mandate, m);
+      return { ...d, reason: `Safety floor: ${d.reason}`, by: "simulated" };
+    }
     const prompt = buildPrompt(t, mandate, m);
     if (DECISION_SYSTEM.length > LLM_LIMITS.system || prompt.length > LLM_LIMITS.prompt) return fallback(t, mandate, m);
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -72,7 +79,7 @@ export async function decideWithModel(llm: LlmFn, t: Telemetry, mandate: Mandate
     const { action, kWh, reason } = r.value;
     if (!isPlainText(reason, REASON_MAX)) return fallback(t, mandate, m);
     if (!KWH_RE.test(kWh)) return fallback(t, mandate, m);
-    if (action === "wait") return { action: "wait", reason, by: "claude" };
+    if (action === "wait") return { action: "wait", reason: `waiting \u2014 Claude: "${reason}"`, by: "claude" };
 
     // charge: the model's kWh is only a request
     const level = clampPct(t.battery.levelPct);
@@ -82,7 +89,9 @@ export async function decideWithModel(llm: LlmFn, t: Telemetry, mandate: Mandate
     if (milli > toFull) milli = toFull;
     const p = priceCharge(milli, mandate, m);
     if (!p.ok) return { action: "wait", reason: `battery ${Math.round(level)}%: the mandate left allows nothing to charge`, by: "claude" };
-    return { action: "charge", kWh: p.kWh, amount: p.amount, reason, by: "claude" };
+    const reduced = p.capped || milli < (parseKwhMilli(kWh) ?? 0n);
+    const said = `\u2014 Claude: "${reason}"`;
+    return { action: "charge", kWh: p.kWh, amount: p.amount, reason: `charging ${p.kWh} kWh for ${usdc2(p.amount)} USDC${reduced ? " (amount set in code, capped by the mandate)" : ""} ${said}`, by: "claude" };
   } catch {
     return fallback(t, mandate, m);
   }
