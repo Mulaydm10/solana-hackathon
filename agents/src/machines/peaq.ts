@@ -6,6 +6,8 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import type { Address } from "@solana/kit";
+import { createPublicClient, createWalletClient, defineChain, getAddress, http, keccak256, parseAbi, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 
 type Ok<T> = { ok: true } & T;
 type Refused = { ok: false; reason: string; message: string };
@@ -145,11 +147,82 @@ export function createPeaqClient(cfg: PeaqConfig, deps: PeaqDeps): PeaqClient {
   };
 }
 
+// ---------- EventRegistry versions ----------
+// agung's registry (0x2DAD…) is v1: submitEvent without a currency argument. peaq mainnet's (0xA1e7…) is v2, the call
+// the SDK sends. The version is read from the proxy's implementation code (checked on chain 7 Oct, #241).
+const SUBMIT_V1 = "function submitEvent(uint256 machineId, uint8 eventType, uint256 value, uint256 timestamp, bytes32 dataHash, uint8 trustLevel, uint256 sourceChainId, bytes32 sourceTxHash, bytes metadata)";
+const SELECTOR_V1 = "6b58c7dc";
+const SELECTOR_V2 = "e58a43ca";
+const IMPL_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"; // ERC-1967
+
+/** The minimal chain reads and writes the event path needs; injected in tests. */
+export type RegistryIo = {
+  getCode(address: Hex): Promise<Hex | undefined>;
+  getStorageAt(address: Hex, slot: Hex): Promise<Hex | undefined>;
+  writeV1(registry: Hex, args: readonly unknown[]): Promise<Hex>;
+  waitOk(hash: Hex): Promise<boolean>;
+};
+
+/** 1 or 2 from the implementation's function selectors; 0 when neither submitEvent is there. */
+export async function registryVersion(io: Pick<RegistryIo, "getCode" | "getStorageAt">, registry: Hex): Promise<0 | 1 | 2> {
+  const slot = await io.getStorageAt(registry, IMPL_SLOT);
+  const impl = slot && BigInt(slot) !== 0n ? (`0x${slot.slice(-40)}` as Hex) : registry;
+  const code = ((await io.getCode(impl)) ?? "").toLowerCase();
+  return code.includes(SELECTOR_V2) ? 2 : code.includes(SELECTOR_V1) ? 1 : 0;
+}
+
+/** The v1 call's arguments: v2's minus currency; dataHash = keccak256(rawData) as the SDK computes it. */
+export const v1Args = (p: PeaqEventParams) =>
+  [p.machineId, p.eventType, BigInt(p.value), BigInt(p.timestamp), keccak256(p.rawData), p.trustLevel, BigInt(p.sourceChainId), p.sourceTxHash, `0x${bytesToHex(p.metadata)}`] as const;
+
+function viemIo(cfg: PeaqConfig, privateKey: string): RegistryIo {
+  const pub = createPublicClient({ transport: http(cfg.rpcUrl) });
+  let wallet: Promise<ReturnType<typeof createWalletClient>> | undefined;
+  const walletFor = () => (wallet ??= pub.getChainId().then((id) => createWalletClient({
+    account: privateKeyToAccount(privateKey as Hex),
+    chain: defineChain({ id, name: `peaq-${id}`, nativeCurrency: { name: "PEAQ", symbol: "PEAQ", decimals: 18 }, rpcUrls: { default: { http: [cfg.rpcUrl] } } }),
+    transport: http(cfg.rpcUrl),
+  })));
+  return {
+    getCode: (a) => pub.getCode({ address: a }),
+    getStorageAt: (a, slot) => pub.getStorageAt({ address: a, slot }),
+    writeV1: async (registry, args) => {
+      const w = await walletFor();
+      return w.writeContract({ address: getAddress(registry), abi: parseAbi([SUBMIT_V1]), functionName: "submitEvent", args: args as never, chain: w.chain, account: w.account! });
+    },
+    waitOk: async (hash) => (await pub.waitForTransactionReceipt({ hash, timeout: 120_000 })).status === "success",
+  };
+}
+
+/** A submit for a v1 registry, over injected chain I/O (tests) or viem (production). */
+export function v1Submit(cfg: PeaqConfig, io: RegistryIo): PeaqSubmit {
+  return async (params) => {
+    const hash = await io.writeV1(cfg.eventRegistry as Hex, v1Args(params));
+    if (!(await io.waitOk(hash))) throw Object.assign(new Error("event transaction reverted"), { code: "REVERTED" });
+    return { txHash: hash };
+  };
+}
+
 /**
- * Production `submit`: the peaq SDK's EVM event path. Loaded on first use so nothing else pays for it; the SDK's
- * telemetry is switched off unless the operator set it explicitly. `privateKey` is the peaq event signer (0x hex).
+ * Production `submit`: picks the registry's version once. v2 (peaq mainnet) goes through the peaq SDK, v1 (agung)
+ * through viem with the v1 call. Neither prints or returns the key.
  */
-export function sdkSubmit(cfg: PeaqConfig, privateKey: string): PeaqSubmit {
+export function sdkSubmit(cfg: PeaqConfig, privateKey: string, io?: RegistryIo): PeaqSubmit {
+  let chosen: Promise<PeaqSubmit> | undefined;
+  return async (params) => {
+    chosen ??= (async () => {
+      const x = io ?? viemIo(cfg, privateKey);
+      const v = await registryVersion(x, cfg.eventRegistry as Hex);
+      if (v === 0) throw Object.assign(new Error("no submitEvent at the configured EventRegistry"), { code: "NOT_AN_EVENT_REGISTRY" });
+      return v === 1 ? v1Submit(cfg, x) : sdkV2Submit(cfg, privateKey);
+    })();
+    chosen.catch(() => { chosen = undefined; });
+    return (await chosen)(params);
+  };
+}
+
+/** The peaq SDK's (v2) event path, loaded on first use; telemetry off unless the operator set it. */
+function sdkV2Submit(cfg: PeaqConfig, privateKey: string): PeaqSubmit {
   let client: Promise<{ submitEvent(p: PeaqEventParams): Promise<{ txHash: string }> }> | undefined;
   return async (params) => {
     client ??= (async () => {
