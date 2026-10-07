@@ -57,6 +57,8 @@ const Schema = z.object({
   PEAQ_SOURCE_CHAIN_ID: z.coerce.number().int().min(0).optional(),
   /** Optional peaq block explorer base for tx links, e.g. https://…/tx/ (no link when unset). */
   PEAQ_EXPLORER_TX_URL: z.string().url().optional(),
+  /** Bearer secret for POST /api/machines/tick (the mission service's ticker, #253). Not part of "machines": the page works without it. */
+  MACHINE_TICK_SECRET: z.string().min(32).optional(),
   ROBOT_MACHINE_ID: z.string().regex(/^[1-9]\d{0,77}$/).optional(),
   PAD_MACHINE_ID: z.string().regex(/^[1-9]\d{0,77}$/).optional(),
 });

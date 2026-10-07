@@ -3,4 +3,5 @@ export * from "./meter.ts";
 export * from "./peaq.ts";
 export * from "./charge.ts";
 export * from "./setup.ts";
+export * from "./autonomy.ts";
 export * from "./ticker.ts";

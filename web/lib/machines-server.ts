@@ -13,7 +13,7 @@ import { DEAL_ESCROW_PROGRAM_ADDRESS, getMandate, type DealClient, type DealCont
 import { chainChargeChain, charge, createPeaqClient, sdkSubmit, type PeaqClient } from "@deal/agents/machines";
 import type { ServerEnv } from "./env";
 import { createLimiter } from "./demo";
-import { blobHistory, blobLedger, simulateFirst, type ChargeHistory, type MachineDeps } from "./machines";
+import { blobBattery, blobDecisions, blobHistory, blobLedger, runRobotCharge, simulateFirst, type BatteryStore, type ChargeHistory, type DecisionLog, type MachineDeps, type RobotTickDeps } from "./machines";
 import { USDC_DEVNET } from "./registry";
 import { fileBlobs, vercelBlobs, type BlobApi, type Blobs } from "./storage";
 
@@ -28,6 +28,8 @@ export type MachineRuntime = {
   ctx: DealContext;
   peaq: PeaqClient;
   history: ChargeHistory;
+  battery: BatteryStore;
+  decisions: DecisionLog;
   mission: Address;
   robot: Address;
   pad: Address;
@@ -75,6 +77,8 @@ export function machineRuntime(env: ServerEnv, raw: Record<string, string | unde
     const blobs = machineBlobs(env, raw);
     const ledger = blobLedger(blobs);
     const history = blobHistory(blobs);
+    const battery = blobBattery(blobs);
+    const decisions = blobDecisions(blobs);
     const robotMachineId = BigInt(env.ROBOT_MACHINE_ID!);
     const padMachineId = BigInt(env.PAD_MACHINE_ID!);
     const chain = chainChargeChain(ctx, { mission, robot, pad, now: () => Date.now() / 1000 });
@@ -86,7 +90,7 @@ export function machineRuntime(env: ServerEnv, raw: Record<string, string | unde
       padId: `pad:${padMachineId}`, robotId: `robot:${robotMachineId}`, ledger, history,
       charge: (req) => charge({ chain, peaq, ledger, padSecret, padPublic, robotMachineId, padMachineId }, req),
     };
-    return { deps, ctx, peaq, history, mission, robot: robot.address, pad: pad.address, robotMachineId, padMachineId, deployment: env.PEAQ_DEPLOYMENT!, explorerTx: env.PEAQ_EXPLORER_TX_URL };
+    return { deps, ctx, peaq, history, battery, decisions, mission, robot: robot.address, pad: pad.address, robotMachineId, padMachineId, deployment: env.PEAQ_DEPLOYMENT!, explorerTx: env.PEAQ_EXPLORER_TX_URL };
   })();
   cached = { key, rt };
   rt.catch(() => { if (cached?.rt === rt) cached = undefined; });
@@ -98,4 +102,18 @@ export async function robotRules(rt: MachineRuntime) {
   const m = await getMandate(rt.ctx, rt.mission, rt.robot);
   if (!m) return null;
   return { cap: m.cap, perTxCap: m.perTxCap, spent: m.spent, payees: m.payees, expiresAt: m.expiresAt, revoked: m.revoked };
+}
+
+/** What a tick needs: the stores, the mandate left (read from chain, bigint), and the internal robot charge. */
+export function tickDeps(rt: MachineRuntime, nowSecs = Math.floor(Date.now() / 1000)): RobotTickDeps {
+  return {
+    battery: rt.battery,
+    decisions: rt.decisions,
+    mandate: async () => {
+      const r = await robotRules(rt);
+      if (!r) return { perTxCap: 0n, cap: 0n, spent: 0n, live: false };
+      return { perTxCap: BigInt(r.perTxCap), cap: BigInt(r.cap), spent: BigInt(r.spent), live: !r.revoked && r.expiresAt > nowSecs };
+    },
+    charge: (amount, kWh) => runRobotCharge(rt.deps, amount, kWh),
+  };
 }
