@@ -62,3 +62,19 @@ existing site, `/hire`, "Try the demo" and `DEMO_BUYER_KEY` are untouched.
   never sent, and returns the program's refusal code. Per-IP and daily limits as in `lib/demo.ts`.
 - Rules, totals and MCR are read (chain, peaq), never hard-coded. An MCR rise is shown only if the MCR API reports it.
 - `NAV` gets one appended entry `{ href: "/machines", label: "Machines" }`.
+
+## The robot charges on its own (#253, #255; add only)
+
+- `POST /api/machines/tick`: `Authorization: Bearer $MACHINE_TICK_SECRET` (server env, >= 32 chars, compared in
+  constant time); 401 wrong secret, 503 `NOT_CONFIGURED` when the secret or the machines env is missing. Driven by the
+  mission service (#257), not a Vercel Cron (Hobby allows one per day).
+- One tick per time slot (`floor(now / 30 min)`, idempotent, serialized); at most one charge per tick. Steps: load the
+  simulated battery from Blob (first tick: 60 %), `advance()`, read the robot's mandate from chain, `decide()` (or
+  `decideWithModel()` when a model key is set, #255), and on `charge` run the existing simulate-first charge for the
+  decided amount through an internal path. The public `POST /api/machines/charge` still accepts only "0.40" / "0.60".
+  On success `afterCharge()`. Every decision goes to a decision log in Blob (last 30): `{ at, action, kWh?, amount?,
+  reason, by: "robot" | "claude" | "simulated", chargeId? }`.
+- `GET /api/machines/status` adds `battery: { levelPct, updatedAt, simulated: true }` and `decisions` (last 10).
+  `ChargeView` adds `by?: "visitor" | "robot"`.
+- `/machines`: a battery gauge labelled simulated, the last decision and its reason, and "decided by the robot" on
+  autonomous charges. Model text (#255) is shown only as escaped, quoted text.
