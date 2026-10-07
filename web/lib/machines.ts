@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { getBase58Decoder } from "@solana/kit";
 import type { DealClient } from "@deal/chain";
-import { advance, afterCharge, decide, DEFAULT_ROBOT, type Battery, type ChargeLedger, type ChargeRecord, type MandateLeft, type MeterReading } from "@deal/agents/machines";
+import { advance, afterCharge, decide, DEFAULT_ROBOT, decideWithModel, type Battery, type ChargeLedger, type ChargeRecord, type MandateLeft, type MeterReading, type Telemetry } from "@deal/agents/machines";
 import type { Blobs } from "./storage";
 
 type Refusal = { ok: false; reason: string; message: string };
@@ -36,8 +36,8 @@ export type ChargeView = {
   padEventTx?: string;
   robotEventTx?: string;
   refused?: { reason: string; message: string };
-  /** Who started the charge: a visitor's button, or the robot on its own (#253). Older records have neither. */
-  by?: "visitor" | "robot";
+  /** Who started the charge: a visitor's button, the robot on its own (#253), or Claude (#255). Older records have neither. */
+  by?: "visitor" | "robot" | "claude" | "simulated";
 };
 
 export type ChargeOutcome = ({ ok: true } & Record<string, unknown>) | Refusal;
@@ -182,7 +182,7 @@ export function simulateFirst(inner: DealClient, simulate: Simulate): DealClient
 
 export const SLOT_SECS = 1800;
 export type StoredBattery = Battery & { lastSlot: number };
-export type RobotDecision = { at: number; action: "wait" | "charge"; kWh?: string; amount?: string; reason: string; by: "robot"; chargeId?: string };
+export type RobotDecision = { at: number; action: "wait" | "charge"; kWh?: string; amount?: string; reason: string; by: "robot" | "claude" | "simulated"; chargeId?: string };
 export type BatteryStore = { get(): Promise<StoredBattery | null>; put(b: StoredBattery): Promise<void> };
 export type DecisionLog = { list(): Promise<RobotDecision[]>; add(x: RobotDecision): Promise<void> };
 export const DECISION_LOG = 30;
@@ -193,6 +193,8 @@ export type RobotTickDeps = {
   mandate: () => Promise<MandateLeft>;
   /** The internal robot charge (runRobotCharge on the shared machinery). */
   charge: (amount: bigint, kWh: string, by: "robot") => Promise<ChargeView>;
+  /** Optional: when present, use this decider instead of the robot's deterministic rule. Returns a decision with `by`. */
+  decider?: (b: Battery, mandate: MandateLeft) => Promise<{ action: "wait" | "charge"; kWh?: string; amount?: bigint; reason: string; by: "robot" | "claude" | "simulated" }>;
 };
 export type TickResult = { decision: RobotDecision; battery: StoredBattery; duplicate?: true; charge?: ChargeView };
 
@@ -219,20 +221,32 @@ async function tickOnce(d: RobotTickDeps, now: number): Promise<TickResult> {
     return { decision: last, battery: stored, duplicate: true };
   }
   const b = advance(stored ?? { levelPct: 60, updatedAt: now }, now, DEFAULT_ROBOT);
-  const dec = decide(b, await d.mandate(), DEFAULT_ROBOT);
+  const mandate = await d.mandate();
+
+  // Use the decider if present, otherwise the robot's rule
+  let dec: { action: "wait" | "charge"; kWh?: string; amount?: bigint; reason: string; by: "robot" | "claude" | "simulated" };
+  if (d.decider) {
+    dec = await d.decider(b, mandate);
+  } else {
+    const robotDecision = decide(b, mandate, DEFAULT_ROBOT);
+    dec = { ...robotDecision, by: "robot" as const };
+  }
+
   if (dec.action === "wait") {
     const battery = { levelPct: b.levelPct, updatedAt: b.updatedAt, lastSlot: slot };
-    const decision: RobotDecision = { at: now, action: "wait", reason: dec.reason, by: "robot" };
+    const decision: RobotDecision = { at: now, action: "wait", reason: dec.reason, by: dec.by };
     await d.battery.put(battery);
     await d.decisions.add(decision);
     return { decision, battery };
   }
   // Claim the slot before paying: a crash or a retry mid-charge must never pay twice.
   await d.battery.put({ levelPct: b.levelPct, updatedAt: b.updatedAt, lastSlot: slot });
-  const base = { at: now, action: "charge" as const, kWh: dec.kWh, amount: usdc(dec.amount), by: "robot" as const };
+  const amount = dec.amount ?? 0n;
+  const kWh = dec.kWh ?? "0.000";
+  const base = { at: now, action: "charge" as const, kWh, amount: usdc(amount), by: dec.by };
   let view: ChargeView;
   try {
-    view = await d.charge(dec.amount, dec.kWh, "robot");
+    view = await d.charge(amount, kWh, "robot");
   } catch {
     const decision: RobotDecision = { ...base, reason: `${dec.reason}; the charge could not complete` };
     await d.decisions.add(decision);
@@ -244,7 +258,7 @@ async function tickOnce(d: RobotTickDeps, now: number): Promise<TickResult> {
     ? view.refused ? `${dec.reason}; peaq event pending (${view.refused.reason})` : dec.reason
     : `refused (${view.refused?.reason ?? "not settled"}): ${view.refused?.message ?? dec.reason}`;
   const decision: RobotDecision = { ...base, reason, chargeId: view.id };
-  const after = paid ? afterCharge(b, dec.kWh, now, DEFAULT_ROBOT) : b;
+  const after = paid ? afterCharge(b, kWh, now, DEFAULT_ROBOT) : b;
   const battery = { levelPct: after.levelPct, updatedAt: after.updatedAt, lastSlot: slot };
   await d.battery.put(battery);
   await d.decisions.add(decision);

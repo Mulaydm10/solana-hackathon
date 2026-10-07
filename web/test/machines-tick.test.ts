@@ -221,3 +221,69 @@ test("robot charge: a fraction of a cent or a bad kWh is refused before anything
   }
   assert.equal(seen.length, 0);
 });
+
+// ---------- Claude as the decision maker ----------
+
+test("anthropicLlm: sends correct headers and body; never logs or returns the key", async () => {
+  const { anthropicLlm } = await import("../lib/robot-llm.ts");
+  const key = "sk-ant-v1-test-key-" + "x".repeat(60);
+  const requests: RequestInit[] = [];
+  const stubFetch: typeof fetch = async (url, init) => {
+    requests.push(init!);
+    return new Response(JSON.stringify({ content: [{ type: "text", text: "wait" }] }), { status: 200 });
+  };
+  const llm = anthropicLlm(key, stubFetch);
+  const result = await llm("system prompt", "user prompt");
+  assert.equal(result, "wait");
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]!.method, "POST");
+  const headers = requests[0]!.headers as Record<string, string>;
+  assert.equal(headers["x-api-key"], key);
+  assert.equal(headers["anthropic-version"], "2023-06-01");
+  const body = JSON.parse(requests[0]!.body as string) as Record<string, unknown>;
+  assert.equal(body.model, "claude-haiku-4-5-20251001");
+  assert.equal(body.max_tokens, 200);
+  assert.equal(body.system, "system prompt");
+  const messages = body.messages as { role: string; content: string }[];
+  assert.equal(messages[0]?.content, "user prompt");
+});
+
+test("anthropicLlm: throws on non-2xx and never includes the key in the error message", async () => {
+  const { anthropicLlm } = await import("../lib/robot-llm.ts");
+  const key = "sk-ant-v1-test-key-" + "x".repeat(60);
+  const stubFetch: typeof fetch = async () => new Response("Unauthorized", { status: 401 });
+  const llm = anthropicLlm(key, stubFetch);
+  try {
+    await llm("system", "user");
+    assert.fail("should have thrown");
+  } catch (e) {
+    const msg = String((e as Error).message);
+    assert.ok(!msg.includes(key), "error message must not contain the API key");
+    assert.match(msg, /401/);
+  }
+});
+
+test("tick with a Claude decider: logged decision has by=claude and the decided amount", async () => {
+  const { anthropicLlm } = await import("../lib/robot-llm.ts");
+  const t = tickDeps({ battery: { levelPct: 10, updatedAt: T0, lastSlot: 0 } });
+  const stubFetch: typeof fetch = async () => new Response(JSON.stringify({
+    content: [{ type: "text", text: '{"action":"charge","kWh":"1.234","reason":"cloud decision"}' }],
+  }), { status: 200 });
+  const llm = anthropicLlm("test-key", stubFetch);
+  const { decideWithModel } = await import("@deal/agents/machines");
+  t.d.decider = async (b, mandate) => {
+    const telemetry = { battery: b, distanceToPadKm: 1.5, nextDeliveryKm: 3, pricePerKwhMicro: 320_000n };
+    return decideWithModel(llm, telemetry, mandate, (await import("@deal/agents/machines")).DEFAULT_ROBOT);
+  };
+  const r = await robotTick(t.d, T0);
+  assert.equal(r.decision.by, "claude");
+  assert.equal(r.decision.action, "charge");
+  assert.equal(typeof r.decision.amount, "string");
+  assert.ok(!r.decision.reason.includes('<'), "reason must not contain unescaped HTML");
+});
+
+test("tick without a decider: logged decision has by=robot", async () => {
+  const t = tickDeps({ battery: { levelPct: 10, updatedAt: T0, lastSlot: 0 } });
+  const r = await robotTick(t.d, T0);
+  assert.equal(r.decision.by, "robot");
+});

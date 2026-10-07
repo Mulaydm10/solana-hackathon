@@ -8,5 +8,5 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  return handleTick(req, process.env, async (env) => tickDeps(await machineRuntime(env)));
+  return handleTick(req, process.env, async (env) => tickDeps(await machineRuntime(env), env));
 }
