@@ -10,9 +10,10 @@ import {
 import { solanaRpc } from "@solana/kit-plugin-rpc";
 import { signer as signerPlugin } from "@solana/kit-plugin-signer";
 import { DEAL_ESCROW_PROGRAM_ADDRESS, getMandate, type DealClient, type DealContext } from "@deal/chain";
-import { chainChargeChain, charge, createPeaqClient, sdkSubmit, type PeaqClient } from "@deal/agents/machines";
+import { DEFAULT_ROBOT, chainChargeChain, charge, createPeaqClient, decideWithModel, sdkSubmit, type PeaqClient } from "@deal/agents/machines";
 import type { ServerEnv } from "./env";
 import { createLimiter } from "./demo";
+import { anthropicLlm } from "./robot-llm";
 import { blobBattery, blobDecisions, blobHistory, blobLedger, runRobotCharge, simulateFirst, type BatteryStore, type ChargeHistory, type DecisionLog, type MachineDeps, type RobotTickDeps } from "./machines";
 import { USDC_DEVNET } from "./registry";
 import { fileBlobs, vercelBlobs, type BlobApi, type Blobs } from "./storage";
@@ -105,8 +106,9 @@ export async function robotRules(rt: MachineRuntime) {
 }
 
 /** What a tick needs: the stores, the mandate left (read from chain, bigint), and the internal robot charge. */
-export function tickDeps(rt: MachineRuntime, nowSecs = Math.floor(Date.now() / 1000)): RobotTickDeps {
-  return {
+export function tickDeps(rt: MachineRuntime, env?: ServerEnv, nowSecs = Math.floor(Date.now() / 1000)): RobotTickDeps {
+  const slot = Math.floor(nowSecs / 1800); // SLOT_SECS = 1800
+  const deps: RobotTickDeps = {
     battery: rt.battery,
     decisions: rt.decisions,
     mandate: async () => {
@@ -116,4 +118,23 @@ export function tickDeps(rt: MachineRuntime, nowSecs = Math.floor(Date.now() / 1
     },
     charge: (amount, kWh) => runRobotCharge(rt.deps, amount, kWh),
   };
+
+  // Wire the model decider when ANTHROPIC_API_KEY is set
+  if (env?.ANTHROPIC_API_KEY) {
+    const llm = anthropicLlm(env.ANTHROPIC_API_KEY);
+    deps.decider = async (b, mandate) => {
+      // Simulated deterministic telemetry from the slot number
+      const distanceToPadKm = 1 + ((slot % 7) * 0.5);
+      const nextDeliveryKm = 2 + (slot % 5);
+      const telemetry = {
+        battery: b,
+        distanceToPadKm,
+        nextDeliveryKm,
+        pricePerKwhMicro: DEFAULT_ROBOT.pricePerKwhMicro,
+      };
+      return decideWithModel(llm, telemetry, mandate, DEFAULT_ROBOT);
+    };
+  }
+
+  return deps;
 }
