@@ -19,6 +19,9 @@ that will later use Claude has a deterministic implementation behind the same in
 | `agents/test/injection/` | #71 | vedant059 | Injection corpus, run by the lane's verify |
 | `agents/src/machines/` | #227 | unassigned | peaq machine track: signed meter reading, charge-on-delivery loop, peaq events (`docs/handoffs/peaq-machine-economy.md`) |
 | `agents/scripts/machines/` | #228 | unassigned | One-time setup: activate the two simulated machines on peaq, create the fleet mission + robot mandate |
+| `agents/src/machines/autonomy.ts` | #252 | unassigned | Simulated battery + the robot's own charge decision, capped by its mandate |
+| `agents/src/machines/decide-llm.ts` | #254 | unassigned | Optional: Claude makes the charge decision (Physical AI), same caps, labelled fallback |
+| `agents/scripts/serve-missions.ts` ticker | #257 | unassigned | The always-on service ticks the robot (POST /api/machines/tick) |
 | `agents/src/index.ts` | first PR | whoever lands first | Re-exports; later PRs add one line each |
 
 The first `agents` claim PR to merge adds `agents/package.json`, `tsconfig.json` and `src/index.ts`. Its `test` script
@@ -76,6 +79,32 @@ charge(deps: ChargeDeps, req: { chargeId: string; amount: bigint; reading: Meter
 // Simulates before every send: an over-limit amount returns the program's code (OverPerTxCap, OverMandateCap,
 // PayeeNotAllowed) as a refusal and signs nothing. Idempotent per chargeId: never releases twice, never writes a peaq
 // event twice for one release (a retry resumes where the last run stopped).
+
+// machines/autonomy.ts (#252): the robot decides for itself. Battery and driving are SIMULATED and labelled so; the
+// payment it decides on is real. Pure and deterministic.
+type RobotModel = { capacityKwh: number; drainPctPerHour: number; lowPct: number; targetPct: number; pricePerKwhMicro: bigint };
+const DEFAULT_ROBOT: RobotModel; // e.g. 2 kWh, low 25 %, target 80 %, the pad's price (web lib/machines.ts pricePerKwh)
+type Battery = { levelPct: number; updatedAt: number };                   // unix seconds
+advance(b: Battery, nowSecs: number, m: RobotModel): Battery;              // drains since updatedAt, never below 0
+type MandateLeft = { perTxCap: bigint; cap: bigint; spent: bigint; live: boolean };
+type Decision =
+  | { action: "wait"; reason: string }
+  | { action: "charge"; kWh: string; amount: bigint; reason: string };     // kWh 3 decimals; amount = kWh × price, rounded down to whole cents
+decide(b: Battery, mandate: MandateLeft, m: RobotModel): Decision;
+// charge only when level < lowPct and the mandate is live; kWh to reach targetPct, then amount capped (in code) at
+// perTxCap and at cap − spent (kWh recomputed from the capped amount); amount < 0.01 USDC => wait. Never throws.
+afterCharge(b: Battery, kWh: string, nowSecs: number, m: RobotModel): Battery;
+
+// machines/decide-llm.ts (#254, optional): the same Decision from a model, never trusted with amounts.
+type Telemetry = { battery: Battery; distanceToPadKm: number; nextDeliveryKm: number; pricePerKwhMicro: bigint }; // simulated
+decideWithModel(llm: (system: string, prompt: string) => Promise<string>, t: Telemetry, mandate: MandateLeft, m: RobotModel):
+  Promise<Decision & { by: "claude" | "simulated" }>;
+// telemetry goes in as quarantined data; output must parse as {action, kWh, reason} (strict); amounts are recomputed and
+// capped exactly as decide() does; any failure or no model => decide() with by "simulated". Never throws.
+
+// scripts/serve-missions.ts ticker (#257): machineTicker({ url, secret, intervalMs, fetch, now, log }) POSTs the tick URL
+// with "Authorization: Bearer <secret>" every intervalMs (default 30 min), one at a time; env MACHINE_TICK_URL,
+// MACHINE_TICK_SECRET (>= 32 chars), MACHINE_TICK_MS. Logs status + decision only, never the secret.
 ```
 
 ## Rules
