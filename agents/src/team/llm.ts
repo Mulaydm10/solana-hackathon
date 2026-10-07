@@ -16,7 +16,8 @@ export const LLM_MODEL = "claude-opus-5-5";
 /** What a worker may send with `llm:complete`. */
 export type CompleteArgs = { system: string; prompt: string };
 
-export const LLM_LIMITS = { system: 4_000, prompt: 12_000, maxTokens: 8_000, output: 4_000 } as const;
+import { LLM_LIMITS } from "./limits.ts";
+export { LLM_LIMITS };
 
 export type LlmProviderOptions = {
   model?: string;
