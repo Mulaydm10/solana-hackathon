@@ -90,6 +90,20 @@ export function MachinesView({ initial }: { initial: MachineStatus }) {
         </div>
       ) : <p className="fine">The robot&apos;s mandate could not be read from chain right now.</p>}
 
+      <h2>The robot on its own</h2>
+      <div className="agent-card" data-testid="robot-battery">
+        <span className="eyebrow-mono">Simulated battery · updated {when(s.battery.updatedAt)}</span>
+        <div className="meter" role="meter" aria-label="simulated battery" aria-valuemin={0} aria-valuemax={100} aria-valuenow={s.battery.levelPct}>
+          <span style={{ width: `${s.battery.levelPct}%` }} />
+        </div>
+        <p className="fine">{s.battery.levelPct}% (simulated; the battery and the driving are not real, the payments are)</p>
+        {s.decisions[0] ? (
+          <p data-testid="last-decision">
+            Last decision: {s.decisions[0].action === "charge" ? `charge ${s.decisions[0].kWh} kWh` : "wait"} — {s.decisions[0].reason} <span className="fine">({when(s.decisions[0].at)})</span>
+          </p>
+        ) : <p className="fine" data-testid="last-decision">No decision yet. The robot decides every 30 minutes.</p>}
+      </div>
+
       <h2>Charge the robot</h2>
       <p>
         <button type="button" data-testid="charge-ok" disabled={!!busy || !s.rules?.live} onClick={() => void run("0.40")}>{busy === "0.40" ? "Charging…" : "Charge 0.40 USDC"}</button>
@@ -110,7 +124,7 @@ export function MachinesView({ initial }: { initial: MachineStatus }) {
       <h2>Charges</h2>
       {s.history.length === 0 ? <p className="fine">No charges yet.</p> : s.history.map((c) => (
         <article key={c.id} className="agent-card" data-testid="charge">
-          <span className="eyebrow-mono">{when(c.at)} · {c.amount} USDC · {c.kWh} kWh</span>
+          <span className="eyebrow-mono">{when(c.at)} · {c.amount} USDC · {c.kWh} kWh{c.by === "robot" ? " · decided by the robot" : ""}</span>
           <Timeline c={c} peaqTx={peaqTx} />
         </article>
       ))}
