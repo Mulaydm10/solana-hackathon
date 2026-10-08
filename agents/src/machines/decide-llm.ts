@@ -8,13 +8,17 @@ import { LLM_LIMITS } from "../team/limits.ts";
 import { clampPct, decide, parseKwhMilli, priceCharge, type Battery, type Decision, type MandateLeft, type RobotModel } from "./autonomy.ts";
 
 export type Telemetry = { battery: Battery; distanceToPadKm: number; nextDeliveryKm: number; pricePerKwhMicro: bigint }; // simulated
-export type DecidedBy = Decision & { by: "claude" | "simulated" };
+export type DecidedBy = Decision & { by: "claude" | "simulated" | "robot" };
 export type LlmFn = (system: string, prompt: string) => Promise<string>;
 
 const TIMEOUT_MS = 15_000;
 const REASON_MAX = 160;
 /** Below this battery level (mandate live) the model is not consulted: the robot must never strand itself. */
 export const SAFETY_FLOOR_PCT = 10;
+/** At or above this level the model is not consulted at all (a deal costs ~0.0075 SOL of rent): the robot just waits. */
+export const CONSULT_BELOW_PCT = 40;
+/** A model charge smaller than this (1.0 kWh = half the default battery, in milli-kWh) becomes a wait: many tiny top-ups would drain the rent pool. */
+export const MIN_CHARGE_KWH_MILLI = 1000n;
 const KWH_RE = /^\d{1,3}(\.\d{1,3})?$/;
 
 export const DECISION_SYSTEM = [
@@ -64,6 +68,8 @@ export async function decideWithModel(llm: LlmFn, t: Telemetry, mandate: Mandate
       const d = decide(t.battery, mandate, m);
       return { ...d, reason: `Safety floor: ${d.reason}`, by: "simulated" };
     }
+    const lvl = clampPct(t.battery.levelPct);
+    if (lvl >= CONSULT_BELOW_PCT) return { action: "wait", reason: `battery ${Math.round(lvl)}%: above ${CONSULT_BELOW_PCT}%, no charge needed (model not consulted)`, by: "robot" };
     const prompt = buildPrompt(t, mandate, m);
     if (DECISION_SYSTEM.length > LLM_LIMITS.system || prompt.length > LLM_LIMITS.prompt) return fallback(t, mandate, m);
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -89,6 +95,8 @@ export async function decideWithModel(llm: LlmFn, t: Telemetry, mandate: Mandate
     if (milli > toFull) milli = toFull;
     const p = priceCharge(milli, mandate, m);
     if (!p.ok) return { action: "wait", reason: `battery ${Math.round(level)}%: the mandate left allows nothing to charge`, by: "claude" };
+    const finalMilli = parseKwhMilli(p.kWh) ?? 0n;
+    if (finalMilli < MIN_CHARGE_KWH_MILLI) return { action: "wait", reason: `model asked for ${kWh} kWh: below the 1.0 kWh minimum, waiting \u2014 Claude: "${reason}"`, by: "claude" };
     const reduced = p.capped || milli < (parseKwhMilli(kWh) ?? 0n);
     const said = `\u2014 Claude: "${reason}"`;
     return { action: "charge", kWh: p.kWh, amount: p.amount, reason: `charging ${p.kWh} kWh for ${usdc2(p.amount)} USDC${reduced ? " (amount set in code, capped by the mandate)" : ""} ${said}`, by: "claude" };
