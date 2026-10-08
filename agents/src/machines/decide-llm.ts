@@ -17,8 +17,8 @@ const REASON_MAX = 160;
 export const SAFETY_FLOOR_PCT = 10;
 /** At or above this level the model is not consulted at all (a deal costs ~0.0075 SOL of rent): the robot just waits. */
 export const CONSULT_BELOW_PCT = 40;
-/** A model charge smaller than this (0.5 kWh, in milli-kWh) becomes a wait: many tiny top-ups would drain the rent pool. */
-export const MIN_CHARGE_KWH_MILLI = 500n;
+/** A model charge smaller than this (1.0 kWh = half the default battery, in milli-kWh) becomes a wait: many tiny top-ups would drain the rent pool. */
+export const MIN_CHARGE_KWH_MILLI = 1000n;
 const KWH_RE = /^\d{1,3}(\.\d{1,3})?$/;
 
 export const DECISION_SYSTEM = [
@@ -96,7 +96,7 @@ export async function decideWithModel(llm: LlmFn, t: Telemetry, mandate: Mandate
     const p = priceCharge(milli, mandate, m);
     if (!p.ok) return { action: "wait", reason: `battery ${Math.round(level)}%: the mandate left allows nothing to charge`, by: "claude" };
     const finalMilli = parseKwhMilli(p.kWh) ?? 0n;
-    if (finalMilli < MIN_CHARGE_KWH_MILLI) return { action: "wait", reason: `model asked for ${kWh} kWh: below the 0.5 kWh minimum, waiting \u2014 Claude: "${reason}"`, by: "claude" };
+    if (finalMilli < MIN_CHARGE_KWH_MILLI) return { action: "wait", reason: `model asked for ${kWh} kWh: below the 1.0 kWh minimum, waiting \u2014 Claude: "${reason}"`, by: "claude" };
     const reduced = p.capped || milli < (parseKwhMilli(kWh) ?? 0n);
     const said = `\u2014 Claude: "${reason}"`;
     return { action: "charge", kWh: p.kWh, amount: p.amount, reason: `charging ${p.kWh} kWh for ${usdc2(p.amount)} USDC${reduced ? " (amount set in code, capped by the mandate)" : ""} ${said}`, by: "claude" };
