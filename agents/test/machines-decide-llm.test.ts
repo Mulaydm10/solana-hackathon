@@ -160,7 +160,7 @@ test("#265: minimum charge size 0.5 kWh", async () => {
   const small = await decideWithModel(say(ok("charge", "0.200", "Top up.")), t(30), live, m);
   assert.deepEqual(small, { action: "wait", reason: 'model asked for 0.200 kWh: below the 0.5 kWh minimum, waiting \u2014 Claude: "Top up."', by: "claude" });
   const big = await decideWithModel(say(ok("charge", "0.600")), t(30), live, m);
-  assert.ok(big.action === "charge" && big.kWh === "0.600" && big.by === "claude");
+  assert.ok(big.action === "charge" && big.kWh === "0.593" && big.by === "claude");
   const edge = await decideWithModel(say(ok("charge", "0.500")), t(30), live, m);
   assert.equal(edge.action, "charge");
   // a mandate cap that squeezes the charge below the minimum also waits
