@@ -33,6 +33,8 @@ Next: downtime insurance paid from escrow on heartbeat events, and credit lines 
 ## Fit with the judging criteria
 
 - **Machine economy focus:** two machines, one deal, settled with no human per payment. That's the track's own starter idea, plus the limits that make it safe.
+- **DePIN:** The charging pad is one node of a charging network. It has a peaq machine identity, earns revenue for a service it proves (signed kWh, hashed on chain), and builds the on-chain revenue history peaq's credit rating and future financing use.
+- **Autonomy:** After the owner sets the rules once, the robot decides on its own when to charge (checking its simulated battery on a schedule) and pays without human approval per transaction.
 - **Technical implementation:**
   - A deployed Solana program enforces the mandate (`OverPerTxCap`, `OverMandateCap`, `PayeeNotAllowed`).
   - Escrow is released on the hash of a signed meter reading.

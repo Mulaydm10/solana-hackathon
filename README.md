@@ -169,12 +169,14 @@ A clean devnet run of the hire flow: mission [`BJyjL2qc…`](https://explorer.so
 
 **The loop: "charge on delivery."**
 1. **The owner sets the rules once, on chain:** a Fiducia mandate for the robot's agent. At most **0.50 USDC per charge** and **2 USDC in total**, and the charging pad is the **only allowed payee**.
-2. **The robot pays on its own.** Its agent opens an escrow deal for each charge. Nobody approves individual payments.
+2. **The robot decides when it needs to charge** (simulated battery) **and pays on its own.** Its agent opens an escrow deal for each charge. Nobody approves individual payments. The robot is on a schedule: every 30 minutes, it checks its battery and, if below 25%, decides how much to charge (up to 80%, capped by its mandate).
 3. **Pay only for proven energy.** The pad signs a meter reading (kWh, time, price). Its sha256 is delivered on chain, and the robot releases **exactly that reading**.
 4. **The program enforces the limits.** A 0.60 USDC charge is refused by the Solana program (`OverPerTxCap`). The site simulates every transaction first, so a refused charge is never sent.
 5. **It's recorded on peaq.** Each settled charge becomes a **revenue event for the pad** and an **activity event for the robot** in peaq's EventRegistry. That's the history peaq's Machine Credit Rating is built from.
 
 **Why both chains:** peaq is the machines' identity and credit layer. Solana + Fiducia is the money layer: mandates, escrow and settlement. peaq's own agent-spending limits are enforced by its orchestrator server; Fiducia enforces the same kind of limits **in a Solana program**.
+
+**Why this is DePIN:** The charging pad is one node of a charging network. It has a peaq machine identity, earns revenue for a service it proves (a signed kWh meter reading, hashed on chain), and builds the on-chain revenue history that peaq's Machine Credit Rating and future financing are built from. One simulated pad today; next is many pads and real meters. The same loop also fits a drone landing on a charging pad—peaq's own starter idea—though nothing drone-specific is built yet. Autonomous ticking (the robot deciding on its own) is being switched on in production.
 
 | Try it | |
 |---|---|
@@ -187,7 +189,7 @@ A clean devnet run of the hire flow: mission [`BJyjL2qc…`](https://explorer.so
 | peaq network | agung testnet (chain 9990), EventRegistry [`0x2DAD…0040`](https://agung-testnet.subscan.io/account/0x2DAD8905380993940e340C5cE6d313d5c2780040) |
 
 **Honest limits**
-- **Simulated machines.** No physical robot or pad. The keys, signatures, deals and events are real.
+- **Simulated machines.** No physical robot or pad. Battery and driving are simulated. The keys, signatures, deals and events are real.
 - **Self-reported peaq events (trust level 0).** peaq can't verify a Solana transaction (its event registry accepts peaq or Base as source chains), so each event carries the full Solana release signature for anyone to check on the Solana Explorer. The events never claim peaq verified the payment.
 - **agung uses peaq's 1.0 machine registry.** agung has no Economics 2.0 event registry, so the robot and pad are registered and bonded (1 PEAQ each) in agung's 1.0 IdentityRegistry. peaq serves no credit rating for testnet machines, and the page says so instead of showing a number.
 - **Test money only:** devnet test USDC and agung PEAQ.
