@@ -7,9 +7,8 @@ import type { Address } from "@solana/kit";
 import { hasDuplicateKeys, s } from "../reader/schema.ts";
 import { LLM_LIMITS } from "../team/limits.ts";
 import type { LlmFn } from "./decide-llm.ts";
+import type { Grade } from "./score.ts";
 
-// Same as score.ts (#267) `Grade`; declared locally until that file is on main.
-type Grade = "AAA" | "AA" | "A" | "BBB" | "BB" | "B" | "NR" | "Provisioned";
 
 export type PadOffer = { role: string; machineId: bigint; address: Address; pricePerKwhMicro: bigint; online: boolean; score: number; grade: Grade };
 export type PadChoice =

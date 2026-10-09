@@ -31,8 +31,13 @@ export type Settlement = { chargeId: string; deal: Address; releaseSignature: st
 export interface PeaqClient {
   submitRevenueEvent(machineId: bigint, s: Settlement): Promise<Ok<{ txHash: string }> | Refused>;
   submitActivityEvent(machineId: bigint, s: Settlement): Promise<Ok<{ txHash: string }> | Refused>;
+  /** Insurance (#271): an activity event whose value is the outage gap in seconds, rawData = the outage record. */
+  submitOutageEvent(machineId: bigint, o: OutageEventInput): Promise<Ok<{ txHash: string }> | Refused>;
   queryMcr(machineId: bigint): Promise<Ok<{ status: string; score?: number }> | Refused>;
 }
+
+/** An outage seen by the insurer: the gap, the sha256 of the outage proof (hex) and the policy id. */
+export type OutageEventInput = { gapSecs: number; proofHash: string; policy: string };
 
 /** The exact parameters handed to the SDK's `submitEvent` (shape from @peaqos/peaq-os-sdk 0.10). */
 export type PeaqEventParams = {
@@ -100,6 +105,31 @@ export function eventParams(
   };
 }
 
+/** rawData of an outage event: canonical JSON (fixed key order). */
+export function outageRawData(o: OutageEventInput): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify({ gapSecs: o.gapSecs, kind: "fiducia-outage-v1", policy: o.policy, proofHash: o.proofHash }));
+}
+
+/** Builds the outage activity event (type 1, value = gap seconds, no currency). The proof hash is the source reference. */
+export function outageEventParams(
+  machineId: bigint, o: OutageEventInput, cfg: Pick<PeaqConfig, "sourceChainId">, nowSecs: number,
+): Ok<{ params: PeaqEventParams }> | Refused {
+  if (machineId <= 0n) return refuse("BAD_MACHINE_ID", "machine id must be positive");
+  if (!(PEAQ_SOURCE_CHAINS as readonly number[]).includes(cfg.sourceChainId)) {
+    return refuse("BAD_CONFIG", `peaq accepts sourceChainId ${PEAQ_SOURCE_CHAINS.join(", ")} only (0 = self-reported)`);
+  }
+  if (!Number.isSafeInteger(o.gapSecs) || o.gapSecs <= 0) return refuse("BAD_GAP", "the outage gap must be a positive whole number of seconds");
+  if (!o.proofHash || !o.policy) return refuse("BAD_OUTAGE", "an outage event needs a proof hash and a policy id");
+  return {
+    ok: true,
+    params: {
+      machineId, eventType: 1, value: o.gapSecs, currency: "", timestamp: Math.floor(nowSecs), rawData: outageRawData(o),
+      trustLevel: cfg.sourceChainId === 0 ? 0 : 1, sourceChainId: cfg.sourceChainId, sourceTxHash: sourceTxHash(o.proofHash),
+      metadata: new Uint8Array(),
+    },
+  };
+}
+
 /** What the SDK client needs to provide; injected so tests never touch a network. */
 export type PeaqSubmit = (params: PeaqEventParams) => Promise<{ txHash: string }>;
 export type PeaqDeps = { submit: PeaqSubmit; fetch?: typeof fetch; now?: () => number; program: string };
@@ -125,6 +155,16 @@ export function createPeaqClient(cfg: PeaqConfig, deps: PeaqDeps): PeaqClient {
     }
   };
   return {
+    async submitOutageEvent(machineId, o) {
+      const p = outageEventParams(machineId, o, cfg, now());
+      if (!p.ok) return p;
+      try {
+        const r = await deps.submit(p.params);
+        return { ok: true, txHash: r.txHash };
+      } catch (e) {
+        return refuse("PEAQ_SUBMIT_FAILED", `peaq rejected the outage event (${errText(e)})`);
+      }
+    },
     submitRevenueEvent: (id, s) => send("revenue", id, s),
     submitActivityEvent: (id, s) => send("activity", id, s),
     async queryMcr(machineId) {

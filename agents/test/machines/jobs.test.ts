@@ -33,6 +33,7 @@ function stubPeaq(failFirst = 0) {
   const peaq: PeaqClient = {
     async submitRevenueEvent(id, s) { if (left-- > 0) return refused("PEAQ_SUBMIT_FAILED"); events.push({ id, s }); return { ok: true, txHash: "0xevent" }; },
     async submitActivityEvent() { throw new Error("jobs write a revenue event only"); },
+    async submitOutageEvent() { throw new Error("jobs write a revenue event only"); },
     async queryMcr() { return refused("MCR_NOT_SERVED"); },
   };
   return { peaq, events };
