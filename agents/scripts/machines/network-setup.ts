@@ -193,7 +193,8 @@ for (const role of ["shop", "insurer"] as const) {
   const r = await safeSend(c, s.address, async () => !!(await getPolicy(c, s.address)), async () => [
     await getInitPolicyInstructionAsync({
       buyer: s, mint: mint!,
-      params: { periodSecs: 86_400, periodBudget: 10n * USDC, maxPrice: budget, approvalThreshold: 10n ** 15n, approver: s.address, allowAnySeller: true, allowedSellers: [] },
+      params: { periodSecs: 86_400, periodBudget: 10n * USDC, maxPrice: USDC, // program: maxPrice <= periodBudget; a job is 0.50, coverage 1.00
+      approvalThreshold: 10n ** 15n, approver: s.address, allowAnySeller: true, allowedSellers: [] },
     }),
   ]);
   if (!r.ok) fail([`init policy for ${role} refused: ${r.reason} ${r.message}`]);
