@@ -78,3 +78,27 @@ existing site, `/hire`, "Try the demo" and `DEMO_BUYER_KEY` are untouched.
   `ChargeView` adds `by?: "visitor" | "robot"`.
 - `/machines`: a battery gauge labelled simulated, the last decision and its reason, and "decided by the robot" on
   autonomous charges. Model text (#255) is shown only as escaped, quoted text.
+
+## Machines v2 (#273 server, #274 page; plan: docs/handoffs/peaq-v2-plan.md; add only)
+
+- **Tick (#273)**, same route and auth. Order per tick: (1) each online pad signs a heartbeat (stored, verified on read);
+  (2) `insuranceStep` for each pad's current policy (a new daily policy is quoted when none is active); (3) `planJob`
+  → `runJob` (a delivery drains the battery); (4) the robot decides; on "charge", `choosePad` (or `choosePadWithModel`
+  with a model key) picks the pad and the existing charge path pays it. Scores are recomputed from peaq logs at most
+  once per tick and cached in the blob store. Each step's failure is recorded and does not stop the next.
+- `POST /api/machines/power` body `{ pad: "<role>", online: boolean }`, same Bearer secret as the tick: the owner's
+  simulated power switch (an offline pad stops signing heartbeats). Never public.
+- New server env: `PAD2_KEY`, `PAD3_KEY`, `PAD_PEAQ_KEYS` (JSON role → peaq key), `INSURER_KEY`, `SHOP_KEY`,
+  `MACHINE_NETWORK` (JSON from state.json `network`), `INSURANCE_VERIFIER` (address). Missing: v1 behaviour continues
+  and the page says which part is not configured.
+- `GET /api/machines/status` adds (all amounts as decimal USDC strings):
+  `network: [{ role, name, machineId, pricePerKwh, online, lastHeartbeatAt, upPct24h, score, grade, provisioned }]`,
+  `scores: { [role]: MachineScore }` (robot included), `insurance: { policies: Policy[] }` (last 10, amounts as strings),
+  `earnings: { jobs, earned, spentOnEnergy, net, recent: [{ id, at, amount, deal, releaseSig, robotEventTx }] }`,
+  and on decisions `chosenPad?`, `choiceReason?`, `choiceBy?`.
+- **Page (#274)**: "The network" (one card per pad: price, MCR-style grade + score + top factors, uptime 24 h,
+  online/offline, last heartbeat), "Insurance" (each policy: coverage, premium and the grade that priced it, term,
+  status, a timeline with Solana links for open / premium / claim / payout or refund and the outage peaq event), "The
+  robot's earnings" (earned vs spent on energy, recent jobs with links), and on each charge "chose <pad> because …".
+  Labels: "MCR-style score, computed by Fiducia from peaq events (peaq's own rating is not served on testnet)";
+  outages and deliveries say "simulated". Status fixture for tests: `web/test/fixtures/machines-status-v2.json`.
