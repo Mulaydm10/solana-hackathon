@@ -90,7 +90,9 @@ async function existing(id: string | undefined, wallet: EvmAddress): Promise<big
 }
 // A re-run keeps the prices already in state.json (the owner may have edited them); otherwise the defaults.
 const prices = Object.fromEntries((state.network?.pads ?? []).map((p) => [p.role, BigInt(p.pricePerKwhMicro)]));
-const known = (role: string) => state.network?.pads.find((p) => p.role === role)?.machineId;
+// A registration is saved at once (state.peaq.<role>MachineId), so a run that fails later never registers twice.
+const known = (role: string) =>
+  state.network?.pads.find((p) => p.role === role)?.machineId ?? (state.peaq as Record<string, string | undefined> | undefined)?.[`${role}MachineId`];
 const peaqIds: Record<"pad2" | "pad3", bigint | null> = {
   pad2: await existing(known("pad2"), n.pad2Peaq), pad3: await existing(known("pad3"), n.pad3Peaq),
 };
@@ -174,6 +176,8 @@ if (toRegister.length) {
     const wallet = who === "pad2" ? n.pad2Peaq : n.pad3Peaq;
     try {
       ids[who] = (await client.registerFor(wallet)).toString();
+      const now = readFleetState(dir);
+      writeFleetState(dir, { ...now, peaq: { ...now.peaq!, [`${who}MachineId`]: ids[who] } });
       console.log(`${who}: registered and bonded as peaq machine ${ids[who]} (wallet ${wallet})`);
     } catch (e) {
       fail([`registerFor ${who} failed: ${(e as { code?: string }).code ?? (e instanceof Error ? e.name : "error")}`]);
@@ -193,7 +197,8 @@ for (const role of ["shop", "insurer"] as const) {
   const r = await safeSend(c, s.address, async () => !!(await getPolicy(c, s.address)), async () => [
     await getInitPolicyInstructionAsync({
       buyer: s, mint: mint!,
-      params: { periodSecs: 86_400, periodBudget: 10n * USDC, maxPrice: budget, approvalThreshold: 10n ** 15n, approver: s.address, allowAnySeller: true, allowedSellers: [] },
+      params: { periodSecs: 86_400, periodBudget: 10n * USDC, maxPrice: USDC, // program: maxPrice <= periodBudget; a job is 0.50, coverage 1.00
+      approvalThreshold: 10n ** 15n, approver: s.address, allowAnySeller: true, allowedSellers: [] },
     }),
   ]);
   if (!r.ok) fail([`init policy for ${role} refused: ${r.reason} ${r.message}`]);
