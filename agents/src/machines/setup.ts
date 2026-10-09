@@ -91,12 +91,20 @@ export function fleetAddresses(k: FleetKeys) {
   };
 }
 
+/** The payee list: `pads` (several pads, #269) or the single `pad`. */
+function payeeList(o: { pad?: Address; pads?: Address[] }): Address[] {
+  const list = o.pads ?? (o.pad ? [o.pad] : []);
+  if (list.length === 0) throw new TypeError("a pad address (pad or pads) is required");
+  return list;
+}
+
 /** The rules the owner approves once, as a document; its sha256 is the stage-0 plan hash. */
-export function fleetRules(o: { robot: Address; pad: Address; cap: bigint; perCharge: bigint; expiresAt: number }) {
+export function fleetRules(o: { robot: Address; pad?: Address; pads?: Address[]; cap: bigint; perCharge: bigint; expiresAt: number }) {
+  const payees = payeeList(o);
   const doc = {
     kind: "fiducia-fleet-rules-v1",
     machine: "simulated delivery robot", payee: "simulated charging pad",
-    robot: o.robot, pad: o.pad,
+    robot: o.robot, ...(o.pads ? { pads: payees } : { pad: payees[0] }), // the single-pad document (and its hash) is unchanged
     perChargeMaxMicroUsdc: o.perCharge.toString(), totalCapMicroUsdc: o.cap.toString(), expiresAt: o.expiresAt,
     settlement: "escrow, released on the sha256 of the pad's signed meter reading",
   };
@@ -105,10 +113,10 @@ export function fleetRules(o: { robot: Address; pad: Address; cap: bigint; perCh
 }
 
 /** The robot's mandate: per-charge limit, total cap, only the pad, stage 0, until the mission expires. */
-export function robotMandate(o: { robot: Address; pad: Address; cap: bigint; perCharge: bigint; expiresAt: number }): MandateInput {
+export function robotMandate(o: { robot: Address; pad?: Address; pads?: Address[]; cap: bigint; perCharge: bigint; expiresAt: number }): MandateInput {
   return {
     agent: o.robot, roleHash: sha256(new TextEncoder().encode("fiducia-role:robot-charging")), cap: o.cap, perTxCap: o.perCharge,
-    payees: [o.pad], stageMask: 1, expiresAt: BigInt(o.expiresAt),
+    payees: payeeList(o), stageMask: 1, expiresAt: BigInt(o.expiresAt),
   };
 }
 
