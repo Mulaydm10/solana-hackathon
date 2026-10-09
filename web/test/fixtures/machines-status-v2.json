@@ -1,0 +1,274 @@
+{
+  "ok": true,
+  "deployment": "agung-2026-08-28",
+  "explorerTx": "https://agung-testnet.subscan.io/tx/",
+  "mission": "Vote111111111111111111111111111111111111111",
+  "machines": [
+    {
+      "role": "robot",
+      "name": "Delivery robot",
+      "machineId": "13",
+      "wallet": "So11111111111111111111111111111111111111112",
+      "mcr": {
+        "unavailable": "peaq does not serve a Machine Credit Rating for testnet machines"
+      }
+    },
+    {
+      "role": "pad",
+      "name": "Charging pad",
+      "machineId": "12",
+      "wallet": "Sysvar1111111111111111111111111111111111111",
+      "mcr": {
+        "unavailable": "peaq does not serve a Machine Credit Rating for testnet machines"
+      }
+    }
+  ],
+  "rules": {
+    "cap": "5.00",
+    "perTxCap": "0.50",
+    "spent": "0.60",
+    "payees": [
+      "Sysvar1111111111111111111111111111111111111"
+    ],
+    "expiresAt": 1800900000,
+    "revoked": false,
+    "live": true
+  },
+  "history": [
+    {
+      "id": "c1kx9a",
+      "at": 1800000000,
+      "amount": "0.30",
+      "kWh": "1.071",
+      "deal": "Stake11111111111111111111111111111111111111",
+      "deliveryHash": "ab12",
+      "openSig": "sample-open-sig",
+      "deliverSig": "sample-deliver-sig",
+      "releaseSig": "sample-release-sig",
+      "padEventTx": "0xsamplepadevent",
+      "robotEventTx": "0xsamplerobotevent",
+      "by": "robot",
+      "pad": "pad2"
+    }
+  ],
+  "totals": {
+    "charges": 1,
+    "refused": 0,
+    "kWh": "1.071",
+    "usdc": "0.30",
+    "peaqEvents": 2
+  },
+  "battery": {
+    "levelPct": 62.5,
+    "updatedAt": 1800000000,
+    "simulated": true
+  },
+  "decisions": [
+    {
+      "at": 1800000000,
+      "action": "charge",
+      "kWh": "1.071",
+      "amount": "0.30",
+      "reason": "battery 10% < 25%: charging 1.071 kWh to reach 80%",
+      "by": "robot",
+      "chargeId": "c1kx9a",
+      "chosenPad": "pad2",
+      "choiceReason": "lowest effective price: pad2 at 0.280 USDC/kWh (effective 0.294), grade AA (score 88), online of 3 eligible",
+      "choiceBy": "robot"
+    },
+    {
+      "at": 1799998200,
+      "action": "wait",
+      "reason": "battery 45%: no charge needed",
+      "by": "robot"
+    }
+  ],
+  "v2": {
+    "configured": true,
+    "lastTick": {
+      "at": 1800000000,
+      "steps": [
+        {
+          "step": "scores",
+          "ok": true
+        },
+        {
+          "step": "heartbeats",
+          "ok": true
+        },
+        {
+          "step": "insurance",
+          "ok": true
+        },
+        {
+          "step": "job",
+          "ok": true,
+          "detail": "last job was recent: next one in 190 min"
+        }
+      ]
+    }
+  },
+  "network": [
+    {
+      "role": "pad",
+      "name": "Charging pad A",
+      "machineId": "12",
+      "pricePerKwh": "0.32",
+      "online": true,
+      "lastHeartbeatAt": 1800000000,
+      "upPct24h": 100,
+      "score": 72,
+      "grade": "BBB",
+      "provisioned": false
+    },
+    {
+      "role": "pad2",
+      "name": "Charging pad B",
+      "machineId": "14",
+      "pricePerKwh": "0.28",
+      "online": true,
+      "lastHeartbeatAt": 1800000000,
+      "upPct24h": 97.9,
+      "score": 88,
+      "grade": "AA",
+      "provisioned": false
+    },
+    {
+      "role": "pad3",
+      "name": "Charging pad C",
+      "machineId": "15",
+      "pricePerKwh": "0.30",
+      "online": false,
+      "lastHeartbeatAt": 1799992000,
+      "upPct24h": 81.3,
+      "score": 41,
+      "grade": "B",
+      "provisioned": false
+    }
+  ],
+  "scores": {
+    "robot": {
+      "score": 64,
+      "grade": "BBB",
+      "provisioned": false,
+      "factors": {
+        "bond": 20,
+        "revenue": 15,
+        "activity": 14,
+        "tenure": 10,
+        "freshness": 20,
+        "penalty": 0
+      },
+      "events": 31,
+      "outages7d": 0,
+      "explain": "MCR-style score 64 (BBB): strongest factors are bond (20.0) and freshness (20.0)."
+    },
+    "pad": {
+      "score": 72,
+      "grade": "BBB",
+      "provisioned": false,
+      "factors": {
+        "bond": 20,
+        "revenue": 21.4,
+        "activity": 20,
+        "tenure": 10,
+        "freshness": 20,
+        "penalty": 0
+      },
+      "events": 44,
+      "outages7d": 0,
+      "explain": "MCR-style score 72 (BBB): strongest factors are revenue (21.4) and bond (20.0)."
+    },
+    "pad2": {
+      "score": 88,
+      "grade": "AA",
+      "provisioned": false,
+      "factors": {
+        "bond": 20,
+        "revenue": 27.9,
+        "activity": 20,
+        "tenure": 10,
+        "freshness": 20,
+        "penalty": 0
+      },
+      "events": 52,
+      "outages7d": 0,
+      "explain": "MCR-style score 88 (AA): strongest factors are revenue (27.9) and bond (20.0)."
+    },
+    "pad3": {
+      "score": 41,
+      "grade": "B",
+      "provisioned": false,
+      "factors": {
+        "bond": 20,
+        "revenue": 15,
+        "activity": 14,
+        "tenure": 10,
+        "freshness": 12,
+        "penalty": -30
+      },
+      "events": 38,
+      "outages7d": 2,
+      "explain": "MCR-style score 41 (B): strongest factors are bond (20.0) and revenue (15.0), minus 30 for 2 outages in the last 7 days."
+    }
+  },
+  "insurance": {
+    "policies": [
+      {
+        "id": "pol-pad3-1799900000",
+        "pad": "pad3",
+        "padAddress": "Vote111111111111111111111111111111111111111",
+        "coverage": "1.00",
+        "premium": "0.12",
+        "grade": "B",
+        "termStart": 1799900000,
+        "termEnd": 1799986400,
+        "status": "claimed",
+        "deal": "Stake11111111111111111111111111111111111111",
+        "openSig": "sample-open",
+        "acceptSig": "sample-accept",
+        "premiumSig": "sample-premium",
+        "claimSig": "sample-claim",
+        "outage": {
+          "detectedAt": 1799992000,
+          "gapSecs": 4100,
+          "peaqEventTx": "0xsampleoutage",
+          "insurerCheck": "valid",
+          "simulated": true
+        }
+      },
+      {
+        "id": "pol-pad2-1799900000",
+        "pad": "pad2",
+        "padAddress": "Sysvar1111111111111111111111111111111111111",
+        "coverage": "1.00",
+        "premium": "0.03",
+        "grade": "AA",
+        "termStart": 1799900000,
+        "termEnd": 1799986400,
+        "status": "paid",
+        "deal": "Stake11111111111111111111111111111111111111",
+        "openSig": "sample-open",
+        "acceptSig": "sample-accept",
+        "premiumSig": "sample-premium",
+        "refundSig": "sample-refund"
+      }
+    ]
+  },
+  "earnings": {
+    "jobs": 2,
+    "earned": "0.60",
+    "spentOnEnergy": "0.30",
+    "net": "0.30",
+    "recent": [
+      {
+        "id": "job-1799985600",
+        "at": 1799985600,
+        "amount": "0.30",
+        "deal": "Stake11111111111111111111111111111111111111",
+        "releaseSig": "sample-job-release",
+        "robotEventTx": "0xsamplejobevent"
+      }
+    ]
+  }
+}

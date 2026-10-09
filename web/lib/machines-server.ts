@@ -40,7 +40,7 @@ export type MachineRuntime = {
   explorerTx?: string;
 };
 
-function machineBlobs(env: ServerEnv, raw: Record<string, string | undefined>): Blobs {
+export function machineBlobs(env: ServerEnv, raw: Record<string, string | undefined>): Blobs {
   return env.BLOB_READ_WRITE_TOKEN ? vercelBlobs(blobApi, env.BLOB_READ_WRITE_TOKEN, "machines") : fileBlobs(raw.DEAL_MACHINES_DIR ?? join(process.cwd(), ".data", "machines"));
 }
 
