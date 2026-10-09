@@ -12,3 +12,8 @@ npm package, run as `npx <name>-mcp`, exposing an MCP server (stdio) to AI agent
 
 Read-only tool: the two simulated machines' peaq IDs, the robot's mandate left, recent charges, peaq event count or
 MCR. No signing; existing tools unchanged.
+
+## machine_status v2 (#275)
+
+Adds the status fields of contracts/web.md "Machines v2" (network, scores, insurance, earnings) to the tool's output,
+read from the same sources. Still read-only, no signing; existing fields unchanged.
