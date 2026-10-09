@@ -9,3 +9,4 @@ export * from "./ticker.ts";
 export * from "./jobs.ts";
 export * from "./network.ts";
 export * from "./heartbeat.ts";
+export * from "./score.ts";
