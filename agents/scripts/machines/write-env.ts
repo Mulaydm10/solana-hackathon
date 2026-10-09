@@ -14,8 +14,10 @@ if (!out) {
   console.error("✗ usage: write-env.ts OUT_FILE [--keys-dir DIR]");
   process.exit(1);
 }
-const { keys } = loadFleetKeys(dir, false);
+// A state with a `network` section (network-setup, peaq v2) also writes the v2 variables; otherwise the v1 env as before.
+const state = readFleetState(dir);
+const { keys } = state.network ? loadFleetKeys(dir, false, { network: true }) : loadFleetKeys(dir, false);
 // RPC and explorer follow the network the machines were activated on (agung or peaq mainnet), unless overridden.
-const env = machineEnv(keys, readFleetState(dir), { peaqRpcUrl: process.env.PEAQ_RPC_URL, explorerTxUrl: process.env.PEAQ_EXPLORER_TX_URL });
+const env = machineEnv(keys, state, { peaqRpcUrl: process.env.PEAQ_RPC_URL, explorerTxUrl: process.env.PEAQ_EXPLORER_TX_URL });
 writeEnvFile(out, env);
 console.log(`wrote ${Object.keys(env).length} variables to ${out} (0600): ${Object.keys(env).join(", ")}`);
