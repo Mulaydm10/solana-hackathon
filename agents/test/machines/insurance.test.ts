@@ -4,20 +4,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Address } from "@solana/kit";
+import { privateKeyToAccount } from "viem/accounts";
 import {
-  insuranceStep, OUTAGE_AFTER_SECS, outageEventParams, outageRawData, PREMIUM_RATE_BPS, quotePremium, createPeaqClient,
+  insuranceStep, OUTAGE_AFTER_SECS, outageEventParams, outageRawData, PREMIUM_RATE_BPS, quotePremium, createPeaqClient, signHeartbeat,
   type Heartbeat, type InsuranceChain, type Policy,
 } from "../../src/index.ts";
 import type { PeaqClient } from "../../src/machines/peaq.ts";
 
 const DEAL = "BQ2UX41FDmdg8UyGFQQLjqW8T8GovFTiN3S9AsCFvP3x" as Address;
-const PAD = "0x1111111111111111111111111111111111111111" as const;
+const KEY = `0x${"11".repeat(32)}` as const;
+const OTHER_KEY = `0x${"22".repeat(32)}` as const;
+const PAD = privateKeyToAccount(KEY).address;
 const refused = (reason: string) => ({ ok: false as const, reason, message: reason });
 const USDC = 1_000_000n;
 const T0 = 1_800_000_000;
 const DAY = 86_400;
 
-type Step = "openPolicy" | "accept" | "payPremium" | "fileClaim" | "claim" | "refund";
+type Step = "openPolicy" | "accept" | "payPremium" | "fileClaim" | "challenge" | "claim" | "refund";
 function stubChain(fail: Partial<Record<Step, string>> = {}) {
   const calls: string[] = [];
   const hashes: Uint8Array[] = [];
@@ -27,7 +30,7 @@ function stubChain(fail: Partial<Record<Step, string>> = {}) {
     async accept() { return ok("accept"); },
     async payPremium() { return ok("payPremium"); },
     async fileClaim(_d, h) { hashes.push(h); return ok("fileClaim"); },
-    async challenge() { throw new Error("not used by the step"); },
+    async challenge() { return ok("challenge"); },
     async claim() { return ok("claim"); },
     async refund() { return ok("refund"); },
   };
@@ -47,7 +50,7 @@ function stubPeaq(failFirst = 0) {
 const policy = (over: Partial<Policy> = {}): Policy => ({
   id: "pol-1", pad: PAD, coverage: USDC, premium: 20_000n, grade: "AAA", termStart: T0, termEnd: T0 + DAY, status: "quoted", ...over,
 });
-const beat = (sentAt: number): Heartbeat => ({ machineId: "349", sentAt, signature: "0xabc", address: PAD });
+const beat = (sentAt: number, key = KEY): Promise<Heartbeat> => signHeartbeat("349", sentAt, key);
 const deps = (chain: InsuranceChain, peaq: PeaqClient) => ({ chain, peaq, padMachineId: 349n, padAddress: PAD });
 const O = (nowSecs: number, lastBeat: Heartbeat | null) => ({ nowSecs, lastBeat, reviewSecs: 600 });
 
@@ -117,7 +120,7 @@ test("active with fresh beats does nothing, however often it is called", async (
   const { peaq, events } = stubPeaq();
   const active = policy({ status: "active", deal: DEAL });
   for (const now of [T0 + 100, T0 + 3_000, T0 + OUTAGE_AFTER_SECS]) {
-    const p = await insuranceStep(deps(chain, peaq), active, O(now, beat(now - OUTAGE_AFTER_SECS)));
+    const p = await insuranceStep(deps(chain, peaq), active, O(now, await beat(now - OUTAGE_AFTER_SECS)));
     assert.deepEqual(p, active);
   }
   const none = await insuranceStep(deps(chain, peaq), active, O(T0 + 5_000, null)); // no beat at all: no proof, no claim
@@ -131,7 +134,7 @@ test("outage: active -> claimed with the outage hash, a peaq event whose value i
   const { peaq, events } = stubPeaq();
   const last = T0 + 1_000;
   const now = last + OUTAGE_AFTER_SECS + 1;
-  const p = await insuranceStep(deps(chain, peaq), policy({ status: "active", deal: DEAL }), O(now, beat(last)));
+  const p = await insuranceStep(deps(chain, peaq), policy({ status: "active", deal: DEAL }), O(now, await beat(last)));
   assert.equal(p.status, "claimed");
   assert.deepEqual(calls, ["fileClaim"]);
   assert.equal(hashes[0]!.length, 32);
@@ -151,7 +154,7 @@ test("a failed claim filing keeps the policy active; no peaq event is written", 
   const { chain } = stubChain({ fileClaim: "DeadlinePassed" });
   const { peaq, events } = stubPeaq();
   const before = policy({ status: "active", deal: DEAL });
-  const p = await insuranceStep(deps(chain, peaq), before, O(T0 + 10_000, beat(T0)));
+  const p = await insuranceStep(deps(chain, peaq), before, O(T0 + 10_000, await beat(T0)));
   assert.equal(p.status, "active");
   assert.match(p.reason ?? "", /DeadlinePassed/);
   assert.deepEqual({ ...p, reason: undefined }, { ...before, reason: undefined });
@@ -162,15 +165,15 @@ test("a peaq failure after filing stays claimed and the event is retried once on
   const { chain, calls } = stubChain();
   const { peaq, events } = stubPeaq(1);
   const now = T0 + 10_000;
-  const p1 = await insuranceStep(deps(chain, peaq), policy({ status: "active", deal: DEAL }), O(now, beat(T0)));
+  const p1 = await insuranceStep(deps(chain, peaq), policy({ status: "active", deal: DEAL }), O(now, await beat(T0)));
   assert.equal(p1.status, "claimed");
   assert.equal(p1.outage?.peaqEventTx, undefined);
   assert.match(p1.reason ?? "", /PEAQ_SUBMIT_FAILED/);
-  const p2 = await insuranceStep(deps(chain, peaq), p1, O(now + 10, beat(T0)));
+  const p2 = await insuranceStep(deps(chain, peaq), p1, O(now + 10, await beat(T0)));
   assert.equal(p2.status, "claimed"); // window not passed
   assert.equal(p2.outage?.peaqEventTx, "0xoutage");
   assert.equal(p2.reason, undefined);
-  const p3 = await insuranceStep(deps(chain, peaq), p2, O(now + 20, beat(T0)));
+  const p3 = await insuranceStep(deps(chain, peaq), p2, O(now + 20, await beat(T0)));
   assert.deepEqual(p3, p2);
   assert.equal(events.length, 1);
   assert.deepEqual(calls, ["fileClaim"]);
@@ -180,13 +183,13 @@ test("claimed: nothing before the review window, then claim -> paid, and paid is
   const { chain, calls } = stubChain();
   const { peaq } = stubPeaq();
   const now = T0 + 10_000;
-  const p1 = await insuranceStep(deps(chain, peaq), policy({ status: "active", deal: DEAL }), O(now, beat(T0)));
-  const early = await insuranceStep(deps(chain, peaq), p1, O(now + 599, beat(T0)));
+  const p1 = await insuranceStep(deps(chain, peaq), policy({ status: "active", deal: DEAL }), O(now, await beat(T0)));
+  const early = await insuranceStep(deps(chain, peaq), p1, O(now + 599, await beat(T0)));
   assert.equal(early.status, "claimed");
-  const paid = await insuranceStep(deps(chain, peaq), early, O(now + 600, beat(T0)));
+  const paid = await insuranceStep(deps(chain, peaq), early, O(now + 600, await beat(T0)));
   assert.equal(paid.status, "paid");
   assert.equal(paid.payoutSig, "claim");
-  const again = await insuranceStep(deps(chain, peaq), paid, O(now + 9_999, beat(T0)));
+  const again = await insuranceStep(deps(chain, peaq), paid, O(now + 9_999, await beat(T0)));
   assert.deepEqual(again, paid);
   assert.deepEqual(calls, ["fileClaim", "claim"]);
 });
@@ -194,12 +197,12 @@ test("claimed: nothing before the review window, then claim -> paid, and paid is
 test("a failed payout keeps claimed and the reason; a retry pays once", async () => {
   const { peaq } = stubPeaq();
   const now = T0 + 10_000;
-  const claimedP = await insuranceStep(deps(stubChain().chain, peaq), policy({ status: "active", deal: DEAL }), O(now, beat(T0)));
-  const p1 = await insuranceStep(deps(stubChain({ claim: "ReviewWindowOpen" }).chain, peaq), claimedP, O(now + 700, beat(T0)));
+  const claimedP = await insuranceStep(deps(stubChain().chain, peaq), policy({ status: "active", deal: DEAL }), O(now, await beat(T0)));
+  const p1 = await insuranceStep(deps(stubChain({ claim: "ReviewWindowOpen" }).chain, peaq), claimedP, O(now + 700, await beat(T0)));
   assert.equal(p1.status, "claimed");
   assert.match(p1.reason ?? "", /ReviewWindowOpen/);
   const good = stubChain();
-  const p2 = await insuranceStep(deps(good.chain, peaq), p1, O(now + 701, beat(T0)));
+  const p2 = await insuranceStep(deps(good.chain, peaq), p1, O(now + 701, await beat(T0)));
   assert.equal(p2.status, "paid");
   assert.deepEqual(good.calls, ["claim"]);
 });
@@ -209,12 +212,12 @@ test("no outage by the end of the term: refund -> expired, once", async () => {
   const { peaq, events } = stubPeaq();
   const active = policy({ status: "active", deal: DEAL });
   const end = T0 + DAY;
-  const before = await insuranceStep(deps(chain, peaq), active, O(end - 1, beat(end - 60)));
+  const before = await insuranceStep(deps(chain, peaq), active, O(end - 1, await beat(end - 60)));
   assert.equal(before.status, "active");
-  const p = await insuranceStep(deps(chain, peaq), active, O(end, beat(end - 60)));
+  const p = await insuranceStep(deps(chain, peaq), active, O(end, await beat(end - 60)));
   assert.equal(p.status, "expired");
   assert.equal(p.refundSig, "refund");
-  assert.deepEqual((await insuranceStep(deps(chain, peaq), p, O(end + 1, beat(end - 60)))), p);
+  assert.deepEqual((await insuranceStep(deps(chain, peaq), p, O(end + 1, await beat(end - 60)))), p);
   assert.deepEqual(calls, ["refund"]);
   assert.equal(events.length, 0);
 });
@@ -223,11 +226,11 @@ test("an outage first seen after the term is a refund, not a claim; a failed ref
   const { peaq, events } = stubPeaq();
   const active = policy({ status: "active", deal: DEAL });
   const late = T0 + DAY + 10_000;
-  const bad = await insuranceStep(deps(stubChain({ refund: "TooEarly" }).chain, peaq), active, O(late, beat(T0)));
+  const bad = await insuranceStep(deps(stubChain({ refund: "TooEarly" }).chain, peaq), active, O(late, await beat(T0)));
   assert.equal(bad.status, "active");
   assert.match(bad.reason ?? "", /TooEarly/);
   const good = stubChain();
-  const ok = await insuranceStep(deps(good.chain, peaq), active, O(late, beat(T0)));
+  const ok = await insuranceStep(deps(good.chain, peaq), active, O(late, await beat(T0)));
   assert.equal(ok.status, "expired");
   assert.deepEqual(good.calls, ["refund"]);
   assert.equal(events.length, 0);
@@ -265,4 +268,63 @@ test("peaq: the outage event is activity (type 1), value = gap seconds, rawData 
   const f = await failing.submitOutageEvent(349n, o);
   assert.equal(f.ok, false);
   assert.ok(!JSON.stringify(f).includes("secret"));
+});
+
+test("valid proof: checked once (insurerCheck valid, stored beat), no challenge, paid after the window", async () => {
+  const g = stubChain();
+  const { peaq } = stubPeaq();
+  const now = T0 + 10_000;
+  const b = await beat(T0);
+  const p1 = await insuranceStep(deps(g.chain, peaq), policy({ status: "active", deal: DEAL }), O(now, b));
+  assert.deepEqual(p1.outage?.lastBeat, b);
+  assert.equal(p1.outage?.insurerCheck, undefined);
+  const p2 = await insuranceStep(deps(g.chain, peaq), p1, O(now + 10, b));
+  assert.equal(p2.status, "claimed");
+  assert.equal(p2.outage?.insurerCheck, "valid");
+  const p3 = await insuranceStep(deps(g.chain, peaq), p2, O(now + 20, b));
+  assert.deepEqual(p3, p2); // idempotent inside the window
+  const p4 = await insuranceStep(deps(g.chain, peaq), p3, O(now + 600, b));
+  assert.equal(p4.status, "paid");
+  assert.deepEqual(g.calls, ["fileClaim", "claim"]);
+});
+
+async function filed(g: ReturnType<typeof stubChain>, peaq: PeaqClient, last: Heartbeat, tamper?: (p: Policy) => Policy) {
+  const p = await insuranceStep(deps(g.chain, peaq), policy({ status: "active", deal: DEAL }), O(T0 + 10_000, last));
+  return tamper ? tamper(p) : p;
+}
+
+test("forged proofs are challenged and never paid: another key's beat, a tampered gap, a tampered beat time", async () => {
+  const forgeries: [string, Heartbeat | null, ((p: Policy) => Policy) | undefined][] = [
+    ["beat signed by another key", await beat(T0, OTHER_KEY), undefined],
+    ["tampered gapSecs", null, (p) => ({ ...p, outage: { ...p.outage!, gapSecs: p.outage!.gapSecs + 5_000 } })],
+    ["tampered beat time", null, (p) => ({ ...p, outage: { ...p.outage!, lastBeat: { ...p.outage!.lastBeat, sentAt: T0 - 9_000 } } })],
+  ];
+  for (const [name, forged, tamper] of forgeries) {
+    const g = stubChain();
+    const { peaq } = stubPeaq();
+    const p1 = await filed(g, peaq, forged ?? (await beat(T0)), tamper);
+    const p2 = await insuranceStep(deps(g.chain, peaq), p1, O(T0 + 10_010, forged ?? (await beat(T0))));
+    assert.equal(p2.status, "challenged", name);
+    assert.equal(p2.challengeSig, "challenge", name);
+    assert.equal(p2.outage?.insurerCheck, "invalid", name);
+    // later steps do nothing, nothing is paid, challenge is not repeated
+    const p3 = await insuranceStep(deps(g.chain, peaq), p2, O(T0 + 99_000, null));
+    assert.deepEqual(p3, p2, name);
+    assert.deepEqual(g.calls, ["fileClaim", "challenge"], name);
+  }
+});
+
+test("a failed challenge keeps claimed + invalid, retries the challenge, and never pays", async () => {
+  const bad = stubChain({ challenge: "NotChallengeable" });
+  const { peaq } = stubPeaq();
+  const p1 = await filed(bad, peaq, await beat(T0, OTHER_KEY));
+  const p2 = await insuranceStep(deps(bad.chain, peaq), p1, O(T0 + 11_000, null)); // window long passed
+  assert.equal(p2.status, "claimed");
+  assert.equal(p2.outage?.insurerCheck, "invalid");
+  assert.match(p2.reason ?? "", /NotChallengeable/);
+  const good = stubChain();
+  const p3 = await insuranceStep(deps(good.chain, peaq), p2, O(T0 + 11_001, null));
+  assert.equal(p3.status, "challenged");
+  assert.deepEqual(good.calls, ["challenge"]);
+  assert.ok(!bad.calls.includes("claim") && !good.calls.includes("claim"));
 });

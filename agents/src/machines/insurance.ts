@@ -12,7 +12,7 @@ import { ata, deals, safeSend, type DealContext } from "@deal/chain";
 import { getCreateAssociatedTokenIdempotentInstructionAsync, getTransferCheckedInstruction, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import type { Address, Instruction, TransactionSigner } from "@solana/kit";
 import { chargeDealId } from "./charge.ts";
-import { outageHash, outageProof, OUTAGE_AFTER_SECS, type Heartbeat } from "./heartbeat.ts";
+import { outageHash, outageProof, OUTAGE_AFTER_SECS, verifyOutageProof, type Heartbeat } from "./heartbeat.ts";
 import type { PeaqClient } from "./peaq.ts";
 import type { Grade } from "./score.ts";
 
@@ -44,7 +44,15 @@ export type Policy = {
   id: string; pad: string; coverage: bigint; premium: bigint; grade: Grade; termStart: number; termEnd: number;
   status: "quoted" | "active" | "claimed" | "paid" | "expired" | "challenged"; deal?: Address; openSig?: string;
   acceptSig?: string; premiumSig?: string; claimSig?: string; payoutSig?: string; refundSig?: string;
-  outage?: { proofHash: string; detectedAt: number; gapSecs: number; peaqEventTx?: string };
+  outage?: {
+    proofHash: string; detectedAt: number; gapSecs: number; peaqEventTx?: string;
+    /** The beat the proof was built on, so anyone can rebuild the proof and recompute proofHash. */
+    lastBeat: Heartbeat;
+    /** The insurer's own check of the proof, made once before any payout. */
+    insurerCheck?: "valid" | "invalid";
+  };
+  /** The insurer challenged an invalid proof; the verifier resolves it outside the step. */
+  challengeSig?: string;
   /** Why the last step did not finish (added by #271; absent when the last step succeeded). */
   reason?: string;
 };
@@ -135,7 +143,7 @@ async function active(deps: InsuranceDeps, p: Policy, o: { nowSecs: number; last
   if (!r.ok) return failed(p, `claim: ${r.reason}`);
   const { reason: _r, ...rest } = p;
   const filed: Policy = {
-    ...rest, status: "claimed", claimSig: r.signature, outage: { proofHash: bytesToHex(hash), detectedAt: o.nowSecs, gapSecs: proof.gapSecs },
+    ...rest, status: "claimed", claimSig: r.signature, outage: { proofHash: bytesToHex(hash), detectedAt: o.nowSecs, gapSecs: proof.gapSecs, lastBeat: beat },
   };
   return recordOutageEvent(deps, filed);
 }
@@ -153,10 +161,26 @@ async function recordOutageEvent(deps: InsuranceDeps, p: Policy): Promise<Policy
 async function claimed(deps: InsuranceDeps, p0: Policy, o: { nowSecs: number; reviewSecs: number }): Promise<Policy> {
   if (!p0.deal || !p0.outage) return failed(p0, "a claimed policy has no deal or outage record");
   const p = await recordOutageEvent(deps, p0); // a missed event must not hold the payout back, but is retried first
-  if (o.nowSecs < p.outage!.detectedAt + o.reviewSecs) return p;
-  const r = await deps.chain.claim(p.deal!);
-  if (!r.ok) return failed(p, `payout: ${r.reason}`);
-  const { reason: _r, ...rest } = p;
+  // The insurer is the adjuster: rebuild the proof from what is stored, and pay only a proof that checks out.
+  let q = p;
+  if (!q.outage!.insurerCheck) {
+    const out = q.outage!;
+    const proof = outageProof(deps.padMachineId.toString(), q.id, out.lastBeat, out.detectedAt);
+    const same = bytesToHex(outageHash(proof)) === out.proofHash && proof.gapSecs === out.gapSecs;
+    const valid = same && (await verifyOutageProof(proof, deps.padAddress, { outageAfterSecs: OUTAGE_AFTER_SECS, nowSecs: o.nowSecs }));
+    q = { ...q, outage: { ...out, insurerCheck: valid ? "valid" : "invalid" } };
+  }
+  if (q.outage!.insurerCheck === "invalid") {
+    if (q.challengeSig) return { ...q, status: "challenged" };
+    const c = await deps.chain.challenge(q.deal!);
+    if (!c.ok) return failed(q, `challenge: ${c.reason}`);
+    const { reason: _c, ...rest } = q;
+    return { ...rest, status: "challenged", challengeSig: c.signature };
+  }
+  if (o.nowSecs < q.outage!.detectedAt + o.reviewSecs) return q;
+  const r = await deps.chain.claim(q.deal!);
+  if (!r.ok) return failed(q, `payout: ${r.reason}`);
+  const { reason: _r, ...rest } = q;
   return { ...rest, status: "paid", payoutSig: r.signature };
 }
 
