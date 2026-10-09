@@ -7,3 +7,4 @@ export * from "./autonomy.ts";
 export * from "./decide-llm.ts";
 export * from "./ticker.ts";
 export * from "./network.ts";
+export * from "./heartbeat.ts";
