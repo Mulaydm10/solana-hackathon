@@ -154,11 +154,11 @@ export const fromStoredPolicy = (p: StoredPolicy): Policy => ({ ...p, coverage: 
 
 // ---------- the tick ----------
 
-export const INSURANCE = { coverage: 1_000_000n, termSecs: DAY, reviewSecs: 60 } as const;
+export const INSURANCE = { coverage: 1_000_000n, termSecs: DAY, reviewSecs: 3600 } as const;
 /** What the simulated shop pays per simulated km of a delivery: whole cents (peaq revenue events refuse a fraction of a cent). */
 export const JOB_RATE_PER_KM = 100_000n;
-/** About 14 days of blocks on agung at any block time above ~5 s; later ticks read only the blocks since the last read. */
-const LOOKBACK_BLOCKS = 250_000n;
+/** All our machines were registered after this agung block, so the first score read starts here; later ticks read only new blocks. */
+export const SCORE_FROM_BLOCK = 11_000_000n;
 const KEEP_EVENTS_SECS = 30 * DAY;
 
 export type NetworkDeps = {
@@ -174,6 +174,8 @@ export type NetworkDeps = {
   readEvents(machineId: bigint, fromBlock: bigint): ReturnType<typeof readMachineEvents>;
   /** Set only when ANTHROPIC_API_KEY is: Claude chooses among the eligible pads. */
   llm?: LlmFn;
+  /** Where the first score read starts (default SCORE_FROM_BLOCK; env PEAQ_SCORE_FROM_BLOCK). */
+  scoreFromBlock?: bigint;
   /** The robot mandate's payee list, read from chain. */
   allowedPayees(): Promise<Address[]>;
 };
@@ -201,7 +203,7 @@ async function refreshScores(d: NetworkDeps, now: number): Promise<StepResult> {
   const toBlock: Record<string, string> = { ...(prev?.toBlock ?? {}) };
   const failures: string[] = [];
   await Promise.all(machines.map(async ([role, id]) => {
-    const from = toBlock[role] !== undefined ? BigInt(toBlock[role]!) + 1n : head > LOOKBACK_BLOCKS ? head - LOOKBACK_BLOCKS : 0n;
+    const from = toBlock[role] !== undefined ? BigInt(toBlock[role]!) + 1n : d.scoreFromBlock ?? SCORE_FROM_BLOCK;
     const r = await d.readEvents(id, from).catch((e: unknown) => ({ ok: false as const, reason: "log-read-failed", message: errMsg(e) }));
     if (!r.ok) { failures.push(`${role}: ${r.reason}`); return; }
     const have = new Map((events[role] ?? []).map((e) => [e.index, e]));
@@ -245,8 +247,10 @@ async function insuranceStepAll(d: NetworkDeps, now: number): Promise<StepResult
       const lastBeat = (await verifiedBeats(d.store, pad)).at(-1) ?? null;
       const mine = () => d.store.policies().then((l) => l.filter((p) => p.pad === pad.address).sort((a, b) => b.termStart - a.termStart));
       let cur = (await mine()).find((p) => LIVE.has(p.status));
-      // At most two steps per pad per tick: the current policy, then (if it just ended and the pad is up) a fresh quote.
-      for (let i = 0; i < 2; i++) {
+      // Up to three calls per pad per tick while the policy moves on: filing a claim and the insurer's own proof check
+      // (and a challenge of a forged proof) happen in the same tick, inside the on-chain review window. The payout comes
+      // on a later tick, once the window has passed. A policy that just ended is followed by a fresh quote if the pad is up.
+      for (let i = 0; i < 3; i++) {
         if (cur && cur.status === "quoted" && !cur.deal && now >= cur.termEnd) {
           // never opened and already over: close it so a fresh policy can be quoted
           await d.store.putPolicy({ ...cur, status: "expired", reason: "the term ended before the policy could be opened" });
@@ -263,11 +267,14 @@ async function insuranceStepAll(d: NetworkDeps, now: number): Promise<StepResult
           await d.store.putPolicy(toStoredPolicy(quoted));
           cur = toStoredPolicy(quoted);
         }
+        const before = cur;
         const next = await insuranceStep(deps, fromStoredPolicy(cur), { nowSecs: now, lastBeat, reviewSecs: INSURANCE.reviewSecs });
-        await d.store.putPolicy(toStoredPolicy(next));
+        const stored = toStoredPolicy(next);
+        await d.store.putPolicy(stored);
         if (next.reason) { failures.push(`${pad.role}: ${next.reason}`); break; }
-        if (LIVE.has(next.status)) break;
-        cur = undefined;
+        if (!LIVE.has(next.status)) { cur = undefined; continue; }
+        if (next.status === before.status && JSON.stringify(stored.outage) === JSON.stringify(before.outage)) break; // nothing moved
+        cur = stored;
       }
     } catch (e) {
       failures.push(`${pad.role}: ${errMsg(e)}`);

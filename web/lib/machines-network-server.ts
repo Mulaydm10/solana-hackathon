@@ -5,7 +5,7 @@ import { chainChargeChain, chainInsuranceChain, chainJobChain, charge, readMachi
 import type { ServerEnv } from "./env";
 import { runRobotCharge, type MachineDeps, type RobotTickDeps } from "./machines";
 import { machineBlobs, robotRules, type MachineRuntime } from "./machines-server";
-import { blobNetworkStore, jsonRpcLogIo, networkPrelude, parseNetworkEnv, routeCharge, type NetworkDeps, type NetworkStore, type NotConfigured } from "./machines-network";
+import { INSURANCE, blobNetworkStore, jsonRpcLogIo, networkPrelude, parseNetworkEnv, routeCharge, type NetworkDeps, type NetworkStore, type NotConfigured } from "./machines-network";
 import { anthropicLlm } from "./robot-llm";
 
 const signerOf = (bytes: Uint8Array) => createKeyPairSignerFromBytes(bytes);
@@ -50,13 +50,14 @@ export async function networkDeps(rt: MachineRuntime, env: ServerEnv, raw: Recor
     cfg, robotMachineId, store, battery: rt.battery,
     signBeat: (pad, sentAt) => signHeartbeat(pad.machineId.toString(), sentAt, keys.peaq[pad.role]!),
     insuranceDeps: (pad) => ({
-      chain: chainInsuranceChain(rt.ctx, { insurer, pad: padSigners[pad.role]!, verifier: cfg.verifier, now, reviewSecs: 60 }),
+      chain: chainInsuranceChain(rt.ctx, { insurer, pad: padSigners[pad.role]!, verifier: cfg.verifier, now, reviewSecs: INSURANCE.reviewSecs }),
       peaq: rt.peaq, padMachineId: pad.machineId, padAddress: pad.peaqAddress,
     }),
     job,
     headBlock: () => io.blockNumber(),
     readEvents: (machineId, fromBlock) => readMachineEvents(io, registry, machineId, fromBlock),
     ...(env.ANTHROPIC_API_KEY ? { llm: anthropicLlm(env.ANTHROPIC_API_KEY) } : {}),
+    ...(/^\d+$/.test(raw.PEAQ_SCORE_FROM_BLOCK ?? "") ? { scoreFromBlock: BigInt(raw.PEAQ_SCORE_FROM_BLOCK!) } : {}),
     allowedPayees: async () => ((await robotRules(rt))?.payees ?? []).map((a) => a as Address),
   };
   return { ok: true, deps, padDeps };

@@ -26,6 +26,7 @@ const keyArr = () => JSON.stringify(Array.from(randomBytes(64)));
 type Rig = ReturnType<typeof rig>;
 async function rig(o: { failScores?: boolean; failOpenPolicy?: boolean; failJob?: boolean; battery?: StoredBattery; events?: Record<string, MachineEvent[]>; llm?: NetworkDeps["llm"] } = {}) {
   const log: string[] = [];
+  const froms: bigint[] = [];
   const keys = { pad: peaqKey(), pad2: peaqKey(), pad3: peaqKey() };
   const pads: PadCfg[] = [];
   const prices = { pad: 320_000n, pad2: 280_000n, pad3: 300_000n };
@@ -46,8 +47,8 @@ async function rig(o: { failScores?: boolean; failOpenPolicy?: boolean; failJob?
     openPolicy: async () => { log.push(`ins.open.${role}`); return o.failOpenPolicy ? { ok: false, reason: "SimulatedRefusal", message: "no" } : { ok: true, signature: `open-${role}`, deal: A[0] as never }; },
     accept: async () => { log.push(`ins.accept.${role}`); return { ok: true, signature: "acc" }; },
     payPremium: async () => { log.push(`ins.premium.${role}`); return { ok: true, signature: "prem" }; },
-    fileClaim: async () => ({ ok: true, signature: "claim" }), challenge: async () => ({ ok: true, signature: "ch" }),
-    claim: async () => ({ ok: true, signature: "pay" }), refund: async () => ({ ok: true, signature: "ref" }),
+    fileClaim: async () => ({ ok: true, signature: "claim" }), challenge: async () => { log.push(`ins.challenge.${role}`); return { ok: true, signature: "ch" }; },
+    claim: async () => { log.push(`ins.payout.${role}`); return { ok: true, signature: "pay" }; }, refund: async () => ({ ok: true, signature: "ref" }),
   });
   const jobChain: JobChain = {
     openDeal: async (id) => { log.push(`job.open.${id}`); return o.failJob ? { ok: false, reason: "ShopBroke", message: "no" } : { ok: true, signature: "jo", deal: A[1] as never }; },
@@ -59,7 +60,7 @@ async function rig(o: { failScores?: boolean; failOpenPolicy?: boolean; failJob?
     insuranceDeps: (pad) => ({ chain: insChain(pad.role), peaq, padMachineId: pad.machineId, padAddress: pad.peaqAddress }),
     job: { chain: jobChain, peaq, ledger: memoryLedger(), robotSecret: randomBytes(32), robotMachineId: 7n },
     headBlock: async () => { log.push("head"); if (o.failScores) throw new Error("rpc down"); return 1_000_000n; },
-    readEvents: async (id) => { log.push(`events.${id}`); return { ok: true, events: o.events?.[id.toString()] ?? [], toBlock: 1_000_000n }; },
+    readEvents: async (id, from) => { log.push(`events.${id}`); froms.push(from); return { ok: true, events: o.events?.[id.toString()] ?? [], toBlock: 1_000_000n }; },
     allowedPayees: async () => pads.map((p) => p.address),
     ...(o.llm ? { llm: o.llm } : {}),
   };
@@ -75,7 +76,7 @@ async function rig(o: { failScores?: boolean; failOpenPolicy?: boolean; failJob?
     prelude: (now) => networkPrelude(nd, now),
     route: (dec, mandate) => routeCharge(nd, dec, mandate),
   };
-  return { nd, tick, log, store, cfg, decisions, charges, battery: () => battery, keys };
+  return { nd, tick, log, froms, store, cfg, decisions, charges, battery: () => battery, keys };
 }
 
 function events(machineId: bigint, role: "good" | "none", now: number): MachineEvent[] {
@@ -379,4 +380,58 @@ test("wiring: with every v2 variable set the tick gets prelude, route and a per-
   assert.equal(typeof wired.route, "function");
   const mismatch = await withNetwork(base, rt, env, raw(A[0]!));
   assert.equal(mismatch, base, "a key that is not the network's pad falls back to v1");
+});
+
+// ---------- insurance review window vs the 30-minute tick ----------
+
+test("insurance: the outage tick files the claim AND records the insurer's check; the payout waits for the review window", async () => {
+  const r = await rig();
+  await robotTick(r.tick, T0);
+  await setPadPower(r.store, r.cfg, { pad: "pad3", online: false });
+  const detect = T0 + 3 * SLOT_SECS;
+  await networkPrelude(r.nd, detect);
+  const pad3 = r.cfg.pads[2]!.address;
+  const p = (await r.store.policies()).find((x) => x.pad === pad3)!;
+  assert.equal(p.status, "claimed");
+  assert.equal(p.outage!.insurerCheck, "valid", "checked in the same tick that filed the claim");
+  assert.equal(p.outage!.detectedAt, detect);
+  assert.ok(!r.log.includes("ins.payout.pad3"), "no payout inside the review window");
+  await networkPrelude(r.nd, detect + SLOT_SECS); // 1800 s later: still inside 3600
+  assert.ok(!r.log.includes("ins.payout.pad3"));
+  await networkPrelude(r.nd, detect + 3600);
+  assert.ok(r.log.includes("ins.payout.pad3"), "paid on a tick >= detectedAt + 3600");
+  assert.equal((await r.store.policies()).find((x) => x.pad === pad3 && x.id === p.id)!.status, "paid");
+});
+
+test("insurance: a forged outage proof is challenged in the same tick and never paid", async () => {
+  const r = await rig();
+  await robotTick(r.tick, T0);
+  const pad = r.cfg.pads[2]!;
+  const pol = (await r.store.policies()).find((x) => x.pad === pad.address)!;
+  const beat = (await verifiedBeats(r.store, pad))[0]!;
+  await r.store.putPolicy({ ...pol, status: "claimed", claimSig: "claim", outage: { proofHash: "00".repeat(32), detectedAt: T0 + 100, gapSecs: 5000, lastBeat: beat, peaqEventTx: "0xout" } });
+  await networkPrelude(r.nd, T0 + SLOT_SECS);
+  assert.ok(r.log.includes("ins.challenge.pad3"));
+  const after = (await r.store.policies()).find((x) => x.id === pol.id)!;
+  assert.equal(after.status, "challenged");
+  assert.equal(after.outage!.insurerCheck, "invalid");
+  await networkPrelude(r.nd, T0 + 10 * SLOT_SECS);
+  assert.ok(!r.log.includes("ins.payout.pad3"));
+});
+
+// ---------- first score read ----------
+
+test("scores: the first read starts at block 11,000,000 (or the override) and later reads only new blocks", async () => {
+  const { SCORE_FROM_BLOCK } = await import("../lib/machines-network.ts");
+  assert.equal(SCORE_FROM_BLOCK, 11_000_000n);
+  const r = await rig();
+  await networkPrelude(r.nd, T0);
+  assert.deepEqual(r.froms.map(String), Array(4).fill("11000000"));
+  r.froms.length = 0;
+  await networkPrelude(r.nd, T0 + SLOT_SECS);
+  assert.deepEqual(r.froms.map(String), Array(4).fill("1000001"), "incremental from the cached toBlock");
+  const o = await rig();
+  o.nd.scoreFromBlock = 12_345_678n;
+  await networkPrelude(o.nd, T0);
+  assert.deepEqual(o.froms.map(String), Array(4).fill("12345678"));
 });
