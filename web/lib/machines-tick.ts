@@ -6,7 +6,7 @@ import { robotTick, type RobotTickDeps } from "./machines";
 
 const json = (body: unknown, status: number) => Response.json(body, { status });
 
-function secretMatches(header: string | null, secret: string): boolean {
+export function secretMatches(header: string | null, secret: string): boolean {
   const given = Buffer.from(header?.startsWith("Bearer ") ? header.slice(7) : "");
   const want = Buffer.from(secret);
   return given.length === want.length && timingSafeEqual(given, want); // a different length is a mismatch without comparing
@@ -20,7 +20,7 @@ export async function handleTick(req: Request, raw: Record<string, string | unde
   if (!secretMatches(req.headers.get("authorization"), secret)) return json({ ok: false, reason: "UNAUTHORIZED", message: "wrong or missing tick credentials" }, 401);
   try {
     const r = await robotTick(await makeDeps(env.env), nowSecs);
-    return json({ ok: true, decision: r.decision, battery: { ...r.battery, simulated: true }, ...(r.duplicate ? { duplicate: true } : {}), ...(r.charge ? { charge: r.charge } : {}) }, 200);
+    return json({ ok: true, decision: r.decision, battery: { ...r.battery, simulated: true }, ...(r.duplicate ? { duplicate: true } : {}), ...(r.charge ? { charge: r.charge } : {}), ...(r.network !== undefined ? { network: r.network } : {}) }, 200);
   } catch (e) {
     console.error("[machines] tick failed:", e instanceof Error ? e.name : "error");
     return json({ ok: false, reason: "MACHINES_FAILED", message: "the robot's tick could not complete" }, 502);

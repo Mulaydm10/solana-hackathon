@@ -2,7 +2,9 @@
 // storage), never hard-coded; MCR is shown only as the API reports it. Server only; nothing here is a secret.
 import type { ServerEnv } from "./env";
 import { displayBattery, totals, usdc, type ChargeView, type RobotDecision } from "./machines";
-import { machineRuntime, robotRules } from "./machines-server";
+import { machineBlobs, machineRuntime, robotRules } from "./machines-server";
+import { blobNetworkStore, parseNetworkEnv } from "./machines-network";
+import { networkStatus, type NetworkStatus, type NotConfiguredStatus } from "./machines-network-status";
 
 export type MachineCard = { role: "robot" | "pad"; name: string; machineId: string; wallet: string; mcr: { status: string; score?: number } | { unavailable: string } };
 export type MachineStatus = {
@@ -16,15 +18,27 @@ export type MachineStatus = {
   /** Simulated: advanced to now for display, never stored. */
   battery: ReturnType<typeof displayBattery>;
   decisions: RobotDecision[];
-};
+} & Partial<Omit<NetworkStatus, "v2">> & { v2: NetworkStatus["v2"] | NotConfiguredStatus["v2"] | { configured: true; error: string } };
 
-export async function machineStatus(env: ServerEnv, nowSecs = Math.floor(Date.now() / 1000)): Promise<MachineStatus> {
+export async function machineStatus(env: ServerEnv, nowSecs = Math.floor(Date.now() / 1000), raw: Record<string, string | undefined> = process.env): Promise<MachineStatus> {
   const rt = await machineRuntime(env);
   const [rules, history, stored, decisions, robotMcr, padMcr] = await Promise.all([
     robotRules(rt).catch(() => null), rt.history.list(), rt.battery.get(), rt.decisions.list(), rt.peaq.queryMcr(rt.robotMachineId), rt.peaq.queryMcr(rt.padMachineId),
   ]);
   const mcr = (r: typeof robotMcr): MachineCard["mcr"] => (r.ok ? { status: r.status, ...(r.score !== undefined ? { score: r.score } : {}) } : { unavailable: r.message });
+  // peaq v2 (#273): the network, scores, insurance and earnings, when every v2 variable is set; otherwise which part is not.
+  const net = parseNetworkEnv(raw);
+  let v2: Partial<Omit<NetworkStatus, "v2">> & Pick<MachineStatus, "v2"> = { v2: net.ok ? { configured: true, error: "the pad network was not read" } : { configured: false, missing: net.missing } };
+  if (net.ok) {
+    try {
+      v2 = await networkStatus(blobNetworkStore(machineBlobs(env, raw)), net.cfg, history, nowSecs);
+    } catch (e) {
+      console.error("[machines] network status failed:", e instanceof Error ? e.name : "error");
+      v2 = { v2: { configured: true, error: "the pad network could not be read" } };
+    }
+  }
   return {
+    ...v2,
     deployment: rt.deployment,
     explorerTx: rt.explorerTx ?? null,
     mission: rt.mission,
