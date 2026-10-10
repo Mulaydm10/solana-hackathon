@@ -25,7 +25,20 @@ export function v2Of(s: MachineStatus): Configured | null {
   return s.v2.configured && s.network && s.scores && s.insurance && s.earnings ? (s as unknown as Configured) : null;
 }
 
-function Policy({ p, peaqTx }: { p: NetworkStatus["insurance"]["policies"][number]; peaqTx: (h: string) => string | null }) {
+/** A step failure in plain words; the code stays visible for whoever debugs it. Every failed step is retried on the next tick. */
+export function plainNote(reason: string): string {
+  const m = /^(open|accept|premium|claim|challenge|payout|refund|peaq outage event): (.+)$/.exec(reason);
+  if (!m) return reason;
+  const what: Record<string, string> = {
+    open: "the insurer could not open the policy", accept: "the pad could not accept the policy",
+    premium: "the pad could not pay the premium yet", claim: "the pad could not file its claim",
+    challenge: "the insurer could not send its challenge", payout: "the payout could not be claimed yet",
+    refund: "the unused cover could not be refunded yet", "peaq outage event": "the outage event could not be written to peaq yet",
+  };
+  return `${what[m[1]!]} (${m[2]}); retried on the next tick`;
+}
+
+function Policy({ p, padName, peaqTx }: { p: NetworkStatus["insurance"]["policies"][number]; padName: string; peaqTx: (h: string) => string | null }) {
   const rows: { tone: string; tag: string; done: boolean; body: React.ReactNode }[] = [
     { tone: "accent", tag: "Open", done: !!p.openSig, body: <>Insurer opened the policy {p.openSig && <Link href={SOLANA_TX(p.openSig)} text={short(p.openSig)} />}</> },
     { tone: "accent", tag: "Premium", done: !!p.premiumSig, body: <>Premium of {p.premium} USDC paid {p.premiumSig && <Link href={SOLANA_TX(p.premiumSig)} text={short(p.premiumSig)} />}</> },
@@ -35,15 +48,16 @@ function Policy({ p, peaqTx }: { p: NetworkStatus["insurance"]["policies"][numbe
     rows.push({ tone: p.outage.insurerCheck === "invalid" ? "crit" : "ok", tag: "Insurer check", done: !!p.outage.insurerCheck, body: <>{p.outage.insurerCheck ? `The insurer's check of the outage proof: ${p.outage.insurerCheck}` : "The insurer has not checked the proof yet"}</> });
   }
   if (p.claimSig) rows.push({ tone: "accent", tag: "Claim", done: true, body: <>Claim filed <Link href={SOLANA_TX(p.claimSig)} text={short(p.claimSig)} /></> });
+  if (p.challengeSig) rows.push({ tone: "crit", tag: "Challenge", done: true, body: <>The proof did not check out: the insurer challenged the claim and nothing is paid unless the verifier rules for the pad <Link href={SOLANA_TX(p.challengeSig)} text={short(p.challengeSig)} /></> });
   if (p.payoutSig) rows.push({ tone: "ok", tag: "Payout", done: true, body: <>Coverage of {p.coverage} USDC paid out <Link href={SOLANA_TX(p.payoutSig)} text={short(p.payoutSig)} /></> });
   if (p.refundSig) rows.push({ tone: "ok", tag: "Refund", done: true, body: <>No outage: the unused cover was refunded <Link href={SOLANA_TX(p.refundSig)} text={short(p.refundSig)} /></> });
   return (
     <article className="agent-card" data-testid="policy">
-      <span className="eyebrow-mono">{p.pad} · {p.status} · {when(p.termStart)} to {when(p.termEnd)}</span>
+      <span className="eyebrow-mono">{padName} · {p.status} · {when(p.termStart)} to {when(p.termEnd)}</span>
       <dl className="mandate">
         <dt>Coverage</dt><dd>{p.coverage} USDC</dd>
         <dt>Premium</dt><dd>{p.premium} USDC, priced at grade {p.grade}</dd>
-        {p.reason && <><dt>Note</dt><dd>{p.reason}</dd></>}
+        {p.reason && <><dt>Note</dt><dd>{plainNote(p.reason)}</dd></>}
       </dl>
       <ol className="feed">
         {rows.map((r, i) => <li key={i} className={r.done ? `tone-${r.tone}` : "tone-idle"} style={r.done ? undefined : { opacity: 0.5 }}><span className="feed-tag">{r.tag}</span><span>{r.body}</span></li>)}
@@ -64,7 +78,7 @@ export function NetworkSections({ s, v2, peaqTx }: { s: MachineStatus; v2: Confi
           <li key={n.role} className="agent-card" data-testid={`pad-${n.role}`}>
             <div className="agent-top">
               <span className="agent-avatar" aria-hidden>P</span>
-              <div><strong className="agent-role">{n.name}</strong><code>peaq machine {n.machineId}</code></div>
+              <div><strong className="agent-role" style={{ display: "block" }}>{n.name}</strong><code>peaq machine {n.machineId}</code></div>
               <span className="agent-status">{n.online ? "online (simulated)" : "offline (simulated)"}</span>
             </div>
             <dl className="mandate">
@@ -82,7 +96,7 @@ export function NetworkSections({ s, v2, peaqTx }: { s: MachineStatus; v2: Confi
       <h2>Insurance</h2>
       <div data-testid="insurance">
         <p className="fine">Parametric cover for the robot against a pad outage. Outages are simulated; the premiums, claims and payouts are real devnet transactions.</p>
-        {v2.insurance.policies.length === 0 ? <p className="fine">No policies yet.</p> : v2.insurance.policies.map((p) => <Policy key={p.id} p={p} peaqTx={peaqTx} />)}
+        {v2.insurance.policies.length === 0 ? <p className="fine">No policies yet.</p> : v2.insurance.policies.map((p) => <Policy key={p.id} p={p} padName={v2.network.find((n) => n.role === p.pad)?.name ?? p.pad} peaqTx={peaqTx} />)}
       </div>
 
       <h2>The robot&apos;s earnings</h2>
