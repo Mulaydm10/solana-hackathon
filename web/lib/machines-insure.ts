@@ -70,14 +70,15 @@ export const INSURE_HONESTY =
   "The score reads real agung (peaq testnet) events; the quote is a price, not a binding policy.";
 
 /** The machine-readable adapter description. `origin` is the site's origin, e.g. https://fiducia-orpin.vercel.app. */
-export function insureManifest(origin: string, payTo?: string) {
+/** `asset`: the mint the 402 asks for (the site's DEAL_MINT), so a machine reading the manifest pays the right token. */
+export function insureManifest(origin: string, payTo?: string, asset: string = USDC_DEVNET) {
   return {
     name: "Fiducia Insure",
     serviceType: "insurance.downtime-quote",
     description: "A downtime-insurance quote for any bonded peaq machine: score and grade from its agung events, premium for 1.00 USDC of cover over 24 h.",
     price: { amount: usdc2(INSURE_PRICE), baseUnits: INSURE_PRICE.toString(), currency: "USDC", perCall: true },
     rail: "x402 exact, Solana devnet, test USDC",
-    payment: { scheme: "exact", network: SOLANA_DEVNET, asset: USDC_DEVNET, amount: INSURE_PRICE.toString(), ...(payTo ? { payTo } : {}), noAnswerNoCharge: true },
+    payment: { scheme: "exact", network: SOLANA_DEVNET, asset, amount: INSURE_PRICE.toString(), ...(payTo ? { payTo } : {}), noAnswerNoCharge: true },
     endpoint: { method: "POST", url: `${origin}${INSURE_PATH}`, manifest: `${origin}${MANIFEST_PATH}` },
     input: {
       type: "object", required: ["machineId"], additionalProperties: false,
@@ -110,19 +111,22 @@ export type InsureCall =
  */
 export async function callInsure(
   payer: TransactionSigner, url: string, machineId: bigint,
-  opts: { payTo?: string; rpcUrl?: string; fetch?: Fetch } = {},
+  opts: { payTo?: string; asset?: string; rpcUrl?: string; fetch?: Fetch } = {},
 ): Promise<InsureCall> {
   const f: Fetch = opts.fetch ?? ((u, i) => fetch(u, i));
   try {
     let payTo = opts.payTo;
-    if (!payTo) {
+    let asset = opts.asset;
+    if (!payTo || !asset) {
       const m = await f(new URL(MANIFEST_PATH, url).toString());
-      payTo = ((await m.json().catch(() => undefined)) as { payment?: { payTo?: string } } | undefined)?.payment?.payTo;
+      const pay = ((await m.json().catch(() => undefined)) as { payment?: { payTo?: string; asset?: string } } | undefined)?.payment;
+      payTo ??= pay?.payTo;
+      asset ??= pay?.asset;
       if (!payTo) return { ok: false, reason: "NO_PAYEE", message: "no payee given and the manifest names none" };
     }
     const r = await payAndCall(
       url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ machineId: machineId.toString() }) },
-      payer, { network: SOLANA_DEVNET, asset: USDC_DEVNET, payTo, maxAmount: INSURE_PRICE }, { rpcUrl: opts.rpcUrl, fetch: f },
+      payer, { network: SOLANA_DEVNET, asset: asset ?? USDC_DEVNET, payTo, maxAmount: INSURE_PRICE }, { rpcUrl: opts.rpcUrl, fetch: f },
     );
     if (!r.ok) return { ok: false, reason: r.reason, message: r.message, status: r.status };
     if (!isQuote(r.body)) return { ok: false, reason: "BAD_ANSWER", message: "the service answered without a quote" };
