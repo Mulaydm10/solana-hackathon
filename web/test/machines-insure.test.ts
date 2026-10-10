@@ -152,3 +152,9 @@ test("callInsure: a seller that does not ask for payment -> refusal value", asyn
   const r = await callInsure(payer, URL_, 349n, { payTo: PAYEE, fetch: async () => Response.json({}, { status: 200 }) });
   assert.equal(r.ok, false);
 });
+
+test("manifest names the configured mint, and a machine following it pays that mint", async () => {
+  const MINT = "91TuVptwV9MjAowMtrLQB3Qs5VmMWA5uzxng1NcJH6iX";
+  assert.equal(insureManifest("https://site.example", PAYEE, MINT).payment.asset, MINT);
+  assert.equal(insureManifest("https://site.example", PAYEE).payment.asset, USDC_DEVNET);
+});
