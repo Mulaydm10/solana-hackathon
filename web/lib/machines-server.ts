@@ -6,6 +6,7 @@ import { get as blobGet, put as blobPut } from "@vercel/blob";
 import {
   appendTransactionMessageInstructions, compileTransaction, createClient, createKeyPairSignerFromBytes, createSolanaRpc, createTransactionMessage,
   getBase64EncodedWireTransaction, pipe, setTransactionMessageFeePayer, setTransactionMessageLifetimeUsingBlockhash, type Address,
+  type TransactionSigner,
 } from "@solana/kit";
 import { solanaRpc } from "@solana/kit-plugin-rpc";
 import { signer as signerPlugin } from "@solana/kit-plugin-signer";
@@ -27,6 +28,8 @@ const blobApi: BlobApi = {
 export type MachineRuntime = {
   deps: MachineDeps;
   ctx: DealContext;
+  /** The signer ctx's client pays fees with: reuse it in any transaction the robot signs (a second instance for the same address is refused). */
+  robotSigner: TransactionSigner;
   peaq: PeaqClient;
   history: ChargeHistory;
   battery: BatteryStore;
@@ -91,7 +94,7 @@ export function machineRuntime(env: ServerEnv, raw: Record<string, string | unde
       padId: `pad:${padMachineId}`, robotId: `robot:${robotMachineId}`, ledger, history,
       charge: (req) => charge({ chain, peaq, ledger, padSecret, padPublic, robotMachineId, padMachineId }, req),
     };
-    return { deps, ctx, peaq, history, battery, decisions, mission, robot: robot.address, pad: pad.address, robotMachineId, padMachineId, deployment: env.PEAQ_DEPLOYMENT!, explorerTx: env.PEAQ_EXPLORER_TX_URL };
+    return { deps, ctx, robotSigner: robot, peaq, history, battery, decisions, mission, robot: robot.address, pad: pad.address, robotMachineId, padMachineId, deployment: env.PEAQ_DEPLOYMENT!, explorerTx: env.PEAQ_EXPLORER_TX_URL };
   })();
   cached = { key, rt };
   rt.catch(() => { if (cached?.rt === rt) cached = undefined; });
