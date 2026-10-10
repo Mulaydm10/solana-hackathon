@@ -49,3 +49,9 @@ test("v1 status: v1 page plus one not-configured line, no v2 sections", () => {
   assert.ok(h.includes('data-testid="machine-rules"') && h.includes('data-testid="charge"'));
   assert.ok(!/mainnet/i.test(h));
 });
+
+test("plainNote: step failures read as plain words and keep the code", async () => {
+  const { plainNote } = await import("../app/machines/machines-v2");
+  assert.equal(plainNote("premium: CHAIN_ERROR"), "the pad could not pay the premium yet (CHAIN_ERROR); retried on the next tick");
+  assert.equal(plainNote("the term ended before the policy could be opened"), "the term ended before the policy could be opened");
+});
