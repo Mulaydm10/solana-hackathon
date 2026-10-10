@@ -16,7 +16,8 @@ export async function networkDeps(rt: MachineRuntime, env: ServerEnv, raw: Recor
   const parsed = parseNetworkEnv(raw);
   if (!parsed.ok) return parsed;
   const { cfg, keys } = parsed;
-  const robot = await signerOf(Uint8Array.from(JSON.parse(env.ROBOT_AGENT_KEY!) as number[]));
+  // The runtime's own robot signer: ctx's client pays fees with it, and one transaction may hold only one signer per address.
+  const robot = rt.robotSigner;
   const padSigners: Record<string, TransactionSigner> = {};
   for (const p of cfg.pads) {
     padSigners[p.role] = await signerOf(keys.solana[p.role]!);
