@@ -4,6 +4,7 @@
 import { useState } from "react";
 import type { ChargeView } from "../../lib/machines";
 import type { MachineStatus } from "../../lib/machines-status";
+import { ChoiceReason, NetworkSections, v2Of } from "./machines-v2";
 
 const SOLANA_TX = (sig: string) => `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
 const SOLANA_ADDR = (a: string) => `https://explorer.solana.com/address/${a}?cluster=devnet`;
@@ -42,6 +43,7 @@ export function MachinesView({ initial }: { initial: MachineStatus }) {
   const [s, setS] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const v2 = v2Of(s);
   const peaqTx = (h: string) => (s.explorerTx ? `${s.explorerTx}${h}` : null);
 
   async function run(amount: "0.40" | "0.60") {
@@ -99,11 +101,13 @@ export function MachinesView({ initial }: { initial: MachineStatus }) {
         <p className="fine">{s.battery.levelPct}% (simulated; the battery and the driving are not real, the payments are)</p>
         {s.decisions[0] ? (
           <p data-testid="last-decision">
-            Last decision: {s.decisions[0].action === "charge" ? `charge ${s.decisions[0].kWh} kWh for ${s.decisions[0].amount} USDC` : "wait"} · {s.decisions[0].by === "claude" ? "decided by Claude (from simulated telemetry)" : s.decisions[0].by === "simulated" ? "Simulated AI (fallback rule)" : "the robot's rule"} <span className="fine">({when(s.decisions[0].at)})</span>
+            Last decision: {s.decisions[0].action === "charge" ? `charge ${s.decisions[0].kWh} kWh for ${s.decisions[0].amount} USDC` : "wait"} · {s.decisions[0].by === "claude" ? "decided by Claude (from simulated telemetry)" : s.decisions[0].by === "simulated" ? "Simulated AI (fallback rule)" : "decided by the robot"} <span className="fine">({when(s.decisions[0].at)})</span>
           </p>
         ) : <p className="fine" data-testid="last-decision">No decision yet. The robot decides every 30 minutes.</p>}
         {s.decisions[0] && <p className="fine">{s.decisions[0].reason}</p>}
       </div>
+
+      {v2 ? <NetworkSections s={s} v2={v2} peaqTx={peaqTx} /> : <p className="fine" data-testid="v2-not-configured">{s.v2.configured ? "The pad network could not be read right now, so only the single-pad demo is shown." : "The pad network is not configured on this deployment, so only the single-pad demo is shown."}</p>}
 
       <h2>Charge the robot</h2>
       <p>
@@ -124,10 +128,11 @@ export function MachinesView({ initial }: { initial: MachineStatus }) {
 
       <h2>Charges</h2>
       {s.history.length === 0 ? <p className="fine">No charges yet.</p> : s.history.map((c) => {
-        const byLabel = c.by === "claude" ? "decided by Claude (from simulated telemetry)" : c.by === "simulated" ? "Simulated AI (fallback rule)" : c.by === "robot" ? "the robot's rule" : undefined;
+        const byLabel = c.by === "claude" ? "decided by Claude (from simulated telemetry)" : c.by === "simulated" ? "Simulated AI (fallback rule)" : c.by === "robot" ? "decided by the robot" : undefined;
         return (
           <article key={c.id} className="agent-card" data-testid="charge">
             <span className="eyebrow-mono">{when(c.at)} · {c.amount} USDC · {c.kWh} kWh{byLabel ? ` · ${byLabel}` : ""}</span>
+            <ChoiceReason s={s} chargeId={c.id} />
             <Timeline c={c} peaqTx={peaqTx} />
           </article>
         );
