@@ -23,14 +23,15 @@ export default async function Machines() {
         <span className="eyebrow">Machines · simulated · settled on Solana devnet · recorded on peaq</span>
         <h1>Charge on <em>delivery</em></h1>
         <p>
-          A delivery robot&apos;s agent buys charging from a charging pad. The owner set the rules once, on chain: at most
-          0.50 USDC per charge, 2 USDC in total, only this pad. After that the robot pays on its own, with no human per
-          payment. The USDC waits in escrow until the pad proves the energy it delivered (a signed meter reading,
-          hashed on chain), and each settled charge is written to peaq for both machines.
+          One loop, with no human per payment: a delivery robot earns (a shop pays it per delivery), its battery drops,
+          it chooses one of three charging pads by price and track record, and pays into escrow. The pad proves the energy
+          it delivered with a signed meter reading (hashed on chain); the robot releases exactly that payment, and both
+          machines get the event on peaq. The owner set the rules once, on chain: at most 0.50 USDC per charge, 35 USDC in
+          total, only these three pads. Each pad insures itself against downtime from its own earnings.
         </p>
         <p className="fine">
-          Both machines are simulated. Their peaq machine IDs, peaq events and Solana transactions are real; the money
-          is devnet test USDC.
+          The machines, battery, driving, deliveries and outages are simulated. Their peaq machine IDs, peaq events and Solana
+          transactions are real; the money is devnet test USDC.
         </p>
       </header>
       {status ? <MachinesView initial={status} /> : <p data-testid="machines-not-configured" className="empty-note">{problem}</p>}

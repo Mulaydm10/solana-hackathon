@@ -169,3 +169,16 @@ test("totals: only released charges count as paid; refusals and peaq events are 
   assert.equal(meterKwh(400_000n), "1.250");
   assert.equal(meterKwh(600_000n), "1.875");
 });
+
+test("blobHistory: refused attempts never push a settled charge out; only the newest refused are kept", async () => {
+  const h = blobHistory(fileBlobs(mkdtempSync(join(tmpdir(), "hist-"))));
+  const settled = (i: number): ChargeView => ({ id: `s${i}`, at: 1000 + i, amount: "0.40", kWh: "1.250", openSig: `o${i}`, releaseSig: `r${i}` });
+  const refused = (i: number): ChargeView => ({ id: `x${i}`, at: 2000 + i, amount: "0.43", kWh: "1.535", refused: { reason: "CHAIN_ERROR", message: "m" } });
+  for (let i = 0; i < 11; i++) await h.add(settled(i));
+  for (let i = 0; i < 29; i++) await h.add(refused(i));
+  const list = await h.list();
+  assert.equal(list.filter((c) => c.releaseSig).length, 11);
+  assert.equal(list.filter((c) => c.refused).length, MACHINE_LIMITS.refusedKept);
+  assert.equal(totals(list).charges, 11);
+  assert.ok(list.every((c, i) => i === 0 || list[i - 1]!.at >= c.at), "newest first");
+});

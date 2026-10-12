@@ -19,7 +19,8 @@ export const MACHINE_LIMITS = {
   pricePerKwh: 320_000n,
   chargesPerIpPerHour: 6,
   chargesPerDay: 60,
-  history: 30,
+  history: 200, // settled charges kept
+  refusedKept: 10, // refused attempts kept (newest); they never push a settled charge out
 } as const;
 
 /** One charge as the page shows it. Amounts are decimal USDC strings; refusals are normal results. */
@@ -144,7 +145,13 @@ export function blobHistory(blobs: Blobs, max: number = MACHINE_LIMITS.history):
   const list = async () => dec<ChargeView[]>(await blobs.read(file)) ?? [];
   return {
     list,
-    add: async (v) => blobs.write(file, enc([v, ...(await list()).filter((x) => x.id !== v.id)].slice(0, max))),
+    add: async (v) => {
+      const all = [v, ...(await list()).filter((x) => x.id !== v.id)];
+      const refusedOnly = (x: ChargeView) => !!x.refused && !x.openSig;
+      const kept = all.filter((x) => !refusedOnly(x)).slice(0, max);
+      const refused = all.filter(refusedOnly).slice(0, MACHINE_LIMITS.refusedKept);
+      await blobs.write(file, enc([...kept, ...refused].sort((a, b) => b.at - a.at)));
+    },
   };
 }
 

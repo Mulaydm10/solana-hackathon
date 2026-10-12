@@ -15,11 +15,35 @@ function TxLink({ href, text }: { href: string | null; text: string }) {
   return href ? <a href={href} target="_blank" rel="noreferrer"><code>{text}</code></a> : <code>{text}</code>;
 }
 
+/** Program refusals that mean "over the robot's limit" (the mandate and policy checks). */
+const LIMIT_REFUSALS = new Set(["OverPerTxCap", "OverMandateCap", "OverMissionBudget", "OverStageCap", "PayeeNotAllowed", "MandateExpired", "MandateRevoked", "OverMaxPrice", "OverPeriodBudget"]);
+export function refusalText(c: ChargeView): string {
+  const r = c.refused!.reason;
+  return LIMIT_REFUSALS.has(r)
+    ? `${c.amount} USDC is over the robot's limit: refused by the Solana program (${r}). Simulated only; nothing was sent, no money moved.`
+    : `${c.amount} USDC charge refused in simulation before sending (${r}); nothing was sent, no money moved.`;
+}
+
+/** Refused attempts grouped by reason: one line each, so they never bury the settled charges. */
+function RefusedSummary({ list }: { list: ChargeView[] }) {
+  const groups = new Map<string, ChargeView[]>();
+  for (const c of list) groups.set(c.refused!.reason, [...(groups.get(c.refused!.reason) ?? []), c]);
+  return (
+    <ol className="feed" data-testid="charge-refused">
+      {[...groups].map(([reason, cs]) => {
+        const at = cs.map((c) => c.at);
+        const span = cs.length === 1 ? when(at[0]!) : `${when(Math.min(...at))} to ${when(Math.max(...at))}`;
+        return <li key={reason} className="tone-crit"><span className="feed-tag">Refused</span><span>{cs.length === 1 ? refusalText(cs[0]!) : `${cs.length} attempts refused (${reason}), ${span}. ${LIMIT_REFUSALS.has(reason) ? "Over the robot's limit: refused by the Solana program." : "Refused in simulation before sending."} Nothing was sent, no money moved.`}{cs.length === 1 ? ` (${span})` : ""}</span></li>;
+      })}
+    </ol>
+  );
+}
+
 function Timeline({ c, peaqTx }: { c: ChargeView; peaqTx: (h: string) => string | null }) {
   if (c.refused && !c.openSig) {
     return (
       <ol className="feed" data-testid="charge-refused">
-        <li className="tone-crit"><span className="feed-tag">Refused</span><span>{c.amount} USDC is over the robot&apos;s limit: refused by the Solana program ({c.refused.reason}). Simulated only; nothing was sent, no money moved.</span></li>
+        <li className="tone-crit"><span className="feed-tag">Refused</span><span>{refusalText(c)}</span></li>
       </ol>
     );
   }
@@ -98,7 +122,7 @@ export function MachinesView({ initial }: { initial: MachineStatus }) {
         <div className="meter" role="meter" aria-label="simulated battery" aria-valuemin={0} aria-valuemax={100} aria-valuenow={s.battery.levelPct}>
           <span style={{ width: `${s.battery.levelPct}%` }} />
         </div>
-        <p className="fine">{s.battery.levelPct}% (simulated; the battery and the driving are not real, the payments are)</p>
+        <p className="fine">{s.battery.levelPct}% (simulated: it drains 3% per hour while idle and 15% per delivery; the battery and the driving are not real, the payments are)</p>
         {s.decisions[0] ? (
           <p data-testid="last-decision">
             Last decision: {s.decisions[0].action === "charge" ? `charge ${s.decisions[0].kWh} kWh for ${s.decisions[0].amount} USDC` : "wait"} · {s.decisions[0].by === "claude" ? "decided by Claude (from simulated telemetry)" : s.decisions[0].by === "simulated" ? "Simulated AI (fallback rule)" : "decided by the robot"} <span className="fine">({when(s.decisions[0].at)})</span>
@@ -119,15 +143,16 @@ export function MachinesView({ initial }: { initial: MachineStatus }) {
 
       <h2>Totals</h2>
       <dl className="mandate" data-testid="machine-totals">
-        <dt>Settled charges</dt><dd>{s.totals.charges}</dd>
+        <dt>Settled charges (listed below)</dt><dd>{s.totals.charges}</dd>
         <dt>Energy</dt><dd>{s.totals.kWh} kWh</dd>
-        <dt>Paid to the pad</dt><dd>{s.totals.usdc} USDC</dd>
-        <dt>Refused by the program</dt><dd>{s.totals.refused}</dd>
+        <dt>Paid to the pads</dt><dd>{s.totals.usdc} USDC</dd>
+        <dt>Refused before sending</dt><dd>{s.totals.refused}</dd>
         <dt>peaq events</dt><dd>{s.totals.peaqEvents}</dd>
       </dl>
 
       <h2>Charges</h2>
-      {s.history.length === 0 ? <p className="fine">No charges yet.</p> : s.history.map((c) => {
+      {s.history.length === 0 && <p className="fine">No charges yet.</p>}
+      {s.history.filter((c) => !(c.refused && !c.openSig)).map((c) => {
         const byLabel = c.by === "claude" ? "decided by Claude (from simulated telemetry)" : c.by === "simulated" ? "Simulated AI (fallback rule)" : c.by === "robot" ? "decided by the robot" : undefined;
         return (
           <article key={c.id} className="agent-card" data-testid="charge">
@@ -137,6 +162,15 @@ export function MachinesView({ initial }: { initial: MachineStatus }) {
           </article>
         );
       })}
+      {s.history.some((c) => c.refused && !c.openSig) && <RefusedSummary list={s.history.filter((c) => c.refused && !c.openSig)} />}
+      <p className="fine" data-testid="charge-history-note">
+        Earlier, 7 to 10 Oct, the robot charged from one pad (A) under the first mission{" "}
+        <TxLink href={SOLANA_ADDR("3yVERanw5afVZJ1kctWBKd8CYywwDq4NZcQkDr9nshEN")} text="3yVERanw…" />: 11 settled charges, 12.839 kWh, 4.11 USDC,
+        22 peaq events; their cards rolled out of this list before it kept every settled charge. The refusals above (10 to 12 Oct) were caused by
+        a bug in our server, not by the robot's limits: it built two signer objects for the robot, so every charge to pads B
+        and C was refused in simulation. Fixed in{" "}
+        <a href="https://github.com/Mulaydm10/solana-hackathon/pull/295" target="_blank" rel="noreferrer">#295</a>; nothing was sent.
+      </p>
     </section>
   );
 }
