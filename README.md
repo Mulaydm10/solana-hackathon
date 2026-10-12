@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **peaq Machine Economy judges, start here:** [▶ 2:49 video](https://drive.google.com/file/d/1PD8jQsbOQAM7bBLWHdfLyy4I3WEbc_vh/view) · [live demo: /machines](https://fiducia-orpin.vercel.app/machines) · [how it works](#-machine-economy-peaq-track)
+>
+> **A delivery robot runs its own small business.** It earns for each delivery, chooses a charging pad by price and peaq track record, pays into escrow inside limits its owner set once on Solana, and releases the money only for the energy the pad proved with a signed meter reading. The pads insure themselves against downtime: a signed outage proof pays out from escrow, with no adjuster. Every step is a real transaction on Solana devnet and peaq agung; the machines are simulated.
+
 <p align="center">
   <img src="docs/assets/fiducia-banner.svg" alt="Fiducia controls how AI agents spend money, enforced on Solana" width="100%">
 </p>
@@ -167,6 +172,17 @@ A clean devnet run of the hire flow: mission [`BJyjL2qc…`](https://explorer.so
 > **One loop, no human per payment: a delivery robot earns, chooses a charging pad, pays into escrow, and releases the money only for energy the pad proved it delivered. Every step lands on Solana devnet and on peaq.**
 > The machines are **simulated** (battery, driving, deliveries, outages). Their Solana transactions are real (devnet, test USDC), and their peaq identities and events are real (agung testnet).
 
+```mermaid
+flowchart LR
+  Shop["Shop (simulated)"] -- "escrow pays per delivery" --> Robot["Delivery robot\npeaq machine 348"]
+  Robot -- "chooses by price + peaq history\npays into escrow (mandate limits)" --> Pad["Charging pad\n349 / 350 / 351"]
+  Pad -- "signed meter reading\n(hash on chain)" --> Release["Solana program\nreleases exactly that reading"]
+  Release --> Peaq["peaq: revenue + activity events"]
+  Peaq --> Score["MCR-style score"]
+  Score -- "prices" --> Ins["Downtime insurance\n(signed heartbeats, outage proof, escrow payout)"]
+  Score -- "weighs" --> Robot
+```
+
 **The loop**, run every 30 minutes by an always-on service:
 1. **The robot earns.** A simulated shop opens an escrow deal for each delivery (0.10 USDC per km). The robot signs a drop-off record, the shop releases, and the robot gets a **peaq revenue event**.
 2. **Its battery drops** (simulated: 3% per hour idle, 15% per delivery). Below 25% it decides to charge, capped in code by its on-chain mandate.
@@ -186,6 +202,7 @@ A clean devnet run of the hire flow: mission [`BJyjL2qc…`](https://explorer.so
 
 | Evidence | |
 |---|---|
+| Video (2:49) | https://drive.google.com/file/d/1PD8jQsbOQAM7bBLWHdfLyy4I3WEbc_vh/view |
 | Live page | https://fiducia-orpin.vercel.app/machines (network, scores, insurance, earned vs spent, every charge with its links) |
 | Machines (agung) | robot **348**, pads **349 / 350 / 351**, registered and bonded in agung's 1.0 IdentityRegistry |
 | Fleet mission (devnet) | [`FLPoVGNt…bTey`](https://explorer.solana.com/address/FLPoVGNteR6wXJMye65FEo4MFDMJc9QAHDp5syEbwTey?cluster=devnet): 0.50 per charge, 35 total, payees = the three pads, until 30 Oct |
