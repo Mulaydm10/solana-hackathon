@@ -8,9 +8,9 @@ const at = (levelPct: number, updatedAt = 0): Battery => ({ levelPct, updatedAt 
 test("default robot price is the pad's price", () => assert.equal(M.pricePerKwhMicro, 320_000n));
 
 test("advance drains by the hour and clamps at 0", () => {
-  assert.equal(advance(at(80), 3600, M).levelPct, 68);
-  assert.equal(advance(at(80), 1800, M).levelPct, 74);
-  assert.equal(advance(at(10), 10 * 3600, M).levelPct, 0);
+  assert.equal(advance(at(80), 3600, M).levelPct, 77); // 3% per hour (DEFAULT_ROBOT)
+  assert.equal(advance(at(80), 1800, M).levelPct, 78.5);
+  assert.equal(advance(at(10), 10 * 3600, M).levelPct, 0); // clamps
   assert.equal(advance(at(80), 3600, M).updatedAt, 3600);
 });
 

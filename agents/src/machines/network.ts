@@ -10,7 +10,8 @@ import type { LlmFn } from "./decide-llm.ts";
 import type { Grade } from "./score.ts";
 
 
-export type PadOffer = { role: string; machineId: bigint; address: Address; pricePerKwhMicro: bigint; online: boolean; score: number; grade: Grade };
+/** `events`: the pad's peaq events so far (optional); used only to give pads with no rating yet a trial. */
+export type PadOffer = { role: string; machineId: bigint; address: Address; pricePerKwhMicro: bigint; online: boolean; score: number; grade: Grade; events?: number };
 export type PadChoice =
   | { ok: true; pad: PadOffer; effectivePriceMicro: bigint; reason: string; by: "robot" | "claude" | "simulated" }
   | { ok: false; reason: string }; // nobody eligible
@@ -56,8 +57,23 @@ export function choosePad(offers: PadOffer[], o: { allowedPayees: Address[] }): 
     const e = effectivePrice(p);
     if (e < bestEff || (e === bestEff && p.machineId < best.machineId)) { best = p; bestEff = e; }
   }
+  // Trial: while the best pad is not rated yet, the cheapest always wins and the others never earn the events that would
+  // rate them. Among unrated pads within TRIAL_BAND_BPS of the best price, the one with the fewest peaq events gets the charge.
+  if (best.grade === "Provisioned") {
+    const limit = (bestEff * BigInt(10_000 + TRIAL_BAND_BPS)) / 10_000n;
+    const band = ok.filter((p) => p.grade === "Provisioned" && p.events !== undefined && effectivePrice(p) <= limit);
+    const fewest = band.reduce<PadOffer | null>((m, p) => (!m || p.events! < m.events! || (p.events === m.events && p.machineId < m.machineId) ? p : m), null);
+    if (fewest && best.events !== undefined && fewest.events! < best.events && fewest !== best) {
+      const e = effectivePrice(fewest);
+      return { ok: true, pad: fewest, effectivePriceMicro: e, by: "robot",
+        reason: `trial for a pad not rated yet: ${describe(fewest, e)}, ${fewest.events} peaq events (fewest among unrated pads within ${TRIAL_BAND_BPS / 100}% of the best price, ${usdc3(bestEff)})` };
+    }
+  }
   return { ok: true, pad: best, effectivePriceMicro: bestEff, reason: `lowest effective price: ${describe(best, bestEff)} of ${ok.length} eligible`, by: "robot" };
 }
+
+/** How far above the best effective price a pad not rated yet may be and still get a trial charge (15%). */
+export const TRIAL_BAND_BPS = 1500;
 
 function buildPrompt(ok: PadOffer[]): string {
   return [
