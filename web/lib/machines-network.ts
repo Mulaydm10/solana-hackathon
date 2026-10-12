@@ -186,6 +186,13 @@ const slotOf = (t: number) => Math.floor(t / SLOT_SECS);
 const toStoredEvent = (e: MachineEvent): StoredEvent => ({ machineId: e.machineId.toString(), index: e.index.toString(), eventType: e.eventType, value: e.value.toString(), timestamp: e.timestamp, txHash: e.txHash, block: e.block.toString() });
 const fromStoredEvent = (e: StoredEvent): MachineEvent => ({ machineId: BigInt(e.machineId), index: BigInt(e.index), eventType: e.eventType, value: BigInt(e.value), timestamp: e.timestamp, txHash: e.txHash, block: BigInt(e.block) });
 
+/** The events the tick already cached for one of the network's machines (robot or a pad), with the block they reach. */
+export async function cachedEvents(store: NetworkStore, cfg: NetworkConfig, robotMachineId: bigint, machineId: bigint): Promise<{ events: MachineEvent[]; toBlock: bigint } | null> {
+  const role = machineId === robotMachineId ? "robot" : cfg.pads.find((p) => p.machineId === machineId)?.role;
+  const c = role ? await store.scores() : null;
+  if (!role || !c || !c.toBlock[role]) return null;
+  return { events: (c.events[role] ?? []).map(fromStoredEvent), toBlock: BigInt(c.toBlock[role]!) };
+}
 /** Heartbeats whose signature verifies against the pad's peaq address and that name this machine. Verified on every read. */
 export async function verifiedBeats(store: NetworkStore, pad: PadCfg): Promise<Heartbeat[]> {
   const all = (await store.beats())[pad.role] ?? [];
