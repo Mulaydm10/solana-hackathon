@@ -14,6 +14,7 @@
   <a href="docs/pitch/Fiducia-pitch-deck.pdf"><img alt="Pitch deck" src="https://img.shields.io/badge/pitch-deck-855504?style=for-the-badge"></a>
   <a href="docs/pitch/Fiducia-Technical-Brief.pdf"><img alt="Technical brief" src="https://img.shields.io/badge/technical-brief-5A48B8?style=for-the-badge"></a>
   <a href="docs/pitch/Fiducia-GTM-Launch-Plan.pdf"><img alt="Go-to-market plan" src="https://img.shields.io/badge/go--to--market-plan-1B6B33?style=for-the-badge"></a>
+  <a href="docs/SECURITY-AUDIT.md"><img alt="Security and audit readiness" src="https://img.shields.io/badge/security-audit%20readiness-8A1C1C?style=for-the-badge"></a>
 </p>
 
 <p align="center">
@@ -279,6 +280,7 @@ flowchart LR
 | [**Pitch deck**](docs/pitch/Fiducia-pitch-deck.pdf) | 15 slides: problem, first customer, solution, Solana integration, devnet proof, go-to-market, business model, roadmap |
 | [**Technical brief**](docs/pitch/Fiducia-Technical-Brief.pdf) | 3 pages: system map and trust boundaries, mission lifecycle, spend checks, account model, threats, status, roadmap |
 | [**Go-to-market and launch plan**](docs/pitch/Fiducia-GTM-Launch-Plan.pdf) | 8 pages: why now (cited data), customer and vertical, marketplace, pricing hypothesis, launch phases, metrics, risks |
+| [**Security and audit readiness**](docs/SECURITY-AUDIT.md) | The program's scope, accounts, roles, invariants, test and attack-search evidence, reproducible build, open items · report issues via [`SECURITY.md`](SECURITY.md) |
 | [`docs/PLAN.md`](docs/PLAN.md) · [`docs/DEPLOY.md`](docs/DEPLOY.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Design, deploy runbook, architecture |
 
 > Market figures in the pitch material are external context, not Fiducia traction. Pricing and launch numbers are hypotheses and targets.
@@ -326,6 +328,7 @@ npm test --prefix mcp
 
 - The chain suite runs the **committed binary**, including two randomized attack searches (deals and missions) checked against independent models.
 - `chain/scripts/verify-deployed.ts` confirms the devnet program matches the committed build **byte for byte**.
+- Extended run (12 Oct 2026): 2,000 attack-search runs, **0 invariant violations**; a build from source reproduces the deployed binary exactly. Details: [`docs/SECURITY-AUDIT.md`](docs/SECURITY-AUDIT.md).
 
 ---
 
@@ -336,6 +339,7 @@ npm test --prefix mcp
 - **No grade without attestation.** The site shows a grade only if the report hashes to the on-chain hash and its assessor is still registered.
 - **Agents see capabilities, not credentials.** Their egress is allowlisted, and an approval is valid once, for one plan.
 - **Devnet only.** The env schemas refuse mainnet. The program has not been externally audited yet.
+- **Audit-ready brief:** [`docs/SECURITY-AUDIT.md`](docs/SECURITY-AUDIT.md) lists who can do what, the invariants, the evidence and the known open items. Report vulnerabilities privately: [`SECURITY.md`](SECURITY.md).
 
 ## 🗺️ Roadmap
 
