@@ -3,6 +3,7 @@
 > **Status (12 Oct 2026):** Solana devnet only, test USDC, **not externally audited**.
 > This page is the brief for an auditor: what to review, who can do what, what must always hold,
 > the evidence so far, and the open items we already know about.
+> How the program is built (code map, diagrams): [`PROGRAM-ARCHITECTURE.md`](PROGRAM-ARCHITECTURE.md).
 > To report a vulnerability, see [`SECURITY.md`](../SECURITY.md).
 
 ## At a glance
