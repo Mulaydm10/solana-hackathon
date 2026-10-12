@@ -33,6 +33,19 @@ an expiry, revocable in one transaction, enforced by a program rather than by a 
 work. peaq is the identity and credit layer; Solana is the money layer. Once machines have verifiable histories on
 peaq, the same escrow prices and pays insurance for them: the step from a payment rail to finance for machines.
 
+## In one sentence, for the form
+
+A delivery robot runs its own small business on peaq and Solana: it earns per delivery, buys energy from the charging pad
+with the best price and peaq track record, pays only for metered energy inside its owner's on-chain limits, and its pads
+insure themselves against downtime with a signed outage proof that pays out from escrow, no adjuster.
+
+Two of your starter ideas run end to end inside this one system: **Two machines, one deal** (the robot pays a pad) and
+**Parametric insurance** (heartbeats stop, escrow pays, premium priced from the machine's rating).
+
+## Team
+
+@Mulaydm10 (Dhruv) and @vedant059 on GitHub. (Edit before submitting: names, roles, links.)
+
 ## Fit with the track
 
 - **Two machines, one deal (starter idea):** the robot pays a pad with no human approval, settled on chain.
@@ -71,7 +84,7 @@ peaq, the same escrow prices and pays insurance for them: the step from a paymen
 | Insurance: no outage, cover refunded | https://explorer.solana.com/tx/4G5GbfRazYsb5DnXWUH8GM3h61X63dydA1MrBorMM6KypiXJ2NJBowhR39Zqe8zt6sKegAA8e39u8kRsypRStEW?cluster=devnet |
 | Fiducia Insure (x402) | manifest https://fiducia-orpin.vercel.app/api/machines/service/manifest · a paid call https://explorer.solana.com/tx/5exS9vgTxc2UkLiov3pBUXgbmXcpsY7Qckj1G9Ebnc1n8afKc9MjaDqTQKgjfKJ2PdioTXbv1mfdULhKbHLjBUU7?cluster=devnet |
 | peaq network | agung testnet (chain 9990), EventRegistry `0x2DAD8905380993940e340C5cE6d313d5c2780040` |
-| Video (2 to 3 min) | to be recorded on the three-pad version; narration by Devin |
+| Video (2:49) | https://drive.google.com/file/d/1PD8jQsbOQAM7bBLWHdfLyy4I3WEbc_vh/view |
 
 ## Video outline (2 to 3 min)
 
