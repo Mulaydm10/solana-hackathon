@@ -5,13 +5,15 @@ export type TickerOptions = {
   url: string;
   secret: string;
   intervalMs?: number;
+  /** First tick this long after start() (default 15 s), so a restart never postpones the robot by a whole interval. */
+  firstTickMs?: number;
   fetch?: typeof fetch;
   log?: (line: string) => void;
   now?: () => number;
 };
 
 export function machineTicker(o: TickerOptions): { tick(): Promise<void>; start(): () => void } {
-  const { url, secret, intervalMs = 1_800_000, fetch: f = globalThis.fetch, log = () => {}, now = () => Date.now() } = o;
+  const { url, secret, intervalMs = 1_800_000, firstTickMs = 15_000, fetch: f = globalThis.fetch, log = () => {}, now = () => Date.now() } = o;
   let running = false;
 
   const tick = async (): Promise<void> => {
@@ -51,9 +53,12 @@ export function machineTicker(o: TickerOptions): { tick(): Promise<void>; start(
   };
 
   const start = (): (() => void) => {
+    // A repeat inside the same 30-min slot is a no-op on the site (its slot guard), so ticking soon after a restart is safe.
+    const first = setTimeout(tick, firstTickMs);
     const id = setInterval(tick, intervalMs);
+    if (first.unref) first.unref();
     if (id.unref) id.unref();
-    return () => clearInterval(id);
+    return () => { clearTimeout(first); clearInterval(id); };
   };
 
   return { tick, start };
