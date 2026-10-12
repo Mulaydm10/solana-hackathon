@@ -307,3 +307,13 @@ test("tickerFromEnv: uses the given log function on each tick", async () => {
   assert.match(logs[0]!, /^machine tick .* HTTP 202 charge$/);
   assert.match(logs[1]!, /^machine tick .* HTTP 202 charge$/);
 });
+
+test("machineTicker: start() ticks once soon after start, not only after a whole interval", () => {
+  let tickCount = 0;
+  const mockFetch: typeof fetch = async () => { tickCount++; return new Response(JSON.stringify({}), { status: 200 }); };
+  const ticker = machineTicker({ url: "https://example.com/tick", secret: "x".repeat(40), intervalMs: 60_000, firstTickMs: 5, fetch: mockFetch });
+  const stop = ticker.start();
+  return new Promise<void>((resolve) => {
+    setTimeout(() => { stop(); assert.equal(tickCount, 1, "one tick soon after start"); resolve(); }, 40);
+  });
+});
