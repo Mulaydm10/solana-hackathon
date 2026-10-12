@@ -20,7 +20,7 @@ export type NetworkCard = {
 };
 export type PolicyView = {
   id: string; pad: string; padAddress: string; coverage: string; premium: string; grade: string; termStart: number; termEnd: number; status: string;
-  deal?: string; openSig?: string; acceptSig?: string; premiumSig?: string; claimSig?: string; payoutSig?: string; refundSig?: string;
+  deal?: string; openSig?: string; acceptSig?: string; premiumSig?: string; claimSig?: string; challengeSig?: string; payoutSig?: string; refundSig?: string;
   outage?: { detectedAt: number; gapSecs: number; peaqEventTx?: string; insurerCheck?: "valid" | "invalid"; simulated: true };
   reason?: string;
 };
@@ -58,7 +58,7 @@ export async function networkStatus(store: NetworkStore, cfg: NetworkConfig, his
     termStart: p.termStart, termEnd: p.termEnd, status: p.status,
     ...(p.deal ? { deal: p.deal } : {}), ...(p.openSig ? { openSig: p.openSig } : {}), ...(p.acceptSig ? { acceptSig: p.acceptSig } : {}),
     ...(p.premiumSig ? { premiumSig: p.premiumSig } : {}), ...(p.claimSig ? { claimSig: p.claimSig } : {}), ...(p.payoutSig ? { payoutSig: p.payoutSig } : {}),
-    ...(p.refundSig ? { refundSig: p.refundSig } : {}),
+    ...(p.refundSig ? { refundSig: p.refundSig } : {}), ...(p.challengeSig ? { challengeSig: p.challengeSig } : {}),
     ...(p.outage ? { outage: { detectedAt: p.outage.detectedAt, gapSecs: p.outage.gapSecs, ...(p.outage.peaqEventTx ? { peaqEventTx: p.outage.peaqEventTx } : {}), ...(p.outage.insurerCheck ? { insurerCheck: p.outage.insurerCheck } : {}), simulated: true as const } } : {}),
     ...(p.reason ? { reason: p.reason } : {}),
   }));
