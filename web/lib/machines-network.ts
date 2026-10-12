@@ -327,6 +327,7 @@ export async function routeCharge(d: NetworkDeps, dec: { kWh: string; amount: bi
   const offers: PadOffer[] = d.cfg.pads.map((p) => ({
     role: p.role, machineId: p.machineId, address: p.address, pricePerKwhMicro: p.pricePerKwhMicro, online: power[p.role] !== false,
     score: cache?.scores[p.role]?.score ?? 0, grade: cache?.scores[p.role]?.grade ?? "Provisioned",
+    ...(cache?.scores[p.role] ? { events: cache.scores[p.role]!.events } : {}),
   }));
   const allowedPayees = await d.allowedPayees();
   const choice = d.llm ? await choosePadWithModel(d.llm, offers, { allowedPayees }) : choosePad(offers, { allowedPayees });

@@ -99,14 +99,14 @@ export function NetworkSections({ s, v2, peaqTx }: { s: MachineStatus; v2: Confi
         {v2.insurance.policies.length === 0 ? <p className="fine">No policies yet.</p> : v2.insurance.policies.map((p) => <Policy key={p.id} p={p} padName={v2.network.find((n) => n.role === p.pad)?.name ?? p.pad} peaqTx={peaqTx} />)}
       </div>
 
-      <h2>The robot&apos;s earnings</h2>
+      <h2>The robot: earned vs spent</h2>
       <div className="agent-card" data-testid="earnings">
-        <span className="eyebrow-mono">Simulated deliveries · paid on Solana devnet</span>
+        <span className="eyebrow-mono">Simulated deliveries (0.10 USDC per km) · paid on Solana devnet</span>
         <dl className="mandate">
           <dt>Deliveries</dt><dd>{earn.jobs}</dd>
           <dt>Earned</dt><dd>{earn.earned} USDC</dd>
           <dt>Spent on energy</dt><dd>{earn.spentOnEnergy} USDC</dd>
-          <dt>Net</dt><dd>{earn.net} USDC</dd>
+          <dt>Earned minus spent on energy</dt><dd>{earn.net} USDC</dd>
         </dl>
         {earn.recent.length === 0 ? <p className="fine">No deliveries yet.</p> : (
           <ol className="feed">{earn.recent.map((j) => (
