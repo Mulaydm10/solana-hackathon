@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const payTo = process.env.FIDUCIA_INSURE_PAYEE;
-  return Response.json(insureManifest(new URL(req.url).origin, payTo && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(payTo) ? payTo : undefined), { headers: { "cache-control": "no-store" } });
+  const b58 = (v: string | undefined) => (v && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) ? v : undefined);
+  // the same mint the 402 asks for (machines-insure-server.ts insureConfig: DEAL_MINT, else devnet USDC)
+  return Response.json(insureManifest(new URL(req.url).origin, b58(process.env.FIDUCIA_INSURE_PAYEE), b58(process.env.DEAL_MINT)), { headers: { "cache-control": "no-store" } });
 }
