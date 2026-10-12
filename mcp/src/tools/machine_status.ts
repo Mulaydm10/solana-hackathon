@@ -66,16 +66,20 @@ function shape(body: Record<string, unknown>) {
   // settled (or in-progress) charges first, so refusals never hide them
   const history = [...all.filter((c) => !c.refused || c.openSig), ...all.filter((c) => c.refused && !c.openSig)].slice(0, 5);
   const battery = body.battery ? obj(body.battery) : null;
-  const decisions = Array.isArray(body.decisions) ? body.decisions.map(obj).slice(0, 3) : [];
+  const allDecisions = Array.isArray(body.decisions) ? body.decisions.map(obj) : [];
+  const decisions = allDecisions.slice(0, 3);
+  const lastCharge = allDecisions.find((d) => d.action === "charge");
+  const view = (d: Record<string, unknown>) => ({
+    at: num(d.at), action: str(d.action), kWh: str(d.kWh), amountUsdc: str(d.amount), decidedBy: str(d.by),
+    chosenPad: str(d.chosenPad), why: str(d.choiceReason) ?? str(d.reason),
+  });
   return {
     ...v2(body),
     simulated: true,
     note: "The machines (robot and charging pads), battery, driving, deliveries and outages are simulated. Their peaq IDs, peaq events and Solana devnet transactions are real; the money is devnet test USDC.",
     robotBattery: battery && { levelPct: num(battery.levelPct), simulated: true, drain: "simulated: 3% per hour idle, 15% per delivery" },
-    lastDecisions: decisions.map((d) => ({
-      at: num(d.at), action: str(d.action), kWh: str(d.kWh), amountUsdc: str(d.amount), decidedBy: str(d.by),
-      chosenPad: str(d.chosenPad), why: str(d.choiceReason) ?? str(d.reason),
-    })),
+    lastDecisions: decisions.map(view),
+    lastChargeDecision: lastCharge ? view(lastCharge) : null,
     peaqNetwork: str(body.deployment),
     mission: str(body.mission),
     machines: machines.map((m) => {
