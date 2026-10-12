@@ -117,3 +117,20 @@ test("setup: several pads become the mandate's payee list; the single pad still 
   assert.notDeepEqual(one.hash, many.hash);
   assert.throws(() => robotMandate(base), /pad/);
 });
+
+test("choosePad: an unrated pad within 15% of the best price gets a trial when it has fewer peaq events", () => {
+  const mk = (role: string, id: bigint, price: bigint, events: number) =>
+    ({ role, machineId: id, address: `${role}Addr` as Address, pricePerKwhMicro: price, online: true, score: 0, grade: "Provisioned" as const, events });
+  const offers = [mk("pad", 349n, 320_000n, 11), mk("pad2", 350n, 280_000n, 5), mk("pad3", 351n, 300_000n, 0)];
+  const all = offers.map((p) => p.address);
+  const c = choosePad(offers, { allowedPayees: all });
+  assert.ok(c.ok);
+  assert.equal(c.ok && c.pad.role, "pad3"); // 0.375 effective is within 15% of 0.350; 0 events < 5
+  assert.match(c.ok ? c.reason : "", /trial for a pad not rated yet/);
+  // outside the band (pad3 much dearer) the cheapest still wins
+  const far = choosePad([mk("pad2", 350n, 280_000n, 5), mk("pad3", 351n, 400_000n, 0)], { allowedPayees: all });
+  assert.equal(far.ok && far.pad.role, "pad2");
+  // without event counts the rule is unchanged
+  const plain = choosePad(offers.map(({ events: _e, ...p }) => p), { allowedPayees: all });
+  assert.equal(plain.ok && plain.pad.role, "pad2");
+});

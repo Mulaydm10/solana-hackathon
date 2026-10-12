@@ -3,8 +3,8 @@
 // Money is bigint micro-USDC in whole cents (peaq revenue events refuse a fraction of a cent); battery % may be a float.
 
 export type RobotModel = { capacityKwh: number; drainPctPerHour: number; lowPct: number; targetPct: number; pricePerKwhMicro: bigint };
-/** The simulated delivery robot. pricePerKwhMicro equals the pad's price (web lib/machines.ts MACHINE_LIMITS.pricePerKwh). */
-export const DEFAULT_ROBOT: RobotModel = { capacityKwh: 2, drainPctPerHour: 12, lowPct: 25, targetPct: 80, pricePerKwhMicro: 320_000n };
+/** The simulated delivery robot. Idle drain 3%/h (an idle robot lasts ~1 day; deliveries cost 15% each, jobs.ts). pricePerKwhMicro equals the pad's price (web lib/machines.ts MACHINE_LIMITS.pricePerKwh). */
+export const DEFAULT_ROBOT: RobotModel = { capacityKwh: 2, drainPctPerHour: 3, lowPct: 25, targetPct: 80, pricePerKwhMicro: 320_000n };
 
 export type Battery = { levelPct: number; updatedAt: number }; // unix seconds
 export type MandateLeft = { perTxCap: bigint; cap: bigint; spent: bigint; live: boolean };
