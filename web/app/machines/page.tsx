@@ -19,6 +19,8 @@ export default async function Machines() {
   }
   return (
     <main>
+      {/* This page needs no wallet, and the marketplace's event ticker is not about machines: hide both here only. */}
+      <style>{".ticker, [data-testid=wallet-none] { display: none !important; }"}</style>
       <header className="page-head">
         <span className="eyebrow">Machines · simulated · settled on Solana devnet · recorded on peaq</span>
         <h1>Charge on <em>delivery</em></h1>
