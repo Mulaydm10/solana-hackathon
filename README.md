@@ -164,37 +164,49 @@ A clean devnet run of the hire flow: mission [`BJyjL2qc…`](https://explorer.so
 
 ## 🔌 Machine economy (peaq track)
 
-> **Two machines, one deal: a delivery robot pays a charging pad, settled on chain, with no human per payment.**
-> Both machines are **simulated**. Their Solana transactions are real (devnet), and their peaq identities and events are real (agung testnet).
+> **One loop, no human per payment: a delivery robot earns, chooses a charging pad, pays into escrow, and releases the money only for energy the pad proved it delivered. Every step lands on Solana devnet and on peaq.**
+> The machines are **simulated** (battery, driving, deliveries, outages). Their Solana transactions are real (devnet, test USDC), and their peaq identities and events are real (agung testnet).
 
-**The loop: "charge on delivery."**
-1. **The owner sets the rules once, on chain:** a Fiducia mandate for the robot's agent. At most **0.50 USDC per charge** and **2 USDC in total**, and the charging pad is the **only allowed payee**.
-2. **The robot decides when it needs to charge** (simulated battery) **and pays on its own.** Its agent opens an escrow deal for each charge. Nobody approves individual payments. The robot is on a schedule: every 30 minutes, it checks its battery and, if below 25%, decides how much to charge (up to 80%, capped by its mandate).
-3. **Pay only for proven energy.** The pad signs a meter reading (kWh, time, price). Its sha256 is delivered on chain, and the robot releases **exactly that reading**.
-4. **The program enforces the limits.** A 0.60 USDC charge is refused by the Solana program (`OverPerTxCap`). The site simulates every transaction first, so a refused charge is never sent.
-5. **It's recorded on peaq.** Each settled charge becomes a **revenue event for the pad** and an **activity event for the robot** in peaq's EventRegistry. That's the history peaq's Machine Credit Rating is built from.
+**The loop**, run every 30 minutes by an always-on service:
+1. **The robot earns.** A simulated shop opens an escrow deal for each delivery (0.10 USDC per km). The robot signs a drop-off record, the shop releases, and the robot gets a **peaq revenue event**.
+2. **Its battery drops** (simulated: 3% per hour idle, 15% per delivery). Below 25% it decides to charge, capped in code by its on-chain mandate.
+3. **It chooses a pad.** Three charging pads (peaq machines **349, 350, 351**) with their own prices. The robot picks the lowest **risk-adjusted** price among online pads its mandate allows; a pad with a weak or no track record costs more. While no pad is rated yet, a pad with fewer peaq events gets a trial charge, so new pads can earn a history.
+4. **It pays into escrow.** The owner set the rules once, on chain: at most **0.50 USDC per charge**, **35 USDC in total**, **only these three pads**. The Solana program enforces them; the site simulates every transaction first, so a refused one is never sent.
+5. **The pad proves the energy.** It signs a meter reading (kWh, time, price); its sha256 is delivered on chain, and the robot releases **exactly that reading**.
+6. **peaq records both sides:** a **revenue event for the pad** and an **activity event for the robot**, each carrying the Solana release signature.
 
-**Why both chains:** peaq is the machines' identity and credit layer. Solana + Fiducia is the money layer: mandates, escrow and settlement. peaq's own agent-spending limits are enforced by its orchestrator server; Fiducia enforces the same kind of limits **in a Solana program**.
+**On top of the loop**
+- **MCR-style score.** Computed by Fiducia from each machine's events in peaq's EventRegistry (bond, revenue consistency, activity, tenure, freshness, outages), modelled on peaq's documented Machine Credit Rating inputs. It is **not** peaq's official MCR, which is not served for testnet machines. It prices the pad choice and the insurance.
+- **Parametric downtime insurance.** Each pad buys a 24 h policy from its own earnings (1.00 USDC cover, premium priced from its score). Pads sign heartbeats in peaq's message format. If heartbeats stop for over 65 minutes, the pad files the outage proof on chain; the insurer checks the signed proof and challenges a forged one; after a one-hour review window the escrow pays the pad. No outage: the cover returns to the insurer at term end. No program change: it is the same escrow (deliver, claim, refund).
+- **Fiducia Insure, a machine service sold per call.** Built in the shape of a robotic.sh adapter (it is **not** listed on robotic.sh): any peaq machine pays **0.01 USDC over x402 on Solana devnet** and gets its score and a downtime quote. [Manifest](https://fiducia-orpin.vercel.app/api/machines/service/manifest).
 
-**Why this is DePIN:** The charging pad is one node of a charging network. It has a peaq machine identity, earns revenue for a service it proves (a signed kWh meter reading, hashed on chain), and builds the on-chain revenue history that peaq's Machine Credit Rating and future financing are built from. One simulated pad today; next is many pads and real meters. The same loop also fits a drone landing on a charging pad—peaq's own starter idea—though nothing drone-specific is built yet. Autonomous ticking (the robot deciding on its own) is being switched on in production.
+**Why both chains:** peaq is the machines' identity and credit layer; Solana + Fiducia is the money layer: mandates, escrow and settlement, enforced by a program rather than a server.
 
-| Try it | |
+**Why this is DePIN:** the pads are nodes of a small charging network. Each has a peaq identity, earns revenue for a service it proves, builds the on-chain history its score and insurance are priced from, and loses business when it is unreliable or offline.
+
+| Evidence | |
 |---|---|
-| Status | **Live on 7 Oct 2026.** peaq network: **agung testnet**. Robot = peaq machine **348**, charging pad = peaq machine **349** (registered and bonded in agung's 1.0 IdentityRegistry) |
-| First settled charge | 0.40 USDC, released: [`5t4Vbigi…ASBLU`](https://explorer.solana.com/tx/5t4VbigiwYughjqXP36Df17mu5dm5jtEnnLBKBuBjjckopg18kgLxPgjMVUpQWfFDNmu1aoUmuK7X8oicv9ASBLU?cluster=devnet) · pad revenue event [`0xb07adf…8ba8`](https://agung-testnet.subscan.io/tx/0xb07adfadda4142efa034bb38afeef76f7c5a3f6fa6a6783385c3308814ed8ba8) · robot activity event [`0xa61322…36da`](https://agung-testnet.subscan.io/tx/0xa61322813844c0d19f031756ec1693fe393e4cd1c2e0b9498b528df11ade36da) |
-| Refused charge | 0.60 USDC: refused by the program (`OverPerTxCap`) in simulation; nothing was sent |
-| Live page | https://fiducia-orpin.vercel.app/machines: "Charge 0.40 USDC", then "Try 0.60 USDC (over limit)" |
-| From Claude Code | MCP tool `machine_status`: machine IDs, mandate left, last charges with their Solana and peaq transactions |
-| Fleet mission (devnet) | [`7hTQTkkZ…ssYn6`](https://explorer.solana.com/address/7hTQTkkZ5hGrVvdsGXm3kqG4RB3u7LiN62WdmUDssYn6?cluster=devnet), live until 27 Oct 2026 |
+| Live page | https://fiducia-orpin.vercel.app/machines (network, scores, insurance, earned vs spent, every charge with its links) |
+| Machines (agung) | robot **348**, pads **349 / 350 / 351**, registered and bonded in agung's 1.0 IdentityRegistry |
+| Fleet mission (devnet) | [`FLPoVGNt…bTey`](https://explorer.solana.com/address/FLPoVGNteR6wXJMye65FEo4MFDMJc9QAHDp5syEbwTey?cluster=devnet): 0.50 per charge, 35 total, payees = the three pads, until 30 Oct |
+| A delivery the robot was paid for | release [`663MmWzA…`](https://explorer.solana.com/tx/663MmWzA5AHa7cZu9uB9QZnmhfyStv7irpNiS1nqQZVdxVCMeY1yLUqupYHDjpNVKnd6mYkJc9qVYTjHVBRLAYGm?cluster=devnet) · robot revenue event [`0x7a7154fc…`](https://agung-testnet.subscan.io/tx/0x7a7154fc7f8b627cb75758410b8f53240f3a228b557bbfac706403495d385bbc) |
+| A charge the robot chose and paid | pad B, 1.535 kWh, 0.43 USDC: release [`2d4TDBT4…`](https://explorer.solana.com/tx/2d4TDBT42MSKYvEzyqeVQbAkVqDBvGoN44Yq8EJ7BpXWFnH2fvkKqgkonVHhxwQmeiH4Zpy6tD1LXxNghHST6anm?cluster=devnet) · pad revenue event [`0x6e9ffd2a…`](https://agung-testnet.subscan.io/tx/0x6e9ffd2ad68c91da606ff4bf6224b7f1fdd4ba616f715a201c6ab8684e3a3241) · robot activity event [`0xb087d6d3…`](https://agung-testnet.subscan.io/tx/0xb087d6d3cc07d95726d9dcddd6679c3b57d559112d2b475f7c228bc5de40b8ec) |
+| Insurance, no outage | pad C, 11 Oct: [open](https://explorer.solana.com/tx/CqTfkHJEm3eFf5bfdVGj4TsEG6oBQEo53VbmU2SMEFTjJj5iwiFiUWY2CbqfcgNQ7c56K4DaYbXeMvMDxErKnJQ?cluster=devnet) · [premium](https://explorer.solana.com/tx/e3wAhhgBuvSS8pGB4F3dBvqUspvesuMLn7C7gZLcpgtZG28YCUH2JGyQP7wkR1TKsQ1vuFHntDjizsgKRNWGVyT?cluster=devnet) · [cover refunded](https://explorer.solana.com/tx/4G5GbfRazYsb5DnXWUH8GM3h61X63dydA1MrBorMM6KypiXJ2NJBowhR39Zqe8zt6sKegAA8e39u8kRsypRStEW?cluster=devnet) |
+| Insurance, outage paid | pad C, 12 Oct: switched off (simulated) → no heartbeat for 76 min → [claim with the outage-proof hash](https://explorer.solana.com/tx/36dvnYeqzkckenoa2g4Yv1XHifydTbyQoxPzNohXy5guAb5SMJTcLzdaq11FsazA3yHQ5SMwyDAm7Cmc4Pywc16J?cluster=devnet) · insurer check: valid · [peaq outage event](https://agung-testnet.subscan.io/tx/0x36fb64f098844878daa9cdeca88436892fc8c37d461dd42cba3cd09fa799b3e4) · after the 1 h review window, [1.00 USDC paid to the pad](https://explorer.solana.com/tx/67LGhhHCuZGbkLRYbUeKHJT4VHgLUpxPH9fSR862FsTsFnhkJQp3CuhU1nCszYrEXfBRKoy8Av2Fv7C1ndvHgPF7?cluster=devnet) (policy [opened](https://explorer.solana.com/tx/QdQsdwNqnYngi8Nt9bVX2eeVwKmigmQ9S1No7U12MqyqGYYxuosHPZywbcqdGSnog3yWhLT1y4THjZvjRHjxtjX?cluster=devnet), [premium](https://explorer.solana.com/tx/2JjDKdzHNGhQUqeg7BEwRZvF2P7fCebX8nYd4fw4rrBJ3yBUnbvbCYF1P7f7Ga5qT4PC3jSqR4bwWbUyUE2gTFPp?cluster=devnet)) |
+| Fiducia Insure call | pad B paid 0.01 USDC over x402: [`5exS9vgT…`](https://explorer.solana.com/tx/5exS9vgTxc2UkLiov3pBUXgbmXcpsY7Qckj1G9Ebnc1n8afKc9MjaDqTQKgjfKJ2PdioTXbv1mfdULhKbHLjBUU7?cluster=devnet) |
+| From Claude Code | MCP tool `machine_status`: network, scores, insurance, earnings, last charges with their links |
 | peaq network | agung testnet (chain 9990), EventRegistry [`0x2DAD…0040`](https://agung-testnet.subscan.io/account/0x2DAD8905380993940e340C5cE6d313d5c2780040) |
 
 **Honest limits**
-- **Simulated machines.** No physical robot or pad. Battery and driving are simulated. The keys, signatures, deals and events are real.
-- **Self-reported peaq events (trust level 0).** peaq can't verify a Solana transaction (its event registry accepts peaq or Base as source chains), so each event carries the full Solana release signature for anyone to check on the Solana Explorer. The events never claim peaq verified the payment.
-- **agung uses peaq's 1.0 machine registry.** agung has no Economics 2.0 event registry, so the robot and pad are registered and bonded (1 PEAQ each) in agung's 1.0 IdentityRegistry. peaq serves no credit rating for testnet machines, and the page says so instead of showing a number.
+- **Simulated machines.** No physical robot or pad; battery, driving, deliveries and outages are simulated. Keys, signatures, deals, escrow and events are real.
+- **Self-reported peaq events (trust level 0).** peaq's event registry can't verify a Solana transaction, so each event carries the Solana release signature for anyone to check.
+- **MCR-style, not MCR.** peaq serves no credit rating for testnet machines; our score is labelled as ours.
+- **Earned vs spent, not profit.** The page shows what the robot earned against what it spent on energy; we claim no profit unless those live numbers show it.
+- **The decisions are a rule** (Claude can take them when a model key is set; no model key is set in production, so no Physical AI claim).
+- **One bug in the record:** from 10 to 12 Oct our server built two signer objects for the robot, so charges to pads B and C were refused in simulation (nothing sent). Fixed in [#295](https://github.com/Mulaydm10/solana-hackathon/pull/295).
 - **Test money only:** devnet test USDC and agung PEAQ.
 
-Code: `agents/src/machines/` (meter reading, charge loop, peaq events), `agents/scripts/machines/` (one-time setup), `web/app/machines/` (page and API), `mcp/src/tools/machine_status.ts`. Plan: [`docs/handoffs/peaq-machine-economy.md`](docs/handoffs/peaq-machine-economy.md).
+Code: `agents/src/machines/` (meter, charge, score, heartbeat, network, jobs, insurance), `web/lib/machines*.ts` and `web/app/machines/` (tick, page, API, Fiducia Insure), `mcp/src/tools/machine_status.ts`. Plan: [`docs/handoffs/peaq-v2-plan.md`](docs/handoffs/peaq-v2-plan.md).
 
 ---
 
@@ -266,7 +278,7 @@ flowchart LR
 | Deployed binary | sha256 `d437551261d8a438b41b9e0ecc60994ccc9db4df3cfbeab322b226c31b1f7e8c`; `chain/scripts/verify-deployed.ts` checks it against the committed build |
 | Registered assessor | [`EvR4wU8jfNeRLwHiDv8DoCqkSJ8w8nWwhQEXUg95PyKY`](https://explorer.solana.com/address/EvR4wU8jfNeRLwHiDv8DoCqkSJ8w8nWwhQEXUg95PyKY?cluster=devnet) |
 | Settlement token | Demo test USDC [`91TuVptwV9MjAowMtrLQB3Qs5VmMWA5uzxng1NcJH6iX`](https://explorer.solana.com/address/91TuVptwV9MjAowMtrLQB3Qs5VmMWA5uzxng1NcJH6iX?cluster=devnet) (6 decimals; the site's faucet hands it out). Circle devnet USDC also works when configured. |
-| Machine demo | Fleet mission [`7hTQTkkZ…ssYn6`](https://explorer.solana.com/address/7hTQTkkZ5hGrVvdsGXm3kqG4RB3u7LiN62WdmUDssYn6?cluster=devnet) on devnet; peaq agung (chain 9990) for machine IDs and events |
+| Machine demo | Fleet mission [`FLPoVGNt…bTey`](https://explorer.solana.com/address/FLPoVGNteR6wXJMye65FEo4MFDMJc9QAHDp5syEbwTey?cluster=devnet) on devnet (three pads); peaq agung (chain 9990) for machine IDs and events |
 | Live site | https://fiducia-orpin.vercel.app (Vercel) |
 | Demo video | https://youtu.be/L7-ofBtbwRA |
 
