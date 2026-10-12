@@ -58,6 +58,30 @@ export function vercelBlobs(api: BlobApi, token: string, prefix: string): Blobs 
   };
 }
 
+/**
+ * Upstash Redis over its REST API (plain fetch, no SDK): the machine demo's state lives here because the Vercel Blob
+ * Hobby quota (2,000 writes, 10,000 reads a month) is far below what a tick every 30 minutes needs. Values are base64.
+ */
+export function redisBlobs(url: string, token: string, prefix: string, f: typeof fetch = fetch): Blobs {
+  if (!/^[a-z-]+$/.test(prefix)) throw new Error("bad redis prefix");
+  if (!/^https:\/\//.test(url)) throw new Error("redis url must be https");
+  const call = async (cmd: string[]): Promise<unknown> => {
+    const r = await f(url, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(cmd) });
+    const j = (await r.json().catch(() => ({}))) as { result?: unknown; error?: string };
+    if (!r.ok || j.error) throw new Error(`redis ${cmd[0]} failed (HTTP ${r.status})`);
+    return j.result;
+  };
+  return {
+    async read(name) {
+      const v = await call(["GET", `${prefix}/${checkName(name)}`]);
+      return typeof v === "string" ? new Uint8Array(Buffer.from(v, "base64")) : null;
+    },
+    async write(name, bytes) {
+      await call(["SET", `${prefix}/${checkName(name)}`, Buffer.from(bytes).toString("base64")]);
+    },
+  };
+}
+
 /** A listing's documents: as the chain registry reads them, plus the server's own report awaiting attestation. */
 export type ListingDocs = { meta?: string; report?: string; assessed?: string };
 

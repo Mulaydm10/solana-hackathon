@@ -17,7 +17,7 @@ import { createLimiter } from "./demo";
 import { anthropicLlm } from "./robot-llm";
 import { blobBattery, blobDecisions, blobHistory, blobLedger, runRobotCharge, simulateFirst, type BatteryStore, type ChargeHistory, type DecisionLog, type MachineDeps, type RobotTickDeps } from "./machines";
 import { USDC_DEVNET } from "./registry";
-import { fileBlobs, vercelBlobs, type BlobApi, type Blobs } from "./storage";
+import { fileBlobs, redisBlobs, vercelBlobs, type BlobApi, type Blobs } from "./storage";
 
 const limiter = createLimiter();
 const blobApi: BlobApi = {
@@ -43,7 +43,10 @@ export type MachineRuntime = {
   explorerTx?: string;
 };
 
+/** Upstash Redis when configured (the demo's state: a tick every 30 min), else Vercel Blob, else files (local dev). */
 export function machineBlobs(env: ServerEnv, raw: Record<string, string | undefined>): Blobs {
+  const url = raw.KV_REST_API_URL ?? raw.UPSTASH_REDIS_REST_URL, token = raw.KV_REST_API_TOKEN ?? raw.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) return redisBlobs(url, token, "machines");
   return env.BLOB_READ_WRITE_TOKEN ? vercelBlobs(blobApi, env.BLOB_READ_WRITE_TOKEN, "machines") : fileBlobs(raw.DEAL_MACHINES_DIR ?? join(process.cwd(), ".data", "machines"));
 }
 
