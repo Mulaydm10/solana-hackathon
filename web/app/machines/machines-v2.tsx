@@ -72,6 +72,17 @@ export function NetworkSections({ s, v2, peaqTx }: { s: MachineStatus; v2: Confi
     <>
       <h2>The network</h2>
       <p className="fine" data-testid="score-label">{SCORE_LABEL}. Heartbeats and outages are simulated; the peaq events behind the score are real.</p>
+      {v2.scores.robot && (
+        <div className="agent-card" data-testid="robot-score">
+          <span className="eyebrow-mono">Delivery robot · peaq machine {s.machines.find((m) => m.role === "robot")?.machineId} · MCR-style score</span>
+          <dl className="mandate">
+            <dt>Grade</dt><dd>{v2.scores.robot.provisioned ? "not scored yet" : `${v2.scores.robot.grade} · score ${v2.scores.robot.score}`}</dd>
+            <dt>Top factors</dt><dd>{topFactors(v2.scores.robot.factors) || "none yet"}</dd>
+            <dt>peaq events</dt><dd>{v2.scores.robot.events}</dd>
+          </dl>
+          <p className="fine">{v2.scores.robot.explain}</p>
+        </div>
+      )}
       <ul className="agent-grid" data-testid="network">{v2.network.map((n) => {
         const sc = v2.scores[n.role];
         return (

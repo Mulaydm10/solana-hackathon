@@ -55,3 +55,11 @@ test("plainNote: step failures read as plain words and keep the code", async () 
   assert.equal(plainNote("premium: CHAIN_ERROR"), "the pad could not pay the premium yet (CHAIN_ERROR); retried on the next tick");
   assert.equal(plainNote("the term ended before the policy could be opened"), "the term ended before the policy could be opened");
 });
+
+test("v2 page: the robot's own MCR-style grade is shown, with its machine id", () => {
+  const h = renderToStaticMarkup(createElement(MachinesView, { initial: v2 }));
+  assert.match(h, /data-testid="robot-score"/);
+  const robot = v2.scores!.robot!;
+  assert.ok(h.includes(robot.provisioned ? "not scored yet" : `${robot.grade} · score ${robot.score}`));
+  assert.ok(h.includes(`peaq machine ${v2.machines.find((m) => m.role === "robot")!.machineId}`));
+});
