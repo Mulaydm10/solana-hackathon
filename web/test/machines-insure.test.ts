@@ -158,3 +158,21 @@ test("manifest names the configured mint, and a machine following it pays that m
   assert.equal(insureManifest("https://site.example", PAYEE, MINT).payment.asset, MINT);
   assert.equal(insureManifest("https://site.example", PAYEE).payment.asset, USDC_DEVNET);
 });
+
+test("agungReader: with a cache it scans only the blocks after it and merges the events", async () => {
+  const { agungReader } = await import("../lib/machines-insure-server");
+  const calls: { method: string; params: unknown[] }[] = [];
+  const f = (async (_u: string, init: { body: string }) => {
+    const b = JSON.parse(init.body) as { method: string; params: unknown[] };
+    calls.push(b);
+    const result = b.method === "eth_call" ? (calls.filter((c) => c.method === "eth_call").length === 1 ? "0x" + "0".repeat(24) + "9e9463a65c7b74623b3b6cdc39f71be7274e5971" : "0x" + "0".repeat(63) + "1")
+      : b.method === "eth_blockNumber" ? "0xa98a90" : b.method === "eth_getLogs" ? [] : "0x0";
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const old = { machineId: 349n, index: 1n, eventType: 0 as const, value: 38n, timestamp: 1, txHash: "0xaa", block: 11_090_000n };
+  const r = await agungReader("https://rpc.example", "0x2DAD8905380993940e340C5cE6d313d5c2780040", f, async () => ({ events: [old], toBlock: 11_110_000n })).read(349n);
+  assert.ok(r.ok && r.exists);
+  assert.equal(r.ok && r.events.length, 1);
+  const logs = calls.filter((c) => c.method === "eth_getLogs").map((c) => (c.params[0] as { fromBlock: string }).fromBlock);
+  assert.ok(logs.length >= 1 && logs.every((b) => BigInt(b) > 11_110_000n), "scans only after the cache");
+});
