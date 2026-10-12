@@ -20,7 +20,7 @@ export const MACHINE_LIMITS = {
   chargesPerIpPerHour: 6,
   chargesPerDay: 60,
   history: 200, // settled charges kept
-  refusedKept: 10, // refused attempts kept (newest); they never push a settled charge out
+  refusedKept: 50, // refused attempts kept (newest); they never push a settled charge out
 } as const;
 
 /** One charge as the page shows it. Amounts are decimal USDC strings; refusals are normal results. */

@@ -175,7 +175,7 @@ test("blobHistory: refused attempts never push a settled charge out; only the ne
   const settled = (i: number): ChargeView => ({ id: `s${i}`, at: 1000 + i, amount: "0.40", kWh: "1.250", openSig: `o${i}`, releaseSig: `r${i}` });
   const refused = (i: number): ChargeView => ({ id: `x${i}`, at: 2000 + i, amount: "0.43", kWh: "1.535", refused: { reason: "CHAIN_ERROR", message: "m" } });
   for (let i = 0; i < 11; i++) await h.add(settled(i));
-  for (let i = 0; i < 29; i++) await h.add(refused(i));
+  for (let i = 0; i < MACHINE_LIMITS.refusedKept + 10; i++) await h.add(refused(i));
   const list = await h.list();
   assert.equal(list.filter((c) => c.releaseSig).length, 11);
   assert.equal(list.filter((c) => c.refused).length, MACHINE_LIMITS.refusedKept);
