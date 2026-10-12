@@ -164,8 +164,9 @@ export function MachinesView({ initial }: { initial: MachineStatus }) {
       })}
       {s.history.some((c) => c.refused && !c.openSig) && <RefusedSummary list={s.history.filter((c) => c.refused && !c.openSig)} />}
       <p className="fine" data-testid="charge-history-note">
-        Earlier, 7 to 10 Oct, the robot charged from one pad (A) under the first mission{" "}
-        <TxLink href={SOLANA_ADDR("3yVERanw5afVZJ1kctWBKd8CYywwDq4NZcQkDr9nshEN")} text="3yVERanw…" />: 11 settled charges, 12.839 kWh, 4.11 USDC,
+        Earlier, 7 to 10 Oct, the robot charged from one pad (A) under the one-pad missions{" "}
+        <TxLink href={SOLANA_ADDR("7hTQTkkZ5hGrVvdsGXm3kqG4RB3u7LiN62WdmUDssYn6")} text="7hTQTkkZ…" /> (7 Oct) and{" "}
+        <TxLink href={SOLANA_ADDR("3yVERanw5afVZJ1kctWBKd8CYywwDq4NZcQkDr9nshEN")} text="3yVERanw…" /> (8 to 10 Oct): 11 settled charges, 12.839 kWh, 4.11 USDC,
         22 peaq events; their cards rolled out of this list before it kept every settled charge. The refusals above (10 to 12 Oct) were caused by
         a bug in our server, not by the robot's limits: it built two signer objects for the robot, so every charge to pads B
         and C was refused in simulation. Fixed in{" "}
