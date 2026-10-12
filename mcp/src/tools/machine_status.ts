@@ -62,11 +62,20 @@ function shape(body: Record<string, unknown>) {
   const machines = Array.isArray(body.machines) ? body.machines.map(obj) : [];
   const rules = body.rules ? obj(body.rules) : null;
   const totals = obj(body.totals);
-  const history = Array.isArray(body.history) ? body.history.map(obj).slice(0, 5) : [];
+  const all = Array.isArray(body.history) ? body.history.map(obj) : [];
+  // settled (or in-progress) charges first, so refusals never hide them
+  const history = [...all.filter((c) => !c.refused || c.openSig), ...all.filter((c) => c.refused && !c.openSig)].slice(0, 5);
+  const battery = body.battery ? obj(body.battery) : null;
+  const decisions = Array.isArray(body.decisions) ? body.decisions.map(obj).slice(0, 3) : [];
   return {
     ...v2(body),
     simulated: true,
-    note: "Both machines are simulated. Their peaq IDs, peaq events and Solana devnet transactions are real; the money is devnet test USDC.",
+    note: "The machines (robot and charging pads), battery, driving, deliveries and outages are simulated. Their peaq IDs, peaq events and Solana devnet transactions are real; the money is devnet test USDC.",
+    robotBattery: battery && { levelPct: num(battery.levelPct), simulated: true, drain: "simulated: 3% per hour idle, 15% per delivery" },
+    lastDecisions: decisions.map((d) => ({
+      at: num(d.at), action: str(d.action), kWh: str(d.kWh), amountUsdc: str(d.amount), decidedBy: str(d.by),
+      chosenPad: str(d.chosenPad), why: str(d.choiceReason) ?? str(d.reason),
+    })),
     peaqNetwork: str(body.deployment),
     mission: str(body.mission),
     machines: machines.map((m) => {
@@ -85,7 +94,7 @@ function shape(body: Record<string, unknown>) {
       settledCharges: num(totals.charges), refusedByProgram: num(totals.refused), kWh: str(totals.kWh), paidUsdc: str(totals.usdc), peaqEvents: num(totals.peaqEvents),
     },
     lastCharges: history.map((c) => ({
-      at: num(c.at), amountUsdc: str(c.amount), kWh: str(c.kWh), refused: c.refused ? str(obj(c.refused).reason) : null,
+      at: num(c.at), pad: str(c.pad), amountUsdc: str(c.amount), kWh: str(c.kWh), refused: c.refused ? str(obj(c.refused).reason) : null,
       releaseSignature: str(c.releaseSig), padRevenueEventTx: str(c.padEventTx), robotActivityEventTx: str(c.robotEventTx),
     })),
   };
@@ -94,7 +103,7 @@ function shape(body: Record<string, unknown>) {
 export default defineTool({
   name: "machine_status",
   description:
-    "Read-only status of the machine-economy demo (peaq track): a simulated delivery robot that pays a simulated charging pad on Solana devnet under an on-chain mandate, settled on a signed meter reading, with peaq events for both machines. Returns both machines' peaq IDs and credit rating (or that it is not served on testnet), how much of the robot's mandate is left, totals, and the last charges with their Solana release and peaq event transactions. When the site reports v2 data, also the simulated pads' network (price, uptime, MCR-style score computed by Fiducia from peaq events), insurance policies and the robot's earnings. Needs DEAL_SITE_URL. Signs nothing.",
+    "Read-only status of the machine-economy demo (peaq track): a simulated delivery robot that pays a simulated charging pad on Solana devnet under an on-chain mandate, settled on a signed meter reading, with peaq events for both machines. Returns the robot's simulated battery and its last decisions (which pad it chose and why), the machines' peaq IDs and credit rating (or that it is not served on testnet), how much of the robot's mandate is left, totals, and the last charges with their Solana release and peaq event transactions. When the site reports v2 data, also the simulated pads' network (price, uptime, MCR-style score computed by Fiducia from peaq events), insurance policies and the robot's earnings. Needs DEAL_SITE_URL. Signs nothing.",
   input: {},
   writes: false,
   async run(_args, c) {

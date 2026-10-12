@@ -72,10 +72,30 @@ test("machine_status: v2 configured adds network, scores, insurance and earnings
 });
 
 test("machine_status: v1 status (no v2, or v2 not configured) gives the same fields as before", async () => {
-  const v1Keys = ["simulated", "note", "peaqNetwork", "mission", "machines", "robotMandate", "totals", "lastCharges"];
+  const v1Keys = ["simulated", "note", "robotBattery", "lastDecisions", "peaqNetwork", "mission", "machines", "robotMandate", "totals", "lastCharges"];
   for (const body of [V1, { ...V1, v2: { configured: false }, network: [{ role: "pad2" }], scores: {}, earnings: {}, insurance: {} }]) {
     const r = await machineStatus.run({}, { config: cfg.config, fetch: answer(body) });
     assert.ok(r.ok);
     assert.deepEqual(Object.keys(r.data as object), v1Keys);
   }
+});
+
+test("machine_status: robot battery (simulated) and last decisions with the pad chosen and why; settled charges first", async () => {
+  const body = {
+    ...V2,
+    battery: { levelPct: 56, updatedAt: 1800000000, simulated: true },
+    decisions: [{ at: 1800000000, action: "charge", kWh: "1.535", amount: "0.43", by: "robot", chosenPad: "pad2", choiceReason: "lowest effective price: pad2", injected: "x" }],
+    history: [
+      { id: "x1", at: 1800000100, amount: "0.43", kWh: "1.535", refused: { reason: "CHAIN_ERROR", message: "m" } },
+      { id: "c1", at: 1800000000, amount: "0.43", kWh: "1.535", pad: "pad2", openSig: "o", releaseSig: "r", padEventTx: "0xp", robotEventTx: "0xr" },
+    ],
+  };
+  const r = await machineStatus.run({}, { config: cfg.config, fetch: answer(body) });
+  assert.ok(r.ok);
+  const d = r.data as Record<string, any>;
+  assert.deepEqual(d.robotBattery, { levelPct: 56, simulated: true, drain: "simulated: 3% per hour idle, 15% per delivery" });
+  assert.deepEqual(d.lastDecisions[0], { at: 1800000000, action: "charge", kWh: "1.535", amountUsdc: "0.43", decidedBy: "robot", chosenPad: "pad2", why: "lowest effective price: pad2" });
+  assert.equal(d.lastCharges[0].releaseSignature, "r");
+  assert.equal(d.lastCharges[0].pad, "pad2");
+  assert.equal(d.lastCharges[1].refused, "CHAIN_ERROR");
 });
