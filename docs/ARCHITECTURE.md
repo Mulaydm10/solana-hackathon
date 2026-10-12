@@ -1,5 +1,7 @@
 # Agent Bus — architecture
 
+> **Looking for the Solana program?** This page describes the agent bus (how our coding agents coordinated through GitHub). The program is described in [`PROGRAM-ARCHITECTURE.md`](PROGRAM-ARCHITECTURE.md), its security in [`SECURITY-AUDIT.md`](SECURITY-AUDIT.md).
+
 Multi-agent hackathon pipeline where **GitHub is the only shared medium**. Nodes never talk directly; they read and write issues, refs, and PRs. The protocol itself is `AGENTS.md`; this document explains the system around it.
 
 ## Nodes

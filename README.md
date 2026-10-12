@@ -280,8 +280,9 @@ flowchart LR
 | [**Pitch deck**](docs/pitch/Fiducia-pitch-deck.pdf) | 15 slides: problem, first customer, solution, Solana integration, devnet proof, go-to-market, business model, roadmap |
 | [**Technical brief**](docs/pitch/Fiducia-Technical-Brief.pdf) | 3 pages: system map and trust boundaries, mission lifecycle, spend checks, account model, threats, status, roadmap |
 | [**Go-to-market and launch plan**](docs/pitch/Fiducia-GTM-Launch-Plan.pdf) | 8 pages: why now (cited data), customer and vertical, marketplace, pricing hypothesis, launch phases, metrics, risks |
+| [**Program architecture**](docs/PROGRAM-ARCHITECTURE.md) | How `deal_escrow` is built: code map with line numbers, account model, deal state machine, payout table, mission spend gate, self-CPI, settlement, 10 diagrams |
 | [**Security and audit readiness**](docs/SECURITY-AUDIT.md) | The program's scope, accounts, roles, invariants, test and attack-search evidence, reproducible build, open items · report issues via [`SECURITY.md`](SECURITY.md) |
-| [`docs/PLAN.md`](docs/PLAN.md) · [`docs/DEPLOY.md`](docs/DEPLOY.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Design, deploy runbook, architecture |
+| [`docs/PLAN.md`](docs/PLAN.md) · [`docs/DEPLOY.md`](docs/DEPLOY.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Design, deploy runbook, agent-bus architecture |
 
 > Market figures in the pitch material are external context, not Fiducia traction. Pricing and launch numbers are hypotheses and targets.
 
@@ -307,7 +308,7 @@ flowchart LR
 
 | Path | What |
 |---|---|
-| [`chain/`](chain) | Anchor program `deal_escrow` + generated TypeScript client + library (`deals`, `listings`, `missions`) |
+| [`chain/`](chain) | Anchor program `deal_escrow` + generated TypeScript client + library (`deals`, `listings`, `missions`); architecture in [`docs/PROGRAM-ARCHITECTURE.md`](docs/PROGRAM-ARCHITECTURE.md) |
 | [`core/`](core) | Shared pure logic: canonical JSON, listing metadata, pricing, reputation score, blueprints, signed messages |
 | [`agents/`](agents) | Seller chain, custody, capability broker, VM runner, quarantined reader, x402, team orchestrator, mission service, verifier |
 | [`web/`](web) | Next.js 16 site: catalogue, listing, sell, deal, hire, missions, demand, dashboard, proof |
